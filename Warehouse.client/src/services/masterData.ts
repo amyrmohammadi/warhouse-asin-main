@@ -154,9 +154,11 @@ export function importMasterDataFile(
   basePath: string,
   file: File,
   signal?: AbortSignal,
+  fields: Record<string, string> = {},
 ): Promise<MasterDataImportSummary> {
   const formData = new FormData()
   formData.append('File', file)
+  Object.entries(fields).forEach(([key, value]) => formData.append(key, value))
 
   return request<MasterDataImportSummary>(
     `${basePath}/import`,

@@ -48,6 +48,8 @@ public sealed class Product : Entity<Guid>
         Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
     }
 
+    public static bool IsPlaceholderCode(string? value) => value?.Trim() == "-";
+
     public static string CreateComparisonKey(string value) =>
         TextComparison.CreateCompactKey(value);
 }

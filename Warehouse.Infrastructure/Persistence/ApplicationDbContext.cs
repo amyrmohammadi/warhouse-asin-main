@@ -187,8 +187,10 @@ public sealed class ApplicationDbContext
             entity.Property(product => product.Code).HasMaxLength(100).IsRequired();
             entity.Property(product => product.NormalizedCode).HasMaxLength(100).IsRequired();
             entity.Property(product => product.Description).HasMaxLength(1000);
-            entity.HasIndex(product => product.NormalizedCode).IsUnique();
-            entity.HasIndex(product => product.NormalizedTitle).IsUnique();
+            entity.HasIndex(product => product.NormalizedCode)
+                .IsUnique()
+                .HasFilter("[Code] <> N'-'");
+            entity.HasIndex(product => product.NormalizedTitle);
             entity.HasIndex(product => product.Title);
             entity.HasIndex(product => product.UnitOfMeasureId);
             entity.HasOne(product => product.UnitOfMeasure)

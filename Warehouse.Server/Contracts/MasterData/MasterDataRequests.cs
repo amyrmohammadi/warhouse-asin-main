@@ -18,3 +18,9 @@ public sealed class ImportSuppliersRequest
 {
     public IFormFile? File { get; init; }
 }
+
+public sealed class ImportProductsRequest
+{
+    public IFormFile? File { get; init; }
+    public bool CheckOnlyProductCode { get; init; }
+}

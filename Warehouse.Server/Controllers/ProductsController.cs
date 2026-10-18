@@ -1,3 +1,4 @@
+using Warehouse.Application.Features.MasterData.Products.Commands.ImportProducts;
 using AutoMapper;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -62,6 +63,39 @@ public sealed class ProductsController(ISender sender, IMapper mapper) : Control
         return result.IsSuccess
             ? CreatedAtAction(nameof(GetById), new { id = result.Data!.Id }, result)
             : BadRequest(result);
+    }
+
+    [Authorize(Policy = PermissionPolicyNames.MasterData.Manage)]
+    [HttpPost("import")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(51 * 1024 * 1024)]
+    [ProducesResponseType(typeof(Result<ProductImportSummary>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(Result<ProductImportSummary>), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<Result<ProductImportSummary>>> Import(
+        [FromForm] ImportProductsRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.File is null)
+        {
+            return BadRequest(Result<ProductImportSummary>.Error(
+                "انتخاب فایل Excel الزامی است."));
+        }
+
+        if (request.File.Length > ImportProductsCommand.MaxFileSizeBytes)
+        {
+            return BadRequest(Result<ProductImportSummary>.Error(
+                "حجم فایل Excel نباید بیشتر از ۵۰ مگابایت باشد."));
+        }
+
+        await using var stream = new MemoryStream();
+        await request.File.CopyToAsync(stream, cancellationToken);
+        var command = new ImportProductsCommand(
+            request.File.FileName,
+            stream.ToArray(),
+            request.CheckOnlyProductCode);
+        var result = await sender.Send(command, cancellationToken);
+
+        return result.IsSuccess ? Ok(result) : BadRequest(result);
     }
 
     [Authorize(Policy = PermissionPolicyNames.MasterData.Manage)]

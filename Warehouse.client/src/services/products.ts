@@ -1,4 +1,5 @@
 import {
+  importMasterDataFile,
   createMasterDataItem,
   deleteMasterDataItem,
   getMasterDataList,
@@ -88,4 +89,10 @@ export async function updateProduct(
 
 export function deleteProduct(id: string, signal?: AbortSignal): Promise<void> {
   return deleteMasterDataItem(basePath, id, signal)
+}
+
+export function importProducts(file: File, checkOnlyProductCode = false, signal?: AbortSignal) {
+  return importMasterDataFile(basePath, file, signal, {
+    CheckOnlyProductCode: String(checkOnlyProductCode),
+  })
 }

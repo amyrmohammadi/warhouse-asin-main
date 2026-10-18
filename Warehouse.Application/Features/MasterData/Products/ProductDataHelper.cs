@@ -54,6 +54,8 @@ internal static class ProductDataHelper
             return "عنوان کالا قبلاً ثبت شده است.";
         }
 
+        if (Product.IsPlaceholderCode(code)) return null;
+
         return await repository.CountAsync(
                 query.Where(product => product.NormalizedCode == normalizedCode),
                 cancellationToken) > 0

@@ -61,8 +61,8 @@ internal static class MasterDataValidationRules
             .WithMessage($"کد کالا نباید بیشتر از {ProductCodeMaxLength} نویسه باشد.")
             .Must(value =>
                 value is not null &&
-                Product.CreateComparisonKey(value).Length > 0)
-            .WithMessage("کد کالا باید حداقل یک نویسه غیر از فاصله و خط تیره داشته باشد.");
+                (Product.IsPlaceholderCode(value) || Product.CreateComparisonKey(value).Length > 0))
+            .WithMessage("کد کالا باید یک کد معتبر یا علامت - باشد.");
 
         validator.RuleFor(unitOfMeasureTitle)
             .NotEmpty()

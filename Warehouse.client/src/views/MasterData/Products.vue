@@ -12,8 +12,9 @@ import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import DataTableScrollContainer from '@/components/DataTableScrollContainer.vue'
 import DataTableFilters from '@/components/filters/DataTableFilters.vue'
 import { getSession } from '@/services/auth'
-import { MasterDataApiError } from '@/services/masterData'
+import { type MasterDataImportSummary, MasterDataApiError } from '@/services/masterData'
 import {
+  importProducts,
   createProduct,
   deleteProduct,
   getProducts,
@@ -61,6 +62,13 @@ const table = ref<{
   dt: { ajax: { reload: (callback: null, resetPaging: boolean) => unknown } }
 } | null>(null)
 const confirmDialog = ref<ConfirmDialogInstance | null>(null)
+const importInput = ref<HTMLInputElement | null>(null)
+const checkOnlyProductCode = ref(false)
+const importModalOpen = ref(false)
+const pendingImportFile = ref<File | null>(null)
+const isImporting = ref(false)
+const importSummary = ref<MasterDataImportSummary | null>(null)
+let importRequest: AbortController | null = null
 const quickSearch = ref('')
 const appliedFilters = ref<DataTableFilterValues>({})
 const filtersLoading = ref(false)
@@ -345,6 +353,53 @@ async function loadProducts(request: AjaxData, callback: AjaxCallback): Promise<
   }
 }
 
+function handleImportFile(event: Event): void {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file || isImporting.value || !canManage) return
+  if (!/\.(xlsx|xlsm)$/i.test(file.name) || file.size === 0 || file.size > 50 * 1024 * 1024) {
+    toast.error('فایل xlsx یا xlsm غیرخالی با حجم حداکثر ۵۰ مگابایت انتخاب کنید.')
+    return
+  }
+  pendingImportFile.value = file
+  checkOnlyProductCode.value = false
+  importModalOpen.value = true
+}
+
+function closeImportModal(): void {
+  if (isImporting.value) return
+  importModalOpen.value = false
+  pendingImportFile.value = null
+}
+
+async function startImport(): Promise<void> {
+  const file = pendingImportFile.value
+  if (!file || isImporting.value || !canManage) return
+  importSummary.value = null
+  const controller = new AbortController()
+  importRequest = controller
+  isImporting.value = true
+  try {
+    const result = await importProducts(file, checkOnlyProductCode.value, controller.signal)
+    importSummary.value = result
+    importModalOpen.value = false
+    pendingImportFile.value = null
+    if (result.importedCount > 0) {
+      reloadProducts(true)
+      unitOptions.value = []
+      await ensureUnitOptions()
+      toast.success(`${result.importedCount} کالا ثبت شد.`)
+    }
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') return
+    if (await redirectWhenUnauthorized(error)) return
+    toast.error(error instanceof Error ? error.message : 'ایمپورت کالا انجام نشد.')
+  } finally {
+    isImporting.value = false
+    importRequest = null
+  }
+}
 function stringFilter(key: string): string | undefined {
   const value = appliedFilters.value[key]
   return typeof value === 'string' && value.trim() ? value.trim() : undefined
@@ -579,8 +634,8 @@ async function redirectWhenUnauthorized(error: unknown): Promise<boolean> {
   return true
 }
 
-watch(modalOpen, (isOpen) => {
-  document.body.classList.toggle('modal-open', isOpen)
+watch([modalOpen, importModalOpen], ([isOpen, isImportOpen]) => {
+  document.body.classList.toggle('modal-open', isOpen || isImportOpen)
 })
 
 onMounted(() => {
@@ -589,6 +644,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  importRequest?.abort()
   activeListRequest?.abort()
   activeOperationRequest?.abort()
   unitOptionsRequest?.abort()
@@ -622,8 +678,8 @@ onBeforeUnmount(() => {
                 تعریف و مدیریت کالاها و واحد اندازه‌گیری آن‌ها
               </p>
             </div>
+            <div v-if="canManage" class="d-flex align-items-center" style="gap: 0.5rem">
             <button
-              v-if="canManage"
               class="btn btn-primary btn-sm mobile-icon-button"
               type="button"
               title="افزودن کالا"
@@ -633,9 +689,31 @@ onBeforeUnmount(() => {
               <i class="las la-plus ml-1"></i>
               <span class="mobile-button-label">افزودن کالا</span>
             </button>
+            <input ref="importInput" type="file" accept=".xlsx,.xlsm" hidden @change="handleImportFile" />
+            <button class="btn btn-outline-primary btn-sm" type="button" :disabled="isImporting" @click="importInput?.click()">
+              <span v-if="isImporting" class="spinner-border spinner-border-sm ml-1" aria-hidden="true"></span>
+              <i v-else class="las la-file-import ml-1" aria-hidden="true"></i>
+              {{ isImporting ? 'در حال ایمپورت...' : 'ایمپورت کالا' }}
+            </button>
+            </div>
           </div>
 
           <div class="card-body">
+            <div v-if="importSummary" class="alert" :class="importSummary.invalidRows.length ? 'alert-danger' : 'alert-success'" role="status">
+              <p v-if="importSummary.invalidRows.length">هیچ کالا یا واحدی ثبت نشد. خطاهای زیر را اصلاح و فایل را دوباره ارسال کنید.</p>
+              {{ importSummary.importedCount }} ثبت‌شده،
+              {{ importSummary.duplicateCount }} تکراری،
+              {{ importSummary.emptyRowCount }} ردیف خالی و
+              {{ importSummary.invalidRows.length }} ردیف نامعتبر.
+              <details v-if="importSummary.invalidRows.length" class="mt-2" open>
+                <summary>مشاهده خطاهای ردیف‌ها</summary>
+                <ul style="max-height: 20rem; overflow-y: auto">
+                  <li v-for="row in importSummary.invalidRows" :key="row.rowNumber">
+                    ردیف {{ row.rowNumber }}: {{ row.message }}
+                  </li>
+                </ul>
+              </details>
+            </div>
             <DataTableFilters
               v-model="appliedFilters"
               :definitions="filterDefinitions"
@@ -715,6 +793,36 @@ onBeforeUnmount(() => {
       </div>
     </div>
   </div>
+
+  <Teleport to="body">
+    <template v-if="importModalOpen">
+      <div class="modal show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="product-import-title" @click.self="closeImportModal" @keydown.esc="closeImportModal">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+          <form class="modal-content" @submit.prevent="startImport">
+            <div class="modal-header">
+              <h5 id="product-import-title" class="modal-title">ایمپورت کالا</h5>
+              <button type="button" class="close" aria-label="بستن" :disabled="isImporting" @click="closeImportModal"><span aria-hidden="true">&times;</span></button>
+            </div>
+            <div class="modal-body">
+              <p>فایل انتخاب‌شده: <bdi>{{ pendingImportFile?.name }}</bdi></p>
+              <label class="mb-0 d-flex align-items-center" style="gap: 0.4rem">
+                <input v-model="checkOnlyProductCode" type="checkbox" :disabled="isImporting" />
+                فقط کد کالا تکراری بررسی شود
+              </label>
+            </div>
+            <div class="modal-footer modal-footer--split">
+              <button type="button" class="btn btn-light" :disabled="isImporting" @click="closeImportModal">انصراف</button>
+              <button type="submit" class="btn btn-primary" :disabled="isImporting">
+                <span v-if="isImporting" class="spinner-border spinner-border-sm ml-1" aria-hidden="true"></span>
+                {{ isImporting ? 'در حال ایمپورت...' : 'شروع ایمپورت' }}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+      <div class="modal-backdrop show"></div>
+    </template>
+  </Teleport>
 
   <Teleport to="body">
     <template v-if="modalOpen">

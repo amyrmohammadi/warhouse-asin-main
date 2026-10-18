@@ -312,10 +312,10 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("NormalizedCode")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[Code] <> N'-'");
 
-                    b.HasIndex("NormalizedTitle")
-                        .IsUnique();
+                    b.HasIndex("NormalizedTitle");
 
                     b.HasIndex("Title");
 

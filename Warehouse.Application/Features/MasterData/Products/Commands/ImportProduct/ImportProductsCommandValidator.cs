@@ -24,7 +24,7 @@ internal sealed class ImportProductsCommandValidator
             .NotNull()
             .NotEmpty()
             .WithMessage("فایل Excel خالی است.")
-            .Must(content => content.Length <= ImportProductsCommand.MaxFileSizeBytes)
+            .Must(content => content is null || content.Length <= ImportProductsCommand.MaxFileSizeBytes)
             .WithMessage("حجم فایل Excel نباید بیشتر از 50 مگابایت باشد.");
     }
 
