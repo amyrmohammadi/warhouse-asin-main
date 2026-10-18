@@ -1,0 +1,74 @@
+- main [ref=f1e3]:
+  - generic [ref=f1e4]:
+    - link [ref=f1e5] [cursor=pointer]:
+      - /url: /dashboard
+    - button "نمایش منو" [ref=f1e7] [cursor=pointer]
+  - navigation [ref=f1e13]:
+    - list [ref=f1e15]:
+      - listitem [ref=f1e16]:
+        - generic [ref=f1e17]:
+          - strong [ref=f1e20]: admin
+          - img "تصویر کاربر" [ref=f1e21]
+  - complementary [ref=f1e22]:
+    - list [ref=f1e24]:
+      - listitem [ref=f1e25]:
+        - link " داشبورد" [ref=f1e26] [cursor=pointer]:
+          - /url: /dashboard
+          - generic [ref=f1e27]: 
+          - generic [ref=f1e28]: داشبورد
+      - listitem [ref=f1e29]:
+        - link " کاربران" [ref=f1e30] [cursor=pointer]:
+          - /url: /dashboard/users
+          - generic [ref=f1e31]: 
+          - generic [ref=f1e32]: کاربران
+      - listitem [ref=f1e33]:
+        - button "خروج" [ref=f1e34] [cursor=pointer]:
+          - generic [ref=f1e35]: 
+          - text: خروج
+  - generic [ref=f1e37]:
+    - generic [ref=f1e38]:
+      - heading "داشبورد" [level=2] [ref=f1e39]
+      - paragraph [ref=f1e40]: خوش آمدید؛ اتصال حساب کاربری شما با سرور برقرار است.
+    - generic [ref=f1e41]:
+      - generic [ref=f1e44]:
+        - generic [ref=f1e45]:
+          - text: وضعیت حساب
+          - heading "فعال" [level=3] [ref=f1e46]
+        - generic [ref=f1e47]: 
+      - generic [ref=f1e51]:
+        - generic [ref=f1e52]:
+          - text: سطح دسترسی
+          - heading "3" [level=3] [ref=f1e53]
+        - generic [ref=f1e54]: 
+      - generic [ref=f1e58]:
+        - generic [ref=f1e59]:
+          - text: شناسه کاربر
+          - heading "d2e94675…" [level=3] [ref=f1e60]
+        - generic [ref=f1e61]: 
+    - generic [ref=f1e63]:
+      - generic [ref=f1e65]:
+        - heading "نمای کلی سامانه" [level=4] [ref=f1e68]
+        - generic [ref=f1e70]:
+          - generic [ref=f1e72]:
+            - generic [ref=f1e73]: درخواست‌های امروز
+            - strong [ref=f1e74]: ۰
+          - generic [ref=f1e76]:
+            - generic [ref=f1e77]: عملیات موفق
+            - strong [ref=f1e78]: ۰
+          - generic [ref=f1e80]:
+            - generic [ref=f1e81]: پیام جدید
+            - strong [ref=f1e82]: ۰
+      - generic [ref=f1e84]:
+        - heading "اطلاعات نشست" [level=4] [ref=f1e86]
+        - generic [ref=f1e87]:
+          - generic [ref=f1e88]:
+            - generic [ref=f1e89]: ایمیل
+            - strong [ref=f1e90]: admin@hse.com
+          - generic [ref=f1e91]:
+            - generic [ref=f1e92]: ورود
+            - generic [ref=f1e93]: موفق
+          - generic [ref=f1e94]:
+            - generic [ref=f1e95]: اعتبار توکن تا
+            - strong [ref=f1e96]: ۱۴۰۵/۷/۲۲, ۱۵:۱۰:۳۸
+          - button "خروج از حساب" [ref=f1e97] [cursor=pointer]
+  - generic [ref=f1e98]: تمامی حقوق محفوظ است
