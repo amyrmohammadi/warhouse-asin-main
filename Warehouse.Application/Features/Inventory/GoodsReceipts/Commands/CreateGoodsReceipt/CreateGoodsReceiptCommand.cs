@@ -11,7 +11,7 @@ public sealed record CreateGoodsReceiptCommand(
     Guid? DelivererId,
     string? DelivererFullName,
     Guid WarehouseId,
-    InvoiceStatus InvoiceStatus,
+    InvoiceStatus? InvoiceStatus,
     string? InvoiceNumber,
     Guid? SupplierId,
     string? SupplierTitle,

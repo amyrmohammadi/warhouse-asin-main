@@ -24,7 +24,7 @@ export interface GoodsReceipt {
   delivererFullName: string
   warehouseId: string
   warehouseTitle: string
-  invoiceStatus: InvoiceStatus
+  invoiceStatus: InvoiceStatus | null
   invoiceNumber: string | null
   supplierId: string | null
   counterparty: string | null
@@ -55,7 +55,7 @@ export interface GoodsReceiptItemRow {
   receiptDescription: string | null
   delivererFullName: string
   warehouseTitle: string
-  invoiceStatus: InvoiceStatus
+  invoiceStatus: InvoiceStatus | null
   invoiceNumber: string | null
   supplierId: string | null
   counterparty: string | null
@@ -111,7 +111,7 @@ export interface CreateGoodsReceiptRequest {
   delivererId: string | null
   delivererFullName: string | null
   warehouseId: string
-  invoiceStatus: InvoiceStatus
+  invoiceStatus: InvoiceStatus | null
   invoiceNumber: string | null
   supplierId: string | null
   supplierTitle: string | null
@@ -135,6 +135,20 @@ export class GoodsReceiptsApiError extends Error {
     super(message)
     this.name = 'GoodsReceiptsApiError'
   }
+}
+
+export interface GoodsReceiptImportSummary {
+  processedRowCount: number
+  importedReceiptCount: number
+  importedItemCount: number
+  createdDelivererCount: number
+  invalidRows: Array<{ rowNumber: number; message: string }>
+}
+
+export function importGoodsReceipts(file: File, signal?: AbortSignal): Promise<GoodsReceiptImportSummary> {
+  const body = new FormData()
+  body.append('File', file)
+  return request<GoodsReceiptImportSummary>(`${basePath}/import`, { method: 'POST', body, signal }, 'ایمپورت ورود کالا انجام نشد.')
 }
 
 export function getGoodsReceipts(
@@ -185,6 +199,16 @@ export function createGoodsReceipt(
     body: JSON.stringify(payload),
     signal,
   }, 'ثبت ورود کالا انجام نشد.')
+}
+
+export function getGoodsReceipt(id: string, signal?: AbortSignal): Promise<GoodsReceipt> {
+  return request<GoodsReceipt>(`${basePath}/${encodeURIComponent(id)}`, { signal }, 'دریافت سند ورود کالا انجام نشد.')
+}
+
+export function updateGoodsReceipt(id: string, payload: CreateGoodsReceiptRequest, signal?: AbortSignal): Promise<GoodsReceipt> {
+  return request<GoodsReceipt>(`${basePath}/${encodeURIComponent(id)}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal,
+  }, 'ویرایش سند ورود کالا انجام نشد.')
 }
 
 export async function deleteGoodsReceipt(id: string, signal?: AbortSignal): Promise<void> {

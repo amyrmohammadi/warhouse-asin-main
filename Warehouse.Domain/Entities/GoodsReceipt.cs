@@ -1,5 +1,6 @@
 using Warehouse.Domain.Common;
 using Warehouse.Domain.Enums;
+using InvoiceStatusValue = Warehouse.Domain.Enums.InvoiceStatus;
 
 namespace Warehouse.Domain.Entities;
 
@@ -14,7 +15,7 @@ public sealed class GoodsReceipt : Entity<Guid>
         string? description,
         Guid delivererId,
         Guid warehouseId,
-        InvoiceStatus invoiceStatus,
+        InvoiceStatus? invoiceStatus,
         string? invoiceNumber,
         Guid? supplierId,
         string? receiptNumber,
@@ -26,7 +27,7 @@ public sealed class GoodsReceipt : Entity<Guid>
         DelivererId = delivererId;
         WarehouseId = warehouseId;
         InvoiceStatus = invoiceStatus;
-        InvoiceNumber = invoiceStatus == InvoiceStatus.HasInvoice
+        InvoiceNumber = invoiceStatus == InvoiceStatusValue.HasInvoice
             ? Normalize(invoiceNumber)
             : null;
         SupplierId = supplierId;
@@ -46,7 +47,7 @@ public sealed class GoodsReceipt : Entity<Guid>
 
     public StorageWarehouse Warehouse { get; private set; } = null!;
 
-    public InvoiceStatus InvoiceStatus { get; private set; }
+    public InvoiceStatus? InvoiceStatus { get; private set; }
 
     public string? InvoiceNumber { get; private set; }
 
@@ -72,6 +73,25 @@ public sealed class GoodsReceipt : Entity<Guid>
             requestNumber,
             description));
 
+    public void UpdateInitialEntry(DateTimeOffset enteredAtUtc, string? description,
+        Guid delivererId, Guid warehouseId, string pageNumber)
+    {
+        EnteredAtUtc = enteredAtUtc.ToUniversalTime();
+        Description = Normalize(description);
+        DelivererId = delivererId;
+        WarehouseId = warehouseId;
+        PageNumber = pageNumber.Trim();
+    }
+
+    public void UpdateReceiptInvoice(InvoiceStatus? status, string? invoiceNumber,
+        Guid? supplierId, string? receiptNumber)
+    {
+        InvoiceStatus = status;
+        InvoiceNumber = status == InvoiceStatusValue.HasInvoice ? Normalize(invoiceNumber) : null;
+        SupplierId = supplierId;
+        ReceiptNumber = Normalize(receiptNumber);
+    }
     private static string? Normalize(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }
+ 

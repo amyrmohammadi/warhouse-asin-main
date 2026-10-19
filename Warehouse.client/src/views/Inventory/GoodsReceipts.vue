@@ -8,7 +8,12 @@ import { useRouter } from 'vue-router'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { getSession } from '@/services/auth'
 import {
+  importGoodsReceipts,
+  type GoodsReceiptImportSummary,
   createGoodsReceipt,
+  getGoodsReceipt,
+  updateGoodsReceipt,
+  type CreateGoodsReceiptRequest,
   deleteGoodsReceipt,
   getGoodsReceiptItems,
   getGoodsReceiptOptions,
@@ -63,7 +68,16 @@ const router = useRouter()
 const table = shallowRef<{ dt: Api } | null>(null)
 const tableContainer = ref<HTMLElement | null>(null)
 const confirmDialog = ref<ConfirmDialogInstance | null>(null)
+const importInput = ref<HTMLInputElement | null>(null)
+const importModalOpen = ref(false)
+const importFile = ref<File | null>(null)
+const importing = ref(false)
+const importSummary = ref<GoodsReceiptImportSummary | null>(null)
+let importRequest: AbortController | null = null
 const modalOpen = ref(false)
+const receiptInvoiceModalOpen = ref(false)
+const editingReceiptId = ref<string | null>(null)
+const editLoading = ref(false)
 const saving = ref(false)
 const referenceLoading = ref(false)
 const formError = ref('')
@@ -103,7 +117,7 @@ const form = reactive({
   delivererId: '',
   delivererText: '',
   warehouseId: '',
-  invoiceStatus: 'DoesNotHave' as InvoiceStatus,
+  invoiceStatus: null as InvoiceStatus | null,
   invoiceNumber: '',
   supplierId: '',
   supplierText: '',
@@ -221,7 +235,7 @@ const activeColumnSettings = computed(() =>
   tableMode.value === 'items' ? itemColumnSettings : receiptColumnSettings,
 )
 
-if (canInitialEntry) {
+if (canInitialEntry || canManageReceiptInvoice) {
   receiptColumns.push({
     data: 'id',
     name: 'actions',
@@ -506,6 +520,51 @@ async function loadTableRows(request: AjaxData, callback: AjaxCallback): Promise
   }
 }
 
+function selectImportFile(event: Event): void {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file || importing.value || !canInitialEntry) return
+  if (!/\.(xlsx|xlsm)$/i.test(file.name) || file.size === 0 || file.size > 50 * 1024 * 1024) {
+    toast.error('فایل xlsx یا xlsm غیرخالی با حجم حداکثر ۵۰ مگابایت انتخاب کنید.')
+    return
+  }
+  importFile.value = file
+  importModalOpen.value = true
+}
+
+function closeImportModal(): void {
+  if (importing.value) return
+  importModalOpen.value = false
+  importFile.value = null
+}
+
+async function startImport(): Promise<void> {
+  if (!importFile.value || importing.value || !canInitialEntry) return
+  const controller = new AbortController()
+  importRequest = controller
+  importing.value = true
+  importSummary.value = null
+  try {
+    const result = await importGoodsReceipts(importFile.value, controller.signal)
+    importSummary.value = result
+    importModalOpen.value = false
+    importFile.value = null
+    if (result.importedReceiptCount > 0) {
+      referenceDataLoaded.value = false
+      table.value?.dt.ajax.reload(undefined, true)
+      toast.success(`${result.importedReceiptCount} سند ورود و ${result.importedItemCount} قلم کالا ثبت شد.`)
+    }
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') return
+    if (await redirectWhenUnauthorized(error)) return
+    toast.error(error instanceof Error ? error.message : 'ایمپورت ورود کالا انجام نشد.')
+  } finally {
+    importing.value = false
+    importRequest = null
+  }
+}
+
 function localDateTimeNow(): string {
   const now = new Date()
   now.setMinutes(now.getMinutes() - now.getTimezoneOffset())
@@ -538,7 +597,7 @@ function resetForm(): void {
     delivererId: '',
     delivererText: '',
     warehouseId: '',
-    invoiceStatus: 'DoesNotHave' as InvoiceStatus,
+    invoiceStatus: null as InvoiceStatus | null,
     invoiceNumber: '',
     supplierId: '',
     supplierText: '',
@@ -580,7 +639,55 @@ async function loadReferenceData(): Promise<boolean> {
 async function openCreateModal(): Promise<void> {
   if (!await loadReferenceData()) return
   resetForm()
+  editingReceiptId.value = null
   modalOpen.value = true
+}
+
+async function openEditModal(row: GoodsReceipt | GoodsReceiptItemRow): Promise<void> {
+  if (editLoading.value || saving.value || (!canInitialEntry && !canManageReceiptInvoice)) return
+  editLoading.value = true
+  try {
+    if (!await loadReferenceData()) return
+    const id = 'goodsReceiptId' in row ? row.goodsReceiptId : row.id
+    const receipt = await getGoodsReceipt(id)
+    resetForm()
+    editingReceiptId.value = id
+    const date = new Date(receipt.enteredAtUtc)
+    date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
+    Object.assign(form, {
+      enteredAtLocal: date.toISOString().slice(0, 16), description: receipt.description ?? '',
+      delivererId: receipt.delivererId, delivererText: receipt.delivererFullName,
+      warehouseId: receipt.warehouseId, pageNumber: receipt.pageNumber,
+      invoiceStatus: receipt.invoiceStatus, invoiceNumber: receipt.invoiceNumber ?? '',
+      supplierId: receipt.supplierId ?? '', supplierText: receipt.counterparty ?? '',
+      receiptNumber: receipt.receiptNumber ?? '',
+      items: receipt.items.map(item => ({
+        ...newItem(), productId: item.productId, productText: item.productTitle,
+        productCode: item.productCode, unitOfMeasureTitle: item.unitOfMeasureTitle,
+        unitOfMeasureId: products.value.find(p => p.id === item.productId)?.unitOfMeasureId ?? null,
+        quantity: item.quantity, requestNumber: item.requestNumber ?? '', description: item.description ?? '',
+      })),
+    })
+    ensureListRows()
+    if (canInitialEntry) modalOpen.value = true
+    else receiptInvoiceModalOpen.value = true
+  } catch (error) {
+    if (await redirectWhenUnauthorized(error)) return
+    toast.error(error instanceof Error ? error.message : 'دریافت سند انجام نشد.')
+  } finally {
+    editLoading.value = false
+  }
+}
+
+function closeReceiptInvoiceModal(): void {
+  if (saving.value) return
+  receiptInvoiceModalOpen.value = false
+  editingReceiptId.value = null
+  formError.value = ''
+}
+
+async function saveReceiptInvoiceOperation(): Promise<void> {
+  await saveReceipt()
 }
 
 function closeModal(): void {
@@ -1101,13 +1208,13 @@ async function saveReceipt(): Promise<void> {
   formError.value = ''
   try {
     const items = itemsForSubmission()
-    await createGoodsReceipt({
+    const payload: CreateGoodsReceiptRequest = {
       enteredAtUtc: new Date(form.enteredAtLocal).toISOString(),
       description: form.description.trim() || null,
       delivererId: form.delivererId || null,
       delivererFullName: form.delivererId ? null : form.delivererText.trim(),
       warehouseId: form.warehouseId,
-      invoiceStatus: canManageReceiptInvoice ? form.invoiceStatus : 'DoesNotHave',
+      invoiceStatus: canManageReceiptInvoice ? form.invoiceStatus : null,
       invoiceNumber: canManageReceiptInvoice && invoiceHasNumber.value ? form.invoiceNumber.trim() : null,
       supplierId: canManageReceiptInvoice ? (form.supplierId || null) : null,
       supplierTitle: canManageReceiptInvoice && !form.supplierId ? (form.supplierText.trim() || null) : null,
@@ -1122,14 +1229,17 @@ async function saveReceipt(): Promise<void> {
         requestNumber: item.requestNumber.trim() || null,
         description: item.description.trim() || null,
       })),
-    }, controller.signal)
+    }
+    if (editingReceiptId.value) await updateGoodsReceipt(editingReceiptId.value, payload, controller.signal)
+    else await createGoodsReceipt(payload, controller.signal)
+    receiptInvoiceModalOpen.value = false
     modalOpen.value = false
     referenceDataLoaded.value = false
     products.value = []
     people.value = []
     suppliers.value = []
     units.value = []
-    toast.success('ورود کالا با موفقیت ثبت شد.')
+    toast.success(editingReceiptId.value ? 'سند ورود کالا با موفقیت ویرایش شد.' : 'ورود کالا با موفقیت ثبت شد.')
     table.value?.dt.ajax.reload(undefined, true)
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') return
@@ -1144,11 +1254,14 @@ async function saveReceipt(): Promise<void> {
   }
 }
 
-async function removeReceipt(receiptId: string, pageNumber: string): Promise<void> {
-  if (!confirmDialog.value) return
+async function removeReceipt(): Promise<void> {
+  const receiptId = editingReceiptId.value
+  if (!confirmDialog.value || !receiptId || !canInitialEntry || saving.value) return
+  saving.value = true
+  try {
   const confirmed = await confirmDialog.value.ask({
     title: 'حذف سند ورود کالا',
-    text: `سند صفحه «${pageNumber}» حذف شود؟`,
+    text: 'با حذف این ورودی، سند ورود و اطلاعات تمام کالاهای ثبت‌شده در این ورودی حذف می‌شوند. آیا از حذف مطمئن هستید؟',
     icon: 'warning',
     confirmButtonText: 'حذف',
     cancelButtonText: 'انصراف',
@@ -1156,18 +1269,17 @@ async function removeReceipt(receiptId: string, pageNumber: string): Promise<voi
   })
   if (!confirmed) return
 
-  try {
     await deleteGoodsReceipt(receiptId)
+    modalOpen.value = false
+    editingReceiptId.value = null
     toast.success('سند ورود کالا حذف شد.')
     table.value?.dt.ajax.reload(undefined, false)
   } catch (error) {
     if (await redirectWhenUnauthorized(error)) return
     toast.error(error instanceof Error ? error.message : 'حذف سند انجام نشد.')
+  } finally {
+    saving.value = false
   }
-}
-
-function removeReceiptRow(row: GoodsReceipt | GoodsReceiptItemRow): Promise<void> {
-  return removeReceipt('goodsReceiptId' in row ? row.goodsReceiptId : row.id, row.pageNumber)
 }
 
 async function redirectWhenUnauthorized(error: unknown): Promise<boolean> {
@@ -1187,7 +1299,7 @@ function formatQuantity(value: number): string {
   return new Intl.NumberFormat('fa-IR', { maximumFractionDigits: 3 }).format(value)
 }
 
-watch(modalOpen, value => document.body.classList.toggle('modal-open', value))
+watch([modalOpen, receiptInvoiceModalOpen, importModalOpen], ([entryOpen, invoiceOpen, importOpen]) => document.body.classList.toggle('modal-open', entryOpen || invoiceOpen || importOpen))
 watch(tableMode, () => {
   closeColumnSettings()
   disconnectCompactHorizontalScrollbar()
@@ -1202,6 +1314,7 @@ onMounted(() => {
   document.addEventListener('click', closeColumnSettings)
 })
 onBeforeUnmount(() => {
+  importRequest?.abort()
   listRequest?.abort()
   operationRequest?.abort()
   referenceRequest?.abort()
@@ -1259,6 +1372,12 @@ onBeforeUnmount(() => {
               </label>
             </div>
           </div>
+          <template v-if="canInitialEntry">
+            <input ref="importInput" type="file" accept=".xlsx,.xlsm" hidden @change="selectImportFile" />
+            <button class="btn btn-outline-primary btn-sm" type="button" :disabled="importing" @click="importInput?.click()">
+              <i class="las la-file-import ml-1" aria-hidden="true"></i>ایمپورت ورود کالا
+            </button>
+          </template>
           <button
             v-if="canInitialEntry"
             class="btn btn-primary btn-sm mobile-icon-button"
@@ -1274,6 +1393,18 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="card-body">
+        <div v-if="importSummary" class="alert" :class="importSummary.invalidRows.length ? 'alert-danger' : 'alert-success'" role="status">
+          <template v-if="importSummary.invalidRows.length">
+            <p>هیچ ورودی یا تحویل‌دهنده‌ای ثبت نشد. خطاها را اصلاح و فایل را دوباره ارسال کنید.</p>
+            <ul class="mb-0" style="max-height: 20rem; overflow-y: auto">
+              <li v-for="row in importSummary.invalidRows" :key="row.rowNumber">ردیف {{ row.rowNumber }}: {{ row.message }}</li>
+            </ul>
+          </template>
+          <template v-else>
+            {{ importSummary.importedReceiptCount }} سند ورود، {{ importSummary.importedItemCount }} قلم کالا و
+            {{ importSummary.createdDelivererCount }} تحویل‌دهندهٔ جدید ثبت شد.
+          </template>
+        </div>
         <div
           ref="tableContainer"
           :class="['users-table-container', 'goods-receipts-table-container', `goods-receipts-table-container--${tableMode}`]"
@@ -1312,20 +1443,20 @@ onBeforeUnmount(() => {
             </template>
             <template #column-invoiceStatus="{ cellData }">
               <span class="badge light" :class="cellData === 'HasInvoice' ? 'badge-success' : 'badge-secondary'">
-                {{ cellData === 'HasInvoice' ? 'دارد' : 'ندارد' }}
+                {{ cellData === 'HasInvoice' ? 'دارد' : cellData === 'DoesNotHave' ? 'ندارد' : '—' }}
               </span>
             </template>
-            <template v-if="canInitialEntry" #column-actions="{ rowData }">
-              <button class="master-data-row-action receipt-remove-item" type="button" title="حذف سند" aria-label="حذف سند" @click="removeReceiptRow(rowData)">
-                <i class="las la-trash" aria-hidden="true"></i>
+            <template v-if="canInitialEntry || canManageReceiptInvoice" #column-actions="{ rowData }">
+              <button class="master-data-row-action" type="button" title="ویرایش سند" aria-label="ویرایش سند" :disabled="editLoading" @click="openEditModal(rowData)">
+                <i class="las la-edit" aria-hidden="true"></i>
               </button>
             </template>
             <thead>
               <tr v-if="tableMode === 'items'">
-                <th>ردیف</th><th>تاریخ</th><th>عنوان کالا</th><th>کد کالا</th><th>تعداد</th><th>واحد</th><th>توضیحات</th><th>تحویل‌دهنده</th><th>فاکتور</th><th>شماره فاکتور</th><th>طرف حساب</th><th>شماره رسید</th><th>انبار</th><th>شماره صفحه</th><th v-if="canInitialEntry">عملیات</th>
+                <th>ردیف</th><th>تاریخ</th><th>عنوان کالا</th><th>کد کالا</th><th>تعداد</th><th>واحد</th><th>توضیحات</th><th>تحویل‌دهنده</th><th>فاکتور</th><th>شماره فاکتور</th><th>طرف حساب</th><th>شماره رسید</th><th>انبار</th><th>شماره صفحه</th><th v-if="canInitialEntry || canManageReceiptInvoice">عملیات</th>
               </tr>
               <tr v-else>
-                <th>ردیف</th><th>تاریخ ورود</th><th>شماره صفحه</th><th>تحویل‌دهنده</th><th>انبار</th><th>تعداد کالا</th><th>فاکتور</th><th>شماره فاکتور</th><th>طرف حساب</th><th>شماره رسید</th><th>توضیحات ورودی</th><th v-if="canInitialEntry">عملیات</th>
+                <th>ردیف</th><th>تاریخ ورود</th><th>شماره صفحه</th><th>تحویل‌دهنده</th><th>انبار</th><th>تعداد کالا</th><th>فاکتور</th><th>شماره فاکتور</th><th>طرف حساب</th><th>شماره رسید</th><th>توضیحات ورودی</th><th v-if="canInitialEntry || canManageReceiptInvoice">عملیات</th>
               </tr>
             </thead>
           </DataTable>
@@ -1335,12 +1466,39 @@ onBeforeUnmount(() => {
   </div>
 
   <Teleport to="body">
+    <template v-if="importModalOpen">
+      <div class="modal show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="receipt-import-title" @click.self="closeImportModal" @keydown.esc="closeImportModal">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+          <form class="modal-content" @submit.prevent="startImport">
+            <div class="modal-header">
+              <h5 id="receipt-import-title" class="modal-title">ایمپورت ورود کالا</h5>
+              <button type="button" class="close" aria-label="بستن" :disabled="importing" @click="closeImportModal"><span aria-hidden="true">&times;</span></button>
+            </div>
+            <div class="modal-body">
+              <p>فایل انتخاب‌شده: <bdi>{{ importFile?.name }}</bdi></p>
+              <p>ردیف‌های دارای انبار و شمارهٔ صفحهٔ یکسان، یک سند می‌شوند. تاریخ، تحویل‌دهنده و اطلاعات رسید و فاکتور آن‌ها باید یکسان باشد.</p>
+              <p class="mb-0">فقط تحویل‌دهندهٔ جدید ساخته می‌شود؛ سایر مفروضات باید از قبل ثبت شده باشند. در صورت وجود خطا، کل فایل ثبت نمی‌شود.</p>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-light" :disabled="importing" @click="closeImportModal">انصراف</button>
+              <button type="submit" class="btn btn-primary" :disabled="importing">
+                <span v-if="importing" class="spinner-border spinner-border-sm ml-1" aria-hidden="true"></span>
+                {{ importing ? 'در حال بررسی و ثبت...' : 'شروع ایمپورت' }}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+      <div class="modal-backdrop show"></div>
+    </template>
+  </Teleport>
+  <Teleport to="body">
     <template v-if="modalOpen">
       <div class="modal show d-block goods-receipt-modal" tabindex="-1" role="dialog" aria-modal="true" @click.self="closeModal">
         <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" role="document">
           <div class="modal-content">
             <div class="modal-header">
-              <h5 class="modal-title"><i class="las la-dolly-flatbed ml-1"></i> ثبت ورود کالا</h5>
+              <h5 class="modal-title"><i class="las la-dolly-flatbed ml-1"></i> {{ editingReceiptId ? 'ویرایش ورود کالا' : 'ثبت ورود کالا' }}</h5>
               <button type="button" class="close" aria-label="بستن" :disabled="saving" @click="closeModal"><span>&times;</span></button>
             </div>
 
@@ -1436,6 +1594,7 @@ onBeforeUnmount(() => {
                   <div class="col-md-3 form-group">
                     <label>وضعیت فاکتور</label>
                     <select v-model="form.invoiceStatus" class="form-control" :class="{ 'is-invalid': fieldError('invoiceStatus') }" :disabled="saving" @change="clearFieldError('invoiceStatus'); clearFieldError('invoiceNumber')">
+                      <option :value="null">نامشخص</option>
                       <option value="DoesNotHave">ندارد</option>
                       <option value="HasInvoice">دارد</option>
                     </select>
@@ -1511,7 +1670,6 @@ onBeforeUnmount(() => {
                 <div class="receipt-items-header mb-2">
                   <div>
                     <h6 class="mb-0">کالاها و مقدار</h6>
-                    <small v-if="goodsEntryMode === 'list'" class="text-muted">مانند اکسل اطلاعات را وارد کنید؛ همیشه یک ردیف خالی در انتهای جدول آماده است.</small>
                   </div>
                   <div class="receipt-entry-actions">
                     <div class="btn-group btn-group-sm receipt-entry-mode" role="group" aria-label="روش ثبت کالا">
@@ -1520,20 +1678,18 @@ onBeforeUnmount(() => {
                         :class="goodsEntryMode === 'cards' ? 'btn-primary' : 'btn-outline-primary'"
                         type="button"
                         :disabled="saving"
-                        @click="setGoodsEntryMode('cards')"
-                      >
+                        @click="setGoodsEntryMode('cards')">
                         <i class="las la-stream ml-1" aria-hidden="true"></i>
-                        ثبت ردیفی
+                       
                       </button>
                       <button
                         class="btn"
                         :class="goodsEntryMode === 'list' ? 'btn-primary' : 'btn-outline-primary'"
                         type="button"
                         :disabled="saving"
-                        @click="setGoodsEntryMode('list')"
-                      >
+                        @click="setGoodsEntryMode('list')">
                         <i class="las la-table ml-1" aria-hidden="true"></i>
-                        ثبت لیستی کالا
+                     
                       </button>
                     </div>
                     <button class="btn btn-outline-primary btn-sm" type="button" :disabled="saving" @click="addItem"><i class="las la-plus ml-1"></i> افزودن ردیف</button>
@@ -1946,8 +2102,11 @@ onBeforeUnmount(() => {
               </div>
 
               <div class="modal-footer">
+                <button v-if="editingReceiptId && canInitialEntry" class="btn btn-outline-danger px-4" type="button" :disabled="saving" @click="removeReceipt">
+                  <i class="las la-trash ml-1" aria-hidden="true"></i>حذف ورودی
+                </button>
                 <button class="btn btn-light px-4" type="button" :disabled="saving" @click="closeModal">انصراف</button>
-                <button class="btn btn-primary px-4" type="submit" :disabled="saving"><span v-if="saving" class="spinner-border spinner-border-sm ml-1"></span>ثبت ورود کالا</button>
+                <button class="btn btn-primary px-4" type="submit" :disabled="saving"><span v-if="saving" class="spinner-border spinner-border-sm ml-1"></span>{{ editingReceiptId ? 'ذخیره تغییرات' : 'ثبت ورود کالا' }}</button>
               </div>
             </form>
           </div>
@@ -1974,6 +2133,7 @@ onBeforeUnmount(() => {
                   <div class="col-md-6 form-group">
                     <label>وضعیت فاکتور</label>
                     <select v-model="form.invoiceStatus" class="form-control" :class="{ 'is-invalid': fieldError('invoiceStatus') }" :disabled="saving" @change="clearFieldError('invoiceStatus'); clearFieldError('invoiceNumber')">
+                      <option :value="null">نامشخص</option>
                       <option value="DoesNotHave">ندارد</option>
                       <option value="HasInvoice">دارد</option>
                     </select>
@@ -2069,7 +2229,7 @@ onBeforeUnmount(() => {
 .goods-receipts-column-option input { accent-color: var(--primary); flex: 0 0 auto; }
 .receipt-items-header { align-items: center; display: flex; gap: 1rem; justify-content: space-between; }
 .receipt-entry-actions { align-items: center; display: flex; flex-wrap: wrap; gap: .55rem; }
-.receipt-entry-mode .btn { align-items: center; display: inline-flex; justify-content: center; min-width: 7rem; }
+.receipt-entry-mode .btn { align-items: center; display: inline-flex; justify-content: center; }
 .receipt-list-entry { background: var(--surface); border: 1px solid var(--border-color); border-radius: .65rem; margin-bottom: .75rem; }
 .receipt-list-table-scroll { overflow: visible; width: 100%; }
 .receipt-list-table { border-collapse: separate; border-spacing: 0; font-size: .74rem; table-layout: fixed; width: 100%; }
@@ -2106,8 +2266,8 @@ onBeforeUnmount(() => {
 .receipt-product-combobox { position: relative; }
 .receipt-product-combobox > i { color: var(--text-secondary); left: .7rem; pointer-events: none; position: absolute; top: 50%; transform: translateY(-50%); }
 .receipt-product-combobox .form-control { padding-left: 2rem; }
-.receipt-product-options { background: var(--surface); border: 1px solid var(--border-color); border-radius: .65rem; box-shadow: 0 .75rem 1.75rem rgba(15, 23, 42, .18); max-height: 15rem; min-width: 18rem; overflow-y: auto; padding: .3rem; position: absolute; right: 0; top: calc(100% + .35rem); width: 100%; z-index: 1070; }
-.receipt-product-option { align-items: center; background: transparent; border: 0; border-radius: .45rem; color: var(--text-primary); cursor: pointer; display: flex; gap: .5rem; justify-content: space-between; padding: .55rem .65rem; text-align: right; width: 100%; }
+.receipt-product-options { background: var(--surface); border: 1px solid var(--border-color); border-radius: .65rem; box-shadow: 0 .75rem 1.75rem rgba(15, 23, 42, .18); max-height: 15rem; min-width: 18rem; overflow-y: auto; padding: .3rem; position: absolute; right: 0; top: calc(100% + .35rem); width: 90%; z-index: 1070; }
+.receipt-product-option {font-size:12px;align-items: center; background: transparent; border: 0; border-radius: .45rem; color: var(--text-primary); cursor: pointer; display: flex; gap: .5rem; justify-content: space-between; padding: .55rem .65rem; text-align: right; width: 90%; }
 .receipt-product-option + .receipt-product-option { margin-top: .15rem; }
 .receipt-product-option:hover, .receipt-product-option:focus { background: var(--primary-light); color: var(--primary-dark); outline: 0; }
 .receipt-product-option__title { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

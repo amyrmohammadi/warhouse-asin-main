@@ -21,7 +21,7 @@ const isAuthenticated = computed(() => hasValidSession())
                   </div>
                   <h2 class="text-white font-w600 mb-3">به پنل مدیریت خوش آمدید</h2>
                   <p class="text-white mb-4">
-                    رابط کاربری Vue بر پایه اجزای قالب Mophy و متصل به سرویس احراز هویت سرور است.
+                   مدیریت فعالیت های انبار داری 
                   </p>
 
                   <RouterLink

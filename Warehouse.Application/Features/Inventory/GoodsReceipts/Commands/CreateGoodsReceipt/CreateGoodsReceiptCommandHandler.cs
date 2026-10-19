@@ -14,6 +14,13 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
         CreateGoodsReceiptCommand request,
         CancellationToken cancellationToken)
     {
+        return await SaveAsync(request, cancellationToken);
+    }
+
+    internal async Task<Result<GoodsReceiptSummary>> SaveAsync(
+        CreateGoodsReceiptCommand request, CancellationToken cancellationToken,
+        GoodsReceipt? existing = null, bool updateInitial = true, bool updateInvoice = true)
+    {
         var warehouseRepository = unitOfWork.Repository<StorageWarehouse>();
         var warehouse = await warehouseRepository.GetByIdAsync(
             request.WarehouseId,
@@ -53,7 +60,7 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                 return Result<GoodsReceiptSummary>.Error(resolvedItems.Messages);
             }
 
-            var receipt = new GoodsReceipt(
+            var receipt = existing ?? new GoodsReceipt(
                 request.EnteredAtUtc,
                 request.Description,
                 deliverer!.Id,
@@ -64,16 +71,45 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                 request.ReceiptNumber,
                 request.PageNumber);
 
-            foreach (var item in resolvedItems.Data!)
+            if (existing is not null)
             {
-                receipt.AddItem(
-                    item.ProductId,
-                    item.Quantity,
-                    item.RequestNumber,
-                    item.Description);
+                if (updateInitial)
+                    receipt.UpdateInitialEntry(request.EnteredAtUtc, request.Description,
+                        deliverer!.Id, warehouse.Id, request.PageNumber);
+                if (updateInvoice)
+                    receipt.UpdateReceiptInvoice(request.InvoiceStatus, request.InvoiceNumber,
+                        supplier?.Id, request.ReceiptNumber);
             }
-
-            await unitOfWork.Repository<GoodsReceipt>().AddAsync(receipt, cancellationToken);
+            if (existing is null || updateInitial)
+            {
+                var itemRepository = unitOfWork.Repository<GoodsReceiptItem>();
+                var oldItems = existing is null ? [] : await itemRepository.ToListAsync(
+                    itemRepository.Entities.Where(item => item.GoodsReceiptId == receipt.Id), cancellationToken);
+                var requestedIds = resolvedItems.Data!.Select(item => item.ProductId).ToHashSet();
+                foreach (var old in oldItems)
+                {
+                    var tracked = await itemRepository.GetByIdAsync(old.Id, cancellationToken);
+                    if (!requestedIds.Contains(old.ProductId))
+                        await itemRepository.DeleteAsync(tracked!, cancellationToken);
+                }
+                foreach (var item in resolvedItems.Data!)
+                {
+                    var old = oldItems.FirstOrDefault(old => old.ProductId == item.ProductId);
+                    if (old is null)
+                    {
+                        receipt.AddItem(item.ProductId, item.Quantity, item.RequestNumber, item.Description);
+                        if (existing is not null)
+                            await itemRepository.AddAsync(receipt.Items.Last(), cancellationToken);
+                    }
+                    else
+                    {
+                        var tracked = await itemRepository.GetByIdAsync(old.Id, cancellationToken);
+                        tracked!.Update(item.Quantity, item.RequestNumber, item.Description);
+                    }
+                }
+            }
+            if (existing is null)
+                await unitOfWork.Repository<GoodsReceipt>().AddAsync(receipt, cancellationToken);
             await unitOfWork.SaveAsync(cancellationToken);
             await unitOfWork.CommitTransaction(cancellationToken);
 
@@ -82,7 +118,7 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                 Id = receipt.Id,
                 EnteredAtUtc = receipt.EnteredAtUtc,
                 Description = receipt.Description,
-                DelivererId = deliverer.Id,
+                DelivererId = deliverer!.Id,
                 DelivererFullName = deliverer.FullName,
                 WarehouseId = warehouse.Id,
                 WarehouseTitle = warehouse.Title,

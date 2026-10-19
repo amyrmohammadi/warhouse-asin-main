@@ -207,7 +207,7 @@ public sealed class ApplicationDbContext
             entity.Property(receipt => receipt.InvoiceStatus)
                 .HasConversion<string>()
                 .HasMaxLength(32)
-                .IsRequired();
+                .IsRequired(false);
             entity.Property(receipt => receipt.InvoiceNumber).HasMaxLength(100);
             entity.Property(receipt => receipt.ReceiptNumber).HasMaxLength(100);
             entity.Property(receipt => receipt.PageNumber).HasMaxLength(100).IsRequired();

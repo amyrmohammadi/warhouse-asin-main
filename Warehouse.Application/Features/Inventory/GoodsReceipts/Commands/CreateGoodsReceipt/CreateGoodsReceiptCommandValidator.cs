@@ -44,7 +44,8 @@ internal sealed class CreateGoodsReceiptCommandValidator
                 string.IsNullOrWhiteSpace(command.SupplierTitle))
             .WithMessage("برای طرف حساب، تأمین‌کننده را انتخاب کنید یا عنوان جدید وارد کنید.");
         RuleFor(command => command.ReceiptNumber).MaximumLength(100);
-        RuleFor(command => command.InvoiceStatus).IsInEnum();
+        RuleFor(command => command.InvoiceStatus).IsInEnum()
+            .When(command => command.InvoiceStatus.HasValue);
         RuleFor(command => command.InvoiceNumber)
             .NotEmpty()
             .WithMessage("برای وضعیت دارای فاکتور، شماره فاکتور الزامی است.")

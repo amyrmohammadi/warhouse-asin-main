@@ -1,3 +1,5 @@
+using Warehouse.Application.Features.Inventory.GoodsReceipts.Commands.ImportGoodsReceipts;
+using Warehouse.Application.Features.Inventory.GoodsReceipts.Commands.UpdateGoodsReceipt;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -21,6 +23,25 @@ public sealed class GoodsReceiptsController(
     ISender sender,
     IAuthorizationService authorizationService) : ControllerBase
 {
+    [Authorize(Policy = PermissionPolicyNames.Inventory.GoodsReceiptsInitialEntry)]
+    [HttpPost("import")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(51 * 1024 * 1024)]
+    public async Task<ActionResult<Result<GoodsReceiptImportSummary>>> Import(
+        [FromForm] ImportGoodsReceiptsRequest request, CancellationToken cancellationToken)
+    {
+        if (request.File is null || request.File.Length == 0)
+            return BadRequest(Result<GoodsReceiptImportSummary>.Error("فایل Excel را انتخاب کنید."));
+        if (request.File.Length > ImportGoodsReceiptsCommand.MaxFileSizeBytes)
+            return BadRequest(Result<GoodsReceiptImportSummary>.Error("حجم فایل نباید بیشتر از ۵۰ مگابایت باشد."));
+        var canManageInvoice = (await authorizationService.AuthorizeAsync(User,
+            PermissionPolicyNames.Inventory.GoodsReceiptsReceiptInvoiceOperations)).Succeeded;
+        await using var stream = new MemoryStream();
+        await request.File.CopyToAsync(stream, cancellationToken);
+        var result = await sender.Send(new ImportGoodsReceiptsCommand(request.File.FileName,
+            stream.ToArray(), canManageInvoice), cancellationToken);
+        return result.IsSuccess ? Ok(result) : BadRequest(result);
+    }
     [Authorize(Policy = PermissionPolicyNames.Inventory.GoodsReceiptsRead)]
     [HttpGet("options")]
     [ProducesResponseType(typeof(Result<GoodsReceiptOptions>), StatusCodes.Status200OK)]
@@ -89,7 +110,7 @@ public sealed class GoodsReceiptsController(
             request.DelivererId,
             request.DelivererFullName,
             request.WarehouseId,
-            canManageReceiptInvoice ? request.InvoiceStatus : InvoiceStatus.DoesNotHave,
+            canManageReceiptInvoice ? request.InvoiceStatus : null,
             canManageReceiptInvoice ? request.InvoiceNumber : null,
             canManageReceiptInvoice ? request.SupplierId : null,
             canManageReceiptInvoice ? request.SupplierTitle : null,
@@ -106,6 +127,63 @@ public sealed class GoodsReceiptsController(
         var result = await sender.Send(command, cancellationToken);
         return result.IsSuccess
             ? CreatedAtAction(nameof(GetById), new { id = result.Data!.Id }, result)
+            : BadRequest(result);
+    }
+
+    [Authorize]
+    [HttpPut("{id:guid}")]
+    [ProducesResponseType(typeof(Result<GoodsReceiptSummary>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(Result<GoodsReceiptSummary>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<Result<GoodsReceiptSummary>>> Update(
+        Guid id,
+        [FromBody] CreateGoodsReceiptRequest request,
+        CancellationToken cancellationToken)
+    {
+        var canManageReceiptInvoice =
+            (await authorizationService.AuthorizeAsync(
+                User,
+                PermissionPolicyNames.Inventory.GoodsReceiptsReceiptInvoiceOperations)).Succeeded;
+        var canInitialEntry = (await authorizationService.AuthorizeAsync(
+            User, PermissionPolicyNames.Inventory.GoodsReceiptsInitialEntry)).Succeeded;
+        if (!canInitialEntry && !canManageReceiptInvoice) return Forbid();
+        var createsMasterData =
+            (canInitialEntry && !request.DelivererId.HasValue && !string.IsNullOrWhiteSpace(request.DelivererFullName)) ||
+            (canManageReceiptInvoice &&
+             !request.SupplierId.HasValue &&
+             !string.IsNullOrWhiteSpace(request.SupplierTitle)) ||
+            (canInitialEntry && request.Items.Any(item => !item.ProductId.HasValue));
+        if (createsMasterData &&
+            !(await authorizationService.AuthorizeAsync(
+                User,
+                PermissionPolicyNames.MasterData.Manage)).Succeeded)
+        {
+            return Forbid();
+        }
+
+        var command = new CreateGoodsReceiptCommand(
+            request.EnteredAtUtc,
+            request.Description,
+            request.DelivererId,
+            request.DelivererFullName,
+            request.WarehouseId,
+            canManageReceiptInvoice ? request.InvoiceStatus : null,
+            canManageReceiptInvoice ? request.InvoiceNumber : null,
+            canManageReceiptInvoice ? request.SupplierId : null,
+            canManageReceiptInvoice ? request.SupplierTitle : null,
+            canManageReceiptInvoice ? request.ReceiptNumber : null,
+            request.PageNumber,
+            request.Items.Select(item => new CreateGoodsReceiptItem(
+                item.ProductId,
+                item.ProductTitle,
+                item.ProductCode,
+                item.UnitOfMeasureId,
+                item.Quantity,
+                item.RequestNumber,
+                item.Description)).ToArray());
+        var result = await sender.Send(new UpdateGoodsReceiptCommand(id, command, canInitialEntry, canManageReceiptInvoice), cancellationToken);
+        return result.IsSuccess
+            ? Ok(result)
             : BadRequest(result);
     }
 

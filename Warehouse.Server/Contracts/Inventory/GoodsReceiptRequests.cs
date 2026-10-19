@@ -8,7 +8,7 @@ public sealed record CreateGoodsReceiptRequest(
     Guid? DelivererId,
     string? DelivererFullName,
     Guid WarehouseId,
-    InvoiceStatus InvoiceStatus,
+    InvoiceStatus? InvoiceStatus,
     string? InvoiceNumber,
     Guid? SupplierId,
     string? SupplierTitle,
@@ -25,3 +25,8 @@ public sealed record CreateGoodsReceiptItemRequest(
     string? RequestNumber,
     string? Description);
 
+
+public sealed class ImportGoodsReceiptsRequest
+{
+    public IFormFile? File { get; init; }
+}

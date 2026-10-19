@@ -19,7 +19,7 @@ public sealed class GoodsReceiptSummary
 
     public string WarehouseTitle { get; init; } = string.Empty;
 
-    public InvoiceStatus InvoiceStatus { get; init; }
+    public InvoiceStatus? InvoiceStatus { get; init; }
 
     public string? InvoiceNumber { get; init; }
 
@@ -88,7 +88,7 @@ public sealed class GoodsReceiptItemRowSummary
 
     public string WarehouseTitle { get; init; } = string.Empty;
 
-    public InvoiceStatus InvoiceStatus { get; init; }
+    public InvoiceStatus? InvoiceStatus { get; init; }
 
     public string? InvoiceNumber { get; init; }
 

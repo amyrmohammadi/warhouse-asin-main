@@ -37,6 +37,13 @@ public sealed class GoodsReceiptItem : Entity<Guid>
 
     public string? Description { get; private set; }
 
+    public void Update(decimal quantity, string? requestNumber, string? description)
+    {
+        Quantity = quantity;
+        RequestNumber = Normalize(requestNumber);
+        Description = Normalize(description);
+    }
+
     private static string? Normalize(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }
