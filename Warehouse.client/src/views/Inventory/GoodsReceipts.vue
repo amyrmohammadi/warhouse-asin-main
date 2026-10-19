@@ -403,9 +403,14 @@ function createTableOptions(
     pageLength: 10,
     lengthMenu: [5, 10, 25, 50],
     order: [[orderColumn, 'desc']],
-    autoWidth: true,
+    autoWidth: false,
     pagingType: 'full_numbers',
-    responsive: false,
+    responsive: {
+      details: {
+        type: 'inline',
+        renderer: DataTablesCore.Responsive.renderer.listHiddenNodes(),
+      },
+    },
     drawCallback: scheduleCompactHorizontalScrollbar,
     initComplete: scheduleCompactHorizontalScrollbar,
     layout: {
@@ -1414,7 +1419,7 @@ onBeforeUnmount(() => {
             :key="tableMode"
             ref="table"
             :options="tableMode === 'items' ? itemTableOptions : receiptTableOptions"
-            class="display nowrap table-striped table table-sm users-table"
+            class="display responsive nowrap table-striped table table-sm users-table"
           >
             <template #column-enteredAtUtc="{ cellData }">
               <strong class="text-black">{{ formatDate(cellData) }}</strong>
@@ -1751,8 +1756,8 @@ onBeforeUnmount(() => {
                                 >
                                   <span class="receipt-product-option__title">{{ product.title }}</span>
                                   <span class="receipt-product-option__meta">
-                                    <span dir="ltr">{{ product.code }}</span>
-                                    <span>{{ product.unitOfMeasureTitle }}</span>
+                                    <span class="receipt-product-option__code" dir="ltr">{{ product.code }}</span>
+                                    <span class="receipt-product-option__unit">{{ product.unitOfMeasureTitle }}</span>
                                   </span>
                                 </button>
                                 <div v-if="!filteredProductOptions(item, 'title').length" class="receipt-product-empty">
@@ -1801,10 +1806,10 @@ onBeforeUnmount(() => {
                                   role="option"
                                   @mousedown.prevent="chooseProduct(item, product)"
                                 >
-                                  <span class="receipt-product-option__title" dir="ltr">{{ product.code }}</span>
+                                  <span class="receipt-product-option__title">{{ product.title }}</span>
                                   <span class="receipt-product-option__meta">
-                                    <span>{{ product.title }}</span>
-                                    <span>{{ product.unitOfMeasureTitle }}</span>
+                                    <span class="receipt-product-option__code" dir="ltr">{{ product.code }}</span>
+                                    <span class="receipt-product-option__unit">{{ product.unitOfMeasureTitle }}</span>
                                   </span>
                                 </button>
                                 <div v-if="!filteredProductOptions(item, 'code').length" class="receipt-product-empty">کدی پیدا نشد.</div>
@@ -1940,8 +1945,8 @@ onBeforeUnmount(() => {
                           >
                             <span class="receipt-product-option__title">{{ product.title }}</span>
                             <span class="receipt-product-option__meta">
-                              <span dir="ltr">{{ product.code }}</span>
-                              <span>{{ product.unitOfMeasureTitle }}</span>
+                              <span class="receipt-product-option__code" dir="ltr">{{ product.code }}</span>
+                              <span class="receipt-product-option__unit">{{ product.unitOfMeasureTitle }}</span>
                             </span>
                           </button>
                           <div v-if="!filteredProductOptions(item, 'title').length" class="receipt-product-empty">
@@ -1986,10 +1991,10 @@ onBeforeUnmount(() => {
                             role="option"
                             @mousedown.prevent="chooseProduct(item, product)"
                           >
-                            <span class="receipt-product-option__title" dir="ltr">{{ product.code }}</span>
+                            <span class="receipt-product-option__title">{{ product.title }}</span>
                             <span class="receipt-product-option__meta">
-                              <span>{{ product.title }}</span>
-                              <span>{{ product.unitOfMeasureTitle }}</span>
+                              <span class="receipt-product-option__code" dir="ltr">{{ product.code }}</span>
+                              <span class="receipt-product-option__unit">{{ product.unitOfMeasureTitle }}</span>
                             </span>
                           </button>
                           <div v-if="!filteredProductOptions(item, 'code').length" class="receipt-product-empty">
@@ -2242,7 +2247,14 @@ onBeforeUnmount(() => {
 .receipt-list-table .receipt-product-combobox .form-control { padding-left: 1.65rem; }
 .receipt-list-table .form-control:focus { background: var(--surface); border-color: var(--primary); box-shadow: 0 0 0 .12rem rgba(37, 99, 235, .12); }
 .receipt-list-table .form-control.is-invalid { border-color: #dc3545; box-shadow: inset 0 0 0 1px rgba(220, 53, 69, .18); }
-.receipt-list-table .receipt-product-options { min-width: 17rem; z-index: 1085; }
+.receipt-list-table tbody tr:has(.receipt-product-options) { position: relative; z-index: 100068; }
+.receipt-list-table td:has(.receipt-product-options) { z-index: 100069; }
+.receipt-list-table .receipt-product-combobox:has(> .receipt-product-options) { z-index: 100070; }
+.receipt-list-table .receipt-product-options { min-width: 17rem; z-index: 100071; }
+.receipt-list-table tbody tr:nth-last-child(-n + 3) .receipt-product-options {
+  bottom: calc(100% + .35rem);
+  top: auto;
+}
 .receipt-list-table .receipt-list-product-cell { width: 26%; }
 .receipt-list-table .receipt-list-code-cell { width: 11%; }
 .receipt-list-table .receipt-list-unit-cell { width: 9%; }
@@ -2261,17 +2273,66 @@ onBeforeUnmount(() => {
 .receipt-list-cell-error { font-size: .65rem; line-height: 1.2; margin: .15rem .3rem .25rem; }
 .receipt-item-row { padding: .75rem; margin-bottom: .65rem; border: 1px solid var(--border, #e6e6e6); border-radius: .65rem; background-color: #fbfbfb; }
 .receipt-item-row--new-product { background-color: rgba(245, 158, 11, .12); border-color: rgba(245, 158, 11, .35); }
+.receipt-item-row:last-child .receipt-product-options {
+  bottom: calc(100% + .35rem);
+  top: auto;
+}
 :global(body[data-app-theme='dark'] .receipt-item-row) { background-color: #1e2536; border-color: #334155; color: #f1f5f9; }
 :global(body[data-app-theme='dark'] .receipt-item-row--new-product) { background-color: rgba(251, 191, 36, .11); border-color: rgba(251, 191, 36, .3); }
 .receipt-product-combobox { position: relative; }
 .receipt-product-combobox > i { color: var(--text-secondary); left: .7rem; pointer-events: none; position: absolute; top: 50%; transform: translateY(-50%); }
 .receipt-product-combobox .form-control { padding-left: 2rem; }
-.receipt-product-options { background: var(--surface); border: 1px solid var(--border-color); border-radius: .65rem; box-shadow: 0 .75rem 1.75rem rgba(15, 23, 42, .18); max-height: 15rem; min-width: 18rem; overflow-y: auto; padding: .3rem; position: absolute; right: 0; top: calc(100% + .35rem); width: 90%; z-index: 1070; }
-.receipt-product-option {font-size:12px;align-items: center; background: transparent; border: 0; border-radius: .45rem; color: var(--text-primary); cursor: pointer; display: flex; gap: .5rem; justify-content: space-between; padding: .55rem .65rem; text-align: right; width: 90%; }
-.receipt-product-option + .receipt-product-option { margin-top: .15rem; }
+.receipt-product-options
+{ background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: .65rem;
+  box-shadow: 0 .75rem 1.75rem rgba(15, 23, 42, .18);
+  max-height: 15rem;
+  min-width: 18rem;
+  overflow-y: auto;
+  padding: .3rem;
+  position: absolute;
+  right: 0;
+  top: calc(100% + .35rem);
+  width: 100%;
+  z-index: 100070;
+
+}
+.receipt-product-option
+{
+    align-items: stretch;
+
+    background: transparent;
+    border: 0;
+    border-radius: .45rem;
+    color: var(--text-primary);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    font-size: 11px;
+    gap: .4rem;
+    padding: .25rem .25rem;
+    text-align: right;
+    width: 100%;
+}
+.receipt-product-option + .receipt-product-option
+{
+    margin-top: .15rem;
+
+}
 .receipt-product-option:hover, .receipt-product-option:focus { background: var(--primary-light); color: var(--primary-dark); outline: 0; }
-.receipt-product-option__title { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.receipt-product-option__meta { align-items: center; color: var(--text-secondary); display: flex; flex: 0 0 auto; font-size: .74rem; gap: .35rem; }
+.receipt-product-option__title
+{ display: block;
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+}
+.receipt-product-option__meta { align-items: center; color: var(--text-secondary); direction: ltr; display: flex; font-size: .54rem; gap: .35rem; justify-content: flex-start; text-align: left; width: 100%; }
+.receipt-product-option__unit { direction: rtl; }
 .receipt-product-option__meta span { background: var(--body-bg); border: 1px solid var(--border-color); border-radius: 999px; padding: .12rem .4rem; }
 .receipt-product-option:hover .receipt-product-option__meta { color: inherit; }
 .receipt-product-empty { align-items: center; color: var(--text-secondary); display: flex; font-size: .8rem; gap: .4rem; padding: .7rem .55rem; }
