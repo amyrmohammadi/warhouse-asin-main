@@ -45,6 +45,12 @@ public sealed class ApplicationDbContext
 
     public DbSet<GoodsReceiptItem> GoodsReceiptItems => Set<GoodsReceiptItem>();
 
+    public DbSet<GoodsIssueDestination> GoodsIssueDestinations => Set<GoodsIssueDestination>();
+
+    public DbSet<GoodsIssue> GoodsIssues => Set<GoodsIssue>();
+
+    public DbSet<GoodsIssueItem> GoodsIssueItems => Set<GoodsIssueItem>();
+
     internal DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     public override int SaveChanges() => SaveChanges(acceptAllChangesOnSuccess: true);
@@ -247,6 +253,57 @@ public sealed class ApplicationDbContext
             entity.HasOne(item => item.Supplier)
                 .WithMany(supplier => supplier.GoodsReceiptItems)
                 .HasForeignKey(item => item.SupplierId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<GoodsIssueDestination>(entity =>
+        {
+            entity.ToTable("GoodsIssueDestinations", "Business");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.Title).HasMaxLength(200).IsRequired();
+            entity.Property(item => item.Description).HasMaxLength(1000);
+            entity.HasIndex(item => item.Title).IsUnique();
+        });
+
+        builder.Entity<GoodsIssue>(entity =>
+        {
+            entity.ToTable("GoodsIssues", "Business");
+            entity.HasKey(issue => issue.Id);
+            entity.Property(issue => issue.IssueNumber).HasMaxLength(100).IsRequired();
+            entity.HasIndex(issue => issue.IssueNumber).IsUnique();
+            entity.HasIndex(issue => issue.IssuedAtUtc);
+            entity.HasIndex(issue => issue.IssuerId);
+            entity.HasOne(issue => issue.Issuer)
+                .WithMany(person => person.GoodsIssues)
+                .HasForeignKey(issue => issue.IssuerId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<GoodsIssueItem>(entity =>
+        {
+            entity.ToTable("GoodsIssueItems", "Business");
+            entity.HasKey(item => item.Id);
+            entity.Property(item => item.ProductCode).HasMaxLength(100).IsRequired();
+            entity.Property(item => item.Quantity).HasPrecision(18, 3).IsRequired();
+            entity.Property(item => item.AssetNumber).HasMaxLength(100);
+            entity.Property(item => item.ExitReason).HasMaxLength(1000).IsRequired();
+            entity.Property(item => item.Description).HasMaxLength(1000);
+            entity.Property(item => item.DeliveringUnit).HasMaxLength(200).IsRequired();
+            entity.Property(item => item.SortOrder).IsRequired();
+            entity.HasIndex(item => item.GoodsIssueId);
+            entity.HasIndex(item => item.ProductId);
+            entity.HasIndex(item => item.DestinationId);
+            entity.HasOne(item => item.GoodsIssue)
+                .WithMany(issue => issue.Items)
+                .HasForeignKey(item => item.GoodsIssueId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(item => item.Product)
+                .WithMany(product => product.GoodsIssueItems)
+                .HasForeignKey(item => item.ProductId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.Destination)
+                .WithMany(destination => destination.GoodsIssueItems)
+                .HasForeignKey(item => item.DestinationId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

@@ -34,6 +34,8 @@ public sealed class Product : Entity<Guid>
 
     public ICollection<GoodsReceiptItem> GoodsReceiptItems { get; private set; } = [];
 
+    public ICollection<GoodsIssueItem> GoodsIssueItems { get; private set; } = [];
+
     public void Update(
         string title,
         string code,

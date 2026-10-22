@@ -78,6 +78,15 @@ const router = createRouter({
           },
         },
         {
+          path: 'inventory/goods-issues',
+          name: 'goods-issues',
+          component: () => import('@/views/Inventory/GoodsIssues.vue'),
+          meta: {
+            title: 'تاریخچه خروج کالا',
+            requiredPermission: 'GoodsIssuesRead',
+          },
+        },
+        {
           path: 'master-data/products',
           name: 'products',
           component: () => import('@/views/MasterData/Products.vue'),
@@ -119,6 +128,15 @@ const router = createRouter({
           component: () => import('@/views/MasterData/People.vue'),
           meta: {
             title: 'افراد',
+            requiredPermission: 'MasterDataRead',
+          },
+        },
+        {
+          path: 'master-data/goods-issue-destinations',
+          name: 'goods-issue-destinations',
+          component: () => import('@/views/MasterData/GoodsIssueDestinations.vue'),
+          meta: {
+            title: 'مقصدهای خروج',
             requiredPermission: 'MasterDataRead',
           },
         },

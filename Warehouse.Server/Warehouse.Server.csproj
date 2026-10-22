@@ -26,7 +26,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Warehouse.client\Warehouse.client.esproj">
+    <ProjectReference Include="..\Warehouse.client\Warehouse.client.esproj"
+                      Condition="'$(SkipSpaProjectReference)' != 'true'">
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
     </ProjectReference>
     <ProjectReference Include="..\Warehouse.Application\Warehouse.Application.csproj" />

@@ -153,7 +153,9 @@ public sealed class ProductsController(
             PermissionPolicyNames.MasterData.ProductsCreate,
             PermissionPolicyNames.Inventory.GoodsReceiptsRead,
             PermissionPolicyNames.Inventory.GoodsReceiptsInitialEntry,
-            PermissionPolicyNames.Inventory.GoodsReceiptsReceiptInvoiceOperations
+            PermissionPolicyNames.Inventory.GoodsReceiptsReceiptInvoiceOperations,
+            PermissionPolicyNames.Inventory.GoodsIssuesRead,
+            PermissionPolicyNames.Inventory.GoodsIssuesManage
         };
 
         foreach (var policy in policies)

@@ -22,6 +22,8 @@ public sealed class Person : Entity<Guid>
 
     public ICollection<GoodsReceipt> GoodsReceipts { get; private set; } = [];
 
+    public ICollection<GoodsIssue> GoodsIssues { get; private set; } = [];
+
     public void Update(string fullName, string phoneNumber)
     {
         FullName = fullName.Trim();

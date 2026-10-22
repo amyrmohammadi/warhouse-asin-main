@@ -1645,7 +1645,7 @@
                       :entries="itemHistoryEntries"
                       @close="closeItemHistory" />
 
-  <div class="container-fluid users-page goods-receipts-page">
+  <div class="container-fluid users-page goods-receipts-page inventory-data-page">
     <div class="page-titles">
       <ol class="breadcrumb">
         <li class="breadcrumb-item"><RouterLink to="/dashboard">داشبورد</RouterLink></li>
@@ -1736,7 +1736,7 @@
             </ul>
           </template>
           <template v-else>
-            {{ importSummary.importedReceiptCount }} سند ورود، {{ importSummary.importedItemCount }} قلم کالا و
+            {{ importSummary.importedReceiptCount }} سند ورود،{{ importSummary.importedItemCount }} قلم کالا و
             {{ importSummary.createdDelivererCount }} تحویل‌دهندهٔ جدید ثبت شد.
           </template>
         </div>
@@ -1786,12 +1786,12 @@
           </template>
         </DataTableFilters>
         <div ref="tableContainer"
-             :class="['users-table-container', 'goods-receipts-table-container', `goods-receipts-table-container--${tableMode}`]"
+             :class="['users-table-container', 'goods-receipts-table-container', 'inventory-table-container', `goods-receipts-table-container--${tableMode}`]"
              @wheel="handleTableWheel">
           <DataTable :key="tableMode"
                      ref="table"
                      :options="tableMode === 'items' ? itemTableOptions : receiptTableOptions"
-                     class="display responsive nowrap table-striped table table-sm users-table">
+                     class="display responsive nowrap table-striped table table-sm users-table inventory-data-table">
             <template #column-enteredAtUtc="{ cellData }">
               <strong class="text-black">{{ formatDate(cellData) }}</strong>
             </template>
@@ -1957,6 +1957,7 @@
       <div class="modal-backdrop show"></div>
     </template>
   </Teleport>
+
   <Teleport to="body">
     <template v-if="modalOpen">
       <div class="modal show d-block goods-receipt-modal" tabindex="-1" role="dialog" aria-modal="true" @click.self="closeModal">
@@ -2477,10 +2478,7 @@
                            class="receipt-new-master-data"
                            :class="{ 'receipt-new-master-data--denied': !canManageMasterData }">
                       <i :class="canManageMasterData ? 'las la-plus-circle' : 'las la-exclamation-circle'" aria-hidden="true"></i>
-                      {{
- canManageMasterData
-                        ? 'تأمین‌کننده جدید هنگام ثبت اضافه می‌شود.'
-                        : 'مجوز افزودن تأمین‌کننده جدید را ندارید؛ از فهرست انتخاب کنید.'
+                      {{canManageMasterData? 'تأمین‌کننده جدید هنگام ثبت اضافه می‌شود.': 'مجوز افزودن تأمین‌کننده جدید را ندارید؛ از فهرست انتخاب کنید.'
                       }}
                     </small>
                   </div>
@@ -3281,20 +3279,6 @@
 
     .goods-receipts-page > .card > .card-body {
       padding: .75rem;
-    }
-
-    .goods-receipts-page :deep(.data-table-filters) {
-      margin-bottom: .75rem;
-    }
-
-    .goods-receipts-page :deep(.data-table-filters__toolbar),
-    .goods-receipts-page :deep(.data-table-filters__search) {
-      max-width: none;
-      width: 100%;
-    }
-
-    .goods-receipts-page :deep(.data-table-filters__search) {
-      flex: 1 1 auto;
     }
 
     .goods-receipts-table-container :deep(.dt-layout-table > div) {

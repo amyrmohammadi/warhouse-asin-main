@@ -9,9 +9,11 @@ import { defineConfig, type ServerOptions } from 'vite'
 
 function createDevelopmentServerOptions(): ServerOptions {
   const configuredAspNetUrl = env.ASPNETCORE_URLS?.split(';').find(Boolean)
-  const target = env.ASPNETCORE_HTTPS_PORT
-    ? `https://localhost:${env.ASPNETCORE_HTTPS_PORT}`
-    : (configuredAspNetUrl ?? 'https://localhost:7269')
+  const target = 'http://localhost:5189'
+  // env.ASPNETCORE_HTTPS_PORT
+    // ? `https://localhost:${env.ASPNETCORE_HTTPS_PORT}`
+    // : 
+    // (configuredAspNetUrl ?? 'https://localhost:5189')
   const port = Number.parseInt(env.DEV_SERVER_PORT ?? '10243', 10)
 
   if (env.DEV_SERVER_HTTPS === 'false') {

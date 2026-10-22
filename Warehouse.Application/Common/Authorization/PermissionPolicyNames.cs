@@ -36,6 +36,9 @@ public static class PermissionPolicyNames
         public const string GoodsReceiptsReceiptInvoiceOperations = nameof(AppPermission.GoodsReceiptsReceiptInvoiceOperations);
         public const string GoodsReceiptsImport = nameof(AppPermission.GoodsReceiptsImport);
         public const string GoodsReceiptsExport = nameof(AppPermission.GoodsReceiptsExport);
+        public const string GoodsIssuesRead = nameof(AppPermission.GoodsIssuesRead);
+        public const string GoodsIssuesManage = nameof(AppPermission.GoodsIssuesManage);
+        public const string GoodsIssuesExport = nameof(AppPermission.GoodsIssuesExport);
     }
 
     public static IReadOnlyCollection<PermissionPolicyGroup> Groups { get; } =
@@ -71,7 +74,10 @@ public static class PermissionPolicyNames
                 new(Inventory.GoodsReceiptsInitialEntry, "ورود اولیه کالا"),
                 new(Inventory.GoodsReceiptsReceiptInvoiceOperations, "عملیات رسید و فاکتور"),
                 new(Inventory.GoodsReceiptsImport, "ایمپورت ورودی کالا"),
-                new(Inventory.GoodsReceiptsExport, "اکسپورت ورودی کالا")
+                new(Inventory.GoodsReceiptsExport, "اکسپورت ورودی کالا"),
+                new(Inventory.GoodsIssuesRead, "مشاهده تاریخچه خروج کالا"),
+                new(Inventory.GoodsIssuesManage, "ثبت و مدیریت خروج کالا"),
+                new(Inventory.GoodsIssuesExport, "اکسپورت خروج کالا")
             ]),
         new(
             "master-data",

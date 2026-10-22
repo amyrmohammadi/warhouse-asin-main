@@ -123,6 +123,10 @@
     () => session.value?.permissions.includes('GoodsReceiptsRead') ?? false
   )
 
+  const canReadGoodsIssues = computed(
+    () => session.value?.permissions.includes('GoodsIssuesRead') ?? false
+  )
+
   const canReadUserManagement = computed(
     () => canReadUsers.value || canReadRoles.value
   )
@@ -589,6 +593,15 @@
             </RouterLink>
           </li>
 
+          <li v-if="canReadGoodsIssues">
+            <RouterLink class="ai-icon"
+                        to="/dashboard/inventory/goods-issues"
+                        aria-expanded="false">
+              <i class="las la-truck-loading"></i>
+              <span class="nav-text">خروج کالا</span>
+            </RouterLink>
+          </li>
+
           <li v-if="canReadMasterData"
               class="sidebar-group-item"
               :class="{
@@ -706,6 +719,17 @@
                               )
                 }">
                   افراد
+                </RouterLink>
+              </li>
+
+              <li>
+                <RouterLink to="/dashboard/master-data/goods-issue-destinations"
+                            :class="{
+                            'submenu-active': isSubmenuActive(
+                            '/dashboard/master-data/goods-issue-destinations'
+                              )
+                }">
+                  مقصدهای خروج
                 </RouterLink>
               </li>
 

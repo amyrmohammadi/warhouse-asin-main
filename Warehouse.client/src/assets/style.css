@@ -1,0 +1,120 @@
+/* Shared inventory list styles used by both goods receipt and goods issue pages. */
+.inventory-data-page .data-table-filters {
+  margin-bottom: 1rem;
+}
+
+.inventory-data-page .data-table-filters__toolbar {
+  width: 100%;
+}
+
+.inventory-table-container {
+  border: 0;
+  border-radius: 0;
+  width: 100%;
+}
+
+.inventory-table-container .dt-layout-table > div {
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: .5rem;
+  padding: 0;
+}
+
+.inventory-table-container .inventory-data-table {
+  background: transparent;
+  border: 0 !important;
+  border-collapse: collapse;
+  border-spacing: 0;
+  color: var(--text-primary);
+  margin-bottom: 0 !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  min-width: 100%;
+  table-layout: auto;
+  width: 100% !important;
+}
+
+.inventory-data-page .inventory-table-container .inventory-data-table > thead > tr > th,
+.inventory-data-page .inventory-table-container .inventory-data-table > tbody > tr > td {
+  box-sizing: border-box;
+  border: 0 !important;
+  color: var(--text-primary);
+  font-size: .7325rem;
+  line-height: 1.35;
+  padding: .4rem .55rem !important;
+  position: relative;
+  text-align: center;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.inventory-data-page .inventory-table-container .inventory-data-table > thead > tr > th {
+  background: var(--surface) !important;
+  border-bottom: 1px solid var(--border-color) !important;
+  font-family: "iransans-medium", sans-serif;
+  font-weight: normal;
+}
+
+.inventory-data-page .inventory-table-container .inventory-data-table > thead > tr > th + th,
+.inventory-data-page .inventory-table-container .inventory-data-table > tbody > tr > td + td {
+  border-inline-start: 0 !important;
+}
+
+.inventory-data-page .inventory-table-container .inventory-data-table > thead > tr > th + th::before,
+.inventory-data-page .inventory-table-container .inventory-data-table > tbody > tr > td + td::before {
+  background: var(--border-color);
+  bottom: 0;
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 1px;
+}
+
+.inventory-data-page .inventory-table-container .inventory-data-table > tbody > tr:not(:last-child) > td {
+  border-bottom: 1px solid var(--border-color) !important;
+}
+
+.inventory-data-page .inventory-table-container .inventory-data-table > tbody > tr:last-child > td {
+  border-bottom: 0 !important;
+}
+
+.inventory-data-page .inventory-table-container .inventory-data-table > tbody > tr:nth-child(odd) > td {
+  background-color: var(--dt-stripe-odd, transparent) !important;
+  box-shadow: none !important;
+}
+
+.inventory-data-page .inventory-table-container .inventory-data-table > tbody > tr:nth-child(even) > td {
+  background-color: var(--dt-stripe-even, rgba(37, 99, 235, .04)) !important;
+  box-shadow: none !important;
+}
+
+.inventory-data-page .inventory-table-container .inventory-data-table > tbody > tr:hover > td {
+  background-color: var(--dt-row-hover, #fae5c3) !important;
+}
+
+.inventory-data-page .inventory-table-container .inventory-data-table thead .dt-column-header {
+  justify-content: center;
+  text-align: center;
+}
+
+.inventory-table-container .inventory-data-table .actions-cell {
+  white-space: nowrap;
+}
+
+.inventory-table-container .inventory-data-table .text-wrap-cell {
+  max-width: 16rem;
+  white-space: normal;
+}
+
+@media (max-width: 767px) {
+  .inventory-data-page .data-table-filters__toolbar,
+  .inventory-data-page .data-table-filters__search {
+    max-width: none;
+    width: 100%;
+  }
+
+  .inventory-data-page .data-table-filters__search {
+    flex: 1 1 auto;
+  }
+}

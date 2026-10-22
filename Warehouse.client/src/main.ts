@@ -2,6 +2,7 @@ import 'datatables.net-bs4/css/dataTables.bootstrap4.css'
 import 'datatables.net-responsive-bs4/css/responsive.bootstrap4.css'
 import 'datatables.net-responsive-bs4'
 import './assets/main.css'
+import './assets/style.css'
 
 import { createApp } from 'vue'
 import App from './App.vue'

@@ -154,6 +154,117 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                     b.ToTable("UserTokens", "Identity");
                 });
 
+            modelBuilder.Entity("Warehouse.Domain.Entities.GoodsIssue", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("IssueNumber")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTimeOffset>("IssuedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("IssuerId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IssueNumber")
+                        .IsUnique();
+
+                    b.HasIndex("IssuedAtUtc");
+
+                    b.HasIndex("IssuerId");
+
+                    b.ToTable("GoodsIssues", "Business");
+                });
+
+            modelBuilder.Entity("Warehouse.Domain.Entities.GoodsIssueDestination", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Title")
+                        .IsUnique();
+
+                    b.ToTable("GoodsIssueDestinations", "Business");
+                });
+
+            modelBuilder.Entity("Warehouse.Domain.Entities.GoodsIssueItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("AssetNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("DeliveringUnit")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<Guid>("DestinationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ExitReason")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<Guid>("GoodsIssueId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ProductCode")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<Guid?>("ProductId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<DateTimeOffset?>("ReturnAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DestinationId");
+
+                    b.HasIndex("GoodsIssueId");
+
+                    b.HasIndex("ProductId");
+
+                    b.ToTable("GoodsIssueItems", "Business");
+                });
+
             modelBuilder.Entity("Warehouse.Domain.Entities.GoodsReceipt", b =>
                 {
                     b.Property<Guid>("Id")
@@ -623,6 +734,43 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Warehouse.Domain.Entities.GoodsIssue", b =>
+                {
+                    b.HasOne("Warehouse.Domain.Entities.Person", "Issuer")
+                        .WithMany("GoodsIssues")
+                        .HasForeignKey("IssuerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Issuer");
+                });
+
+            modelBuilder.Entity("Warehouse.Domain.Entities.GoodsIssueItem", b =>
+                {
+                    b.HasOne("Warehouse.Domain.Entities.GoodsIssueDestination", "Destination")
+                        .WithMany("GoodsIssueItems")
+                        .HasForeignKey("DestinationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Warehouse.Domain.Entities.GoodsIssue", "GoodsIssue")
+                        .WithMany("Items")
+                        .HasForeignKey("GoodsIssueId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Warehouse.Domain.Entities.Product", "Product")
+                        .WithMany("GoodsIssueItems")
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Destination");
+
+                    b.Navigation("GoodsIssue");
+
+                    b.Navigation("Product");
+                });
+
             modelBuilder.Entity("Warehouse.Domain.Entities.GoodsReceipt", b =>
                 {
                     b.HasOne("Warehouse.Domain.Entities.Person", "Deliverer")
@@ -690,6 +838,16 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Warehouse.Domain.Entities.GoodsIssue", b =>
+                {
+                    b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("Warehouse.Domain.Entities.GoodsIssueDestination", b =>
+                {
+                    b.Navigation("GoodsIssueItems");
+                });
+
             modelBuilder.Entity("Warehouse.Domain.Entities.GoodsReceipt", b =>
                 {
                     b.Navigation("Items");
@@ -697,11 +855,15 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Warehouse.Domain.Entities.Person", b =>
                 {
+                    b.Navigation("GoodsIssues");
+
                     b.Navigation("GoodsReceipts");
                 });
 
             modelBuilder.Entity("Warehouse.Domain.Entities.Product", b =>
                 {
+                    b.Navigation("GoodsIssueItems");
+
                     b.Navigation("GoodsReceiptItems");
                 });
 

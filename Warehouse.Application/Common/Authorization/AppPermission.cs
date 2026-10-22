@@ -17,5 +17,8 @@ public enum AppPermission
     GoodsReceiptsInitialEntry,
     GoodsReceiptsReceiptInvoiceOperations,
     GoodsReceiptsImport,
-    GoodsReceiptsExport
+    GoodsReceiptsExport,
+    GoodsIssuesRead,
+    GoodsIssuesManage,
+    GoodsIssuesExport
 }
