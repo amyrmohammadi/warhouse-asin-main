@@ -16,6 +16,14 @@ public interface IIdentityService
         CreateRoleRequest request,
         CancellationToken cancellationToken = default);
 
+    Task<IdentityOperationResult> UpdateRoleAsync(
+        UpdateRoleRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<IdentityOperationResult> DeleteRoleAsync(
+        DeleteRoleRequest request,
+        CancellationToken cancellationToken = default);
+
     Task<TokenResult> LoginAsync(
         LoginRequest request,
         CancellationToken cancellationToken = default);

@@ -97,11 +97,11 @@ internal static class MasterDataValidationRules
             .WithMessage("وارد کردن نام کامل الزامی است.")
             .MaximumLength(FullNameMaxLength)
             .WithMessage($"نام کامل نباید بیشتر از {FullNameMaxLength} نویسه باشد.");
-        validator.RuleFor(phoneNumber)
-            .NotEmpty()
-            .WithMessage("وارد کردن شماره تلفن الزامی است.")
-            .MaximumLength(PhoneNumberMaxLength)
-            .WithMessage($"شماره تلفن نباید بیشتر از {PhoneNumberMaxLength} نویسه باشد.");
+        //validator.RuleFor(phoneNumber)
+        //    //.NotEmpty()
+        //    //.WithMessage("وارد کردن شماره تلفن الزامی است.")
+        //    .MaximumLength(PhoneNumberMaxLength)
+        //    .WithMessage($"شماره تلفن نباید بیشتر از {PhoneNumberMaxLength} نویسه باشد.");
     }
 
     private static void AddListRules<T>(AbstractValidator<T> validator)

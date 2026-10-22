@@ -7,4 +7,8 @@ public interface IAuditTrailService
     Task<GetAuditTrailsResult> GetAuditTrailsAsync(
         GetAuditTrailsRequest request,
         CancellationToken cancellationToken = default);
+
+    Task<GoodsReceiptItemHistoryResult?> GetGoodsReceiptItemHistoryAsync(
+        Guid itemId,
+        CancellationToken cancellationToken = default);
 }

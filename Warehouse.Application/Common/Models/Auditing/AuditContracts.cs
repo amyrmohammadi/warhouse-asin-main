@@ -39,3 +39,23 @@ public sealed record AuditTrailSummary(
     string? NewValues,
     string? ChangedColumns,
     DateTimeOffset OccurredAtUtc);
+
+public sealed record EntityHistoryChange(
+    string FieldName,
+    string FieldLabel,
+    string OldValue,
+    string NewValue);
+
+public sealed record EntityHistoryEntry(
+    long Id,
+    string Action,
+    string ActionLabel,
+    string SectionLabel,
+    string UserFullName,
+    DateTimeOffset OccurredAtUtc,
+    IReadOnlyCollection<EntityHistoryChange> Changes);
+
+public sealed record GoodsReceiptItemHistoryResult(
+    Guid ItemId,
+    string ItemTitle,
+    IReadOnlyCollection<EntityHistoryEntry> Entries);

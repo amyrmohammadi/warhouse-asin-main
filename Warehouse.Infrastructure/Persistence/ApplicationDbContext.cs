@@ -204,29 +204,13 @@ public sealed class ApplicationDbContext
             entity.ToTable("GoodsReceipts", "Business");
             entity.HasKey(receipt => receipt.Id);
             entity.Property(receipt => receipt.Description).HasMaxLength(1000);
-            entity.Property(receipt => receipt.InvoiceStatus)
-                .HasConversion<string>()
-                .HasMaxLength(32)
-                .IsRequired(false);
-            entity.Property(receipt => receipt.InvoiceNumber).HasMaxLength(100);
-            entity.Property(receipt => receipt.ReceiptNumber).HasMaxLength(100);
             entity.Property(receipt => receipt.PageNumber).HasMaxLength(100).IsRequired();
             entity.HasIndex(receipt => receipt.EnteredAtUtc);
             entity.HasIndex(receipt => receipt.PageNumber);
             entity.HasIndex(receipt => receipt.DelivererId);
-            entity.HasIndex(receipt => receipt.WarehouseId);
-            entity.HasIndex(receipt => receipt.SupplierId);
             entity.HasOne(receipt => receipt.Deliverer)
                 .WithMany(person => person.GoodsReceipts)
                 .HasForeignKey(receipt => receipt.DelivererId)
-                .OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(receipt => receipt.Warehouse)
-                .WithMany(warehouse => warehouse.GoodsReceipts)
-                .HasForeignKey(receipt => receipt.WarehouseId)
-                .OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(receipt => receipt.Supplier)
-                .WithMany(supplier => supplier.GoodsReceipts)
-                .HasForeignKey(receipt => receipt.SupplierId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
@@ -235,10 +219,19 @@ public sealed class ApplicationDbContext
             entity.ToTable("GoodsReceiptItems", "Business");
             entity.HasKey(item => item.Id);
             entity.Property(item => item.Quantity).HasPrecision(18, 3).IsRequired();
+            entity.Property(item => item.SortOrder).IsRequired();
             entity.Property(item => item.RequestNumber).HasMaxLength(100);
             entity.Property(item => item.Description).HasMaxLength(1000);
+            entity.Property(item => item.InvoiceStatus)
+                .HasConversion<string>()
+                .HasMaxLength(32)
+                .IsRequired(false);
+            entity.Property(item => item.InvoiceNumber).HasMaxLength(100);
+            entity.Property(item => item.ReceiptNumber).HasMaxLength(100);
             entity.HasIndex(item => item.ProductId);
-            entity.HasIndex(item => new { item.GoodsReceiptId, item.ProductId }).IsUnique();
+            entity.HasIndex(item => item.WarehouseId);
+            entity.HasIndex(item => item.SupplierId);
+            entity.HasIndex(item => new { item.GoodsReceiptId, item.ProductId });
             entity.HasOne(item => item.GoodsReceipt)
                 .WithMany(receipt => receipt.Items)
                 .HasForeignKey(item => item.GoodsReceiptId)
@@ -246,6 +239,14 @@ public sealed class ApplicationDbContext
             entity.HasOne(item => item.Product)
                 .WithMany(product => product.GoodsReceiptItems)
                 .HasForeignKey(item => item.ProductId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.Warehouse)
+                .WithMany(warehouse => warehouse.GoodsReceiptItems)
+                .HasForeignKey(item => item.WarehouseId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.Supplier)
+                .WithMany(supplier => supplier.GoodsReceiptItems)
+                .HasForeignKey(item => item.SupplierId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

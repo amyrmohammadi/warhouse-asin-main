@@ -12,13 +12,17 @@ using Warehouse.Application.Features.MasterData.Suppliers.Commands.UpdateSupplie
 using Warehouse.Application.Features.MasterData.Suppliers.Queries.GetSupplierById;
 using Warehouse.Application.Features.MasterData.Suppliers.Queries.GetSupplierValidationRules;
 using Warehouse.Application.Features.MasterData.Suppliers.Queries.GetSuppliers;
+using Warehouse.Application.Features.MasterData.Suppliers.Queries.SearchSuppliers;
 using Warehouse.Server.Contracts.MasterData;
 
 namespace Warehouse.Server.Controllers;
 
 [ApiController]
 [Route("endpoint/master-data/suppliers")]
-public sealed class SuppliersController(ISender sender, IMapper mapper) : ControllerBase
+public sealed class SuppliersController(
+    ISender sender,
+    IMapper mapper,
+    IAuthorizationService authorizationService) : ControllerBase
 {
     [Authorize(Policy = PermissionPolicyNames.MasterData.Read)]
     [HttpGet("validation-rules")]
@@ -28,18 +32,33 @@ public sealed class SuppliersController(ISender sender, IMapper mapper) : Contro
         return Ok(result);
     }
 
-    [Authorize(Policy = PermissionPolicyNames.MasterData.Read)]
+    [Authorize]
     [HttpGet]
     [ProducesResponseType(typeof(Result<MasterDataListResult<TitledMasterDataSummary>>), StatusCodes.Status200OK)]
     public async Task<ActionResult<Result<MasterDataListResult<TitledMasterDataSummary>>>> GetAll(
         [FromQuery] GetSuppliersQuery query,
         CancellationToken cancellationToken)
     {
+        if (!await CanReadSuppliersAsync()) return Forbid();
+
         var result = await sender.Send(query, cancellationToken);
         return Ok(result);
     }
 
-    [Authorize(Policy = PermissionPolicyNames.MasterData.Read)]
+    [Authorize]
+    [HttpGet("lookup")]
+    [ProducesResponseType(typeof(Result<IReadOnlyCollection<TitledMasterDataSummary>>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<Result<IReadOnlyCollection<TitledMasterDataSummary>>>> Search(
+        [FromQuery] SearchSuppliersQuery query,
+        CancellationToken cancellationToken)
+    {
+        if (!await CanReadSuppliersAsync()) return Forbid();
+
+        var result = await sender.Send(query, cancellationToken);
+        return Ok(result);
+    }
+
+    [Authorize]
     [HttpGet("{id:guid}")]
     [ProducesResponseType(typeof(Result<TitledMasterDataSummary>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(Result<TitledMasterDataSummary>), StatusCodes.Status404NotFound)]
@@ -47,6 +66,8 @@ public sealed class SuppliersController(ISender sender, IMapper mapper) : Contro
         Guid id,
         CancellationToken cancellationToken)
     {
+        if (!await CanReadSuppliersAsync()) return Forbid();
+
         var result = await sender.Send(
             new GetSupplierByIdQuery(id),
             cancellationToken);
@@ -123,5 +144,23 @@ public sealed class SuppliersController(ISender sender, IMapper mapper) : Contro
             new DeleteSupplierCommand(id),
             cancellationToken);
         return result.IsSuccess ? Ok(result) : NotFound(result);
+    }
+
+    private async Task<bool> CanReadSuppliersAsync()
+    {
+        var policies = new[]
+        {
+            PermissionPolicyNames.MasterData.Read,
+            PermissionPolicyNames.Inventory.GoodsReceiptsRead,
+            PermissionPolicyNames.Inventory.GoodsReceiptsInitialEntry,
+            PermissionPolicyNames.Inventory.GoodsReceiptsReceiptInvoiceOperations
+        };
+
+        foreach (var policy in policies)
+        {
+            if ((await authorizationService.AuthorizeAsync(User, policy)).Succeeded) return true;
+        }
+
+        return false;
     }
 }

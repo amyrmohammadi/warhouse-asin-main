@@ -5,10 +5,18 @@ import type { AjaxCallback, AjaxData, ColumnsConfig, Config } from 'datatables.n
 import { onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import DataTableScrollContainer from '@/components/DataTableScrollContainer.vue'
 import DataTableFilters from '@/components/filters/DataTableFilters.vue'
 import { getSession } from '@/services/auth'
-import { createRole, getRoles, RolesApiError } from '@/services/roles'
+import {
+  createRole,
+  deleteRole,
+  getRoles,
+  RolesApiError,
+  type RoleListItem,
+  updateRole,
+} from '@/services/roles'
 import { toast } from '@/services/toast'
 import type {
   DataTableFilterDefinition,
@@ -25,6 +33,16 @@ const router = useRouter()
 const table = ref<{
   dt: { ajax: { reload: (callback: null, resetPaging: boolean) => unknown } }
 } | null>(null)
+const confirmDialog = ref<{
+  ask: (options: {
+    title: string
+    text?: string
+    icon?: 'warning'
+    confirmButtonText?: string
+    cancelButtonText?: string
+    confirmButtonColor?: string
+  }) => Promise<boolean>
+} | null>(null)
 const quickSearch = ref('')
 const appliedFilters = ref<DataTableFilterValues>({})
 const filtersLoading = ref(false)
@@ -32,6 +50,7 @@ const canManageRolePolicies =
   getSession()?.permissions.includes('RolePoliciesManage') ?? false
 const canManageRoles = getSession()?.permissions.includes('RolesManage') ?? false
 const createModalOpen = ref(false)
+const editingRoleId = ref<string | null>(null)
 const newRoleName = ref('')
 const createRoleError = ref('')
 const roleSaving = ref(false)
@@ -80,12 +99,12 @@ const columns: ColumnsConfig[] = [
   },
 ]
 
-if (canManageRolePolicies) {
+if (canManageRolePolicies || canManageRoles) {
   columns.push({
-    data: 'name',
+    data: null,
     name: 'permissions',
     title: 'مدیریت دسترسی‌ها',
-    className: 'min-tablet-l',
+    className: 'min-tablet-l text-nowrap',
     orderable: false,
     searchable: false,
   })
@@ -251,7 +270,16 @@ async function openRolePermissions(roleName: string): Promise<void> {
 }
 
 function openCreateRoleModal(): void {
+  editingRoleId.value = null
   newRoleName.value = ''
+  createRoleError.value = ''
+  createModalOpen.value = true
+}
+
+function openEditRoleModal(role: RoleListItem): void {
+  if (role.name.toLocaleLowerCase() === 'admin') return
+  editingRoleId.value = role.id
+  newRoleName.value = role.name
   createRoleError.value = ''
   createModalOpen.value = true
 }
@@ -260,6 +288,7 @@ function closeCreateRoleModal(): void {
   if (roleSaving.value) return
   roleOperationRequest?.abort()
   createModalOpen.value = false
+  editingRoleId.value = null
   createRoleError.value = ''
 }
 
@@ -276,19 +305,61 @@ async function saveRole(): Promise<void> {
   createRoleError.value = ''
 
   try {
-    await createRole(name, roleOperationRequest.signal)
+    const isEditing = Boolean(editingRoleId.value)
+    if (editingRoleId.value) {
+      await updateRole(editingRoleId.value, name, roleOperationRequest.signal)
+    } else {
+      await createRole(name, roleOperationRequest.signal)
+    }
     createModalOpen.value = false
+    editingRoleId.value = null
     newRoleName.value = ''
     reloadRoles(false)
-    toast.success(`نقش «${name}» با موفقیت افزوده شد.`)
+    toast.success(`نقش «${name}» با موفقیت ${isEditing ? 'ویرایش' : 'افزوده'} شد.`)
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') return
     if (error instanceof RolesApiError && error.status === 401) {
       await router.replace({ name: 'login', query: { redirect: '/dashboard/roles' } })
       return
     }
-    toast.error(error instanceof Error ? error.message : 'افزودن نقش انجام نشد.')
+    toast.error(error instanceof Error ? error.message : 'ذخیره نقش انجام نشد.')
   } finally {
+    roleSaving.value = false
+  }
+}
+
+async function removeRole(role: RoleListItem): Promise<void> {
+  if (!confirmDialog.value || roleSaving.value || role.name.toLocaleLowerCase() === 'admin') return
+
+  const confirmed = await confirmDialog.value.ask({
+    title: 'حذف نقش',
+    text: role.userCount > 0
+      ? `نقش «${role.name}» به ${role.userCount} کاربر تخصیص دارد. با حذف نقش، این تخصیص‌ها نیز حذف می‌شوند. ادامه می‌دهید؟`
+      : `نقش «${role.name}» حذف شود؟ این عملیات قابل بازگشت نیست.`,
+    icon: 'warning',
+    confirmButtonText: 'حذف نقش',
+    cancelButtonText: 'انصراف',
+    confirmButtonColor: '#dc2626',
+  })
+  if (!confirmed) return
+
+  roleOperationRequest?.abort()
+  const controller = new AbortController()
+  roleOperationRequest = controller
+  roleSaving.value = true
+  try {
+    await deleteRole(role.id, controller.signal)
+    reloadRoles(false)
+    toast.success(`نقش «${role.name}» با موفقیت حذف شد.`)
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') return
+    if (error instanceof RolesApiError && error.status === 401) {
+      await router.replace({ name: 'login', query: { redirect: '/dashboard/roles' } })
+      return
+    }
+    toast.error(error instanceof Error ? error.message : 'حذف نقش انجام نشد.')
+  } finally {
+    if (roleOperationRequest === controller) roleOperationRequest = null
     roleSaving.value = false
   }
 }
@@ -375,16 +446,43 @@ onBeforeUnmount(() => {
                   <span class="badge light badge-primary">{{ cellData }}</span>
                 </template>
 
-                <template v-if="canManageRolePolicies" #column-permissions="{ cellData }">
-                  <button
-                    class="btn btn-primary btn-xs roles-table__manage-action"
-                    type="button"
-                    title="مدیریت نقش"
-                    aria-label="مدیریت نقش"
-                    @click="openRolePermissions(cellData)"
-                  >
-                    <i class="las la-user-shield" aria-hidden="true"></i>
-                  </button>
+                <template v-if="canManageRolePolicies || canManageRoles" #column-permissions="{ rowData }">
+                  <div class="users-table__actions">
+                    <button
+                      v-if="canManageRoles"
+                      class="btn btn-info btn-xs users-table__role-action"
+                      type="button"
+                      :disabled="roleSaving || rowData.name.toLocaleLowerCase() === 'admin'"
+                      :title="rowData.name.toLocaleLowerCase() === 'admin' ? 'نقش مدیر سیستم قابل ویرایش نیست' : 'ویرایش نقش'"
+                      aria-label="ویرایش نقش"
+                      @click="openEditRoleModal(rowData)"
+                    >
+                      <i class="las la-pen" aria-hidden="true"></i>
+                    </button>
+                    <button
+                      v-if="canManageRoles"
+                      class="btn btn-danger btn-xs users-table__role-action"
+                      type="button"
+                      :disabled="roleSaving || rowData.name.toLocaleLowerCase() === 'admin'"
+                      :title="rowData.name.toLocaleLowerCase() === 'admin'
+                        ? 'نقش مدیر سیستم قابل حذف نیست'
+                        : 'حذف نقش'"
+                      aria-label="حذف نقش"
+                      @click="removeRole(rowData)"
+                    >
+                      <i class="las la-trash" aria-hidden="true"></i>
+                    </button>
+                    <button
+                      v-if="canManageRolePolicies"
+                      class="btn btn-primary btn-xs users-table__role-action"
+                      type="button"
+                      title="تعیین دسترسی‌ها"
+                      aria-label="تعیین دسترسی‌های نقش"
+                      @click="openRolePermissions(rowData.name)"
+                    >
+                      <i class="las la-user-shield" aria-hidden="true"></i>
+                    </button>
+                  </div>
                 </template>
 
                 <thead>
@@ -393,7 +491,7 @@ onBeforeUnmount(() => {
                     <th>نام نقش</th>
                     <th>تعداد کاربران</th>
                     <th>تعداد دسترسی‌ها</th>
-                    <th v-if="canManageRolePolicies">مدیریت دسترسی‌ها</th>
+                    <th v-if="canManageRolePolicies || canManageRoles">مدیریت دسترسی‌ها</th>
                   </tr>
                 </thead>
               </DataTable>
@@ -403,6 +501,8 @@ onBeforeUnmount(() => {
       </div>
     </div>
   </div>
+
+  <ConfirmDialog ref="confirmDialog" />
 
   <Teleport to="body">
     <template v-if="createModalOpen">
@@ -417,7 +517,9 @@ onBeforeUnmount(() => {
         <div class="modal-dialog modal-dialog-centered" role="document">
           <div class="modal-content">
             <div class="modal-header">
-              <h5 id="create-role-modal-title" class="modal-title">افزودن نقش جدید</h5>
+              <h5 id="create-role-modal-title" class="modal-title">
+                {{ editingRoleId ? 'ویرایش نقش' : 'افزودن نقش جدید' }}
+              </h5>
               <button
                 type="button"
                 class="close"
@@ -447,7 +549,9 @@ onBeforeUnmount(() => {
                     :disabled="roleSaving"
                   />
                   <small class="form-text text-muted">
-                    پس از ایجاد نقش می‌توانید دسترسی‌های آن را از جدول مدیریت کنید.
+                    {{ editingRoleId
+                      ? 'تغییر نام نقش روی تمام کاربران دارای این نقش اعمال می‌شود.'
+                      : 'پس از ایجاد نقش می‌توانید دسترسی‌های آن را از جدول مدیریت کنید.' }}
                   </small>
                 </div>
               </div>
@@ -465,7 +569,7 @@ onBeforeUnmount(() => {
                     v-if="roleSaving"
                     class="spinner-border spinner-border-sm ml-2"
                     role="status"></span>
-                  افزودن نقش
+                  {{ editingRoleId ? 'ذخیره تغییرات' : 'افزودن نقش' }}
                 </button>
               </div>
             </form>

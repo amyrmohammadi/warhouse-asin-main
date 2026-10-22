@@ -111,6 +111,27 @@ public sealed class NumericFilterExtensionsTests
         Assert.Equal("Admin", Assert.Single(result).Name);
     }
 
+    [Fact]
+    public void ApplyAnyNumericFilter_FiltersParentsByTheirChildren()
+    {
+        var groups = new[]
+        {
+            new NumericGroup("first", [new NumericItem(1, 5m, null)]),
+            new NumericGroup("second", [new NumericItem(2, 12m, null)])
+        }.AsQueryable();
+
+        var result = groups.ApplyAnyNumericFilter(
+            new NumericFilter<decimal>
+            {
+                Operator = NumericOperator.Gte,
+                Value = 10m
+            },
+            group => group.Items,
+            item => item.Decimal);
+
+        Assert.Equal("second", Assert.Single(result).Name);
+    }
+
     private sealed record NumericItem(
         int Integer,
         decimal Decimal,
@@ -120,4 +141,8 @@ public sealed class NumericFilterExtensionsTests
         string Name,
         int First,
         int Second);
+
+    private sealed record NumericGroup(
+        string Name,
+        IReadOnlyCollection<NumericItem> Items);
 }

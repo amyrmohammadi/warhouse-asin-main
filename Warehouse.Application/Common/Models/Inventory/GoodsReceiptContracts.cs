@@ -15,20 +15,6 @@ public sealed class GoodsReceiptSummary
 
     public string DelivererFullName { get; init; } = string.Empty;
 
-    public Guid WarehouseId { get; init; }
-
-    public string WarehouseTitle { get; init; } = string.Empty;
-
-    public InvoiceStatus? InvoiceStatus { get; init; }
-
-    public string? InvoiceNumber { get; init; }
-
-    public Guid? SupplierId { get; init; }
-
-    public string? Counterparty { get; init; }
-
-    public string? ReceiptNumber { get; init; }
-
     public string PageNumber { get; init; } = string.Empty;
 
     public IReadOnlyCollection<GoodsReceiptItemSummary> Items { get; init; } = [];
@@ -44,7 +30,23 @@ public sealed class GoodsReceiptItemSummary
 
     public string ProductCode { get; init; } = string.Empty;
 
+    public Guid UnitOfMeasureId { get; init; }
+
     public string UnitOfMeasureTitle { get; init; } = string.Empty;
+
+    public Guid WarehouseId { get; init; }
+
+    public string WarehouseTitle { get; init; } = string.Empty;
+
+    public InvoiceStatus? InvoiceStatus { get; init; }
+
+    public string? InvoiceNumber { get; init; }
+
+    public Guid? SupplierId { get; init; }
+
+    public string? Counterparty { get; init; }
+
+    public string? ReceiptNumber { get; init; }
 
     public decimal Quantity { get; init; }
 
@@ -113,10 +115,6 @@ public sealed class GoodsReceiptOptions
     public IReadOnlyCollection<PersonSummary> People { get; init; } = [];
 
     public IReadOnlyCollection<TitledMasterDataSummary> Warehouses { get; init; } = [];
-
-    public IReadOnlyCollection<ProductSummary> Products { get; init; } = [];
-
-    public IReadOnlyCollection<TitledMasterDataSummary> Suppliers { get; init; } = [];
 
     public IReadOnlyCollection<TitledMasterDataSummary> UnitsOfMeasure { get; init; } = [];
 }

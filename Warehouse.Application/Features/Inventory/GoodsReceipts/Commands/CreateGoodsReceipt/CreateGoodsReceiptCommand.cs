@@ -10,12 +10,6 @@ public sealed record CreateGoodsReceiptCommand(
     string? Description,
     Guid? DelivererId,
     string? DelivererFullName,
-    Guid WarehouseId,
-    InvoiceStatus? InvoiceStatus,
-    string? InvoiceNumber,
-    Guid? SupplierId,
-    string? SupplierTitle,
-    string? ReceiptNumber,
     string PageNumber,
     IReadOnlyCollection<CreateGoodsReceiptItem> Items)
     : IRequest<Result<GoodsReceiptSummary>>;
@@ -25,6 +19,12 @@ public sealed record CreateGoodsReceiptItem(
     string? ProductTitle,
     string? ProductCode,
     Guid? UnitOfMeasureId,
+    Guid WarehouseId,
+    InvoiceStatus? InvoiceStatus,
+    string? InvoiceNumber,
+    Guid? SupplierId,
+    string? SupplierTitle,
+    string? ReceiptNumber,
     decimal Quantity,
     string? RequestNumber,
     string? Description);

@@ -123,20 +123,21 @@ internal sealed class ImportGoodsReceiptsCommandHandler(
                     row.Source.Date!.Value,
                     requestNumber,
                     person.Id,
-                    row.WarehouseId,
-                    row.InvoiceStatus,
-                    row.Source.InvoiceNumber,
-                    row.SupplierId,
-                    row.Source.ReceiptNumber,
                     row.Source.PageNumber
                 );
 
                 // فقط یک آیتم برای هر سند
                 receipt.AddItem(
                     row.ProductId,
+                    row.WarehouseId,
+                    row.InvoiceStatus,
+                    row.Source.InvoiceNumber,
+                    row.SupplierId,
+                    row.Source.ReceiptNumber,
                     row.Source.Quantity!.Value,
                     null,
-                    row.Source.Description
+                    row.Source.Description,
+                    0
                 );
 
                 await unitOfWork

@@ -20,11 +20,20 @@ internal sealed class GetProductsQueryHandler(IUnitOfWork<Guid> unitOfWork)
 
         if (!string.IsNullOrWhiteSpace(search))
         {
-            query = query.Where(product =>
-                product.Title.Contains(search) ||
-                product.Code.Contains(search) ||
-                product.UnitOfMeasure.Title.Contains(search) ||
-                (product.Description != null && product.Description.Contains(search)));
+            var keywords = search
+                .Trim()
+                .Split("", StringSplitOptions.RemoveEmptyEntries);
+
+            foreach (var keyword in keywords)
+            {
+                var term = keyword;
+
+                query = query.Where(product =>
+                    product.Title.Contains(term) ||
+                    product.Code.Contains(term) ||
+                    product.UnitOfMeasure.Title.Contains(term) 
+                   );
+            }
         }
 
         var title = request.Title?.Trim();

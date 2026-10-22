@@ -71,6 +71,44 @@ public static class NumericFilterExtensions
             Expression.Lambda<Func<TEntity, bool>>(body, selector.Parameters));
     }
 
+    public static IQueryable<TEntity> ApplyAnyNumericFilter<TEntity, TChild, TNumber>(
+        this IQueryable<TEntity> query,
+        NumericFilter<TNumber>? filter,
+        Expression<Func<TEntity, IEnumerable<TChild>>> collectionSelector,
+        Expression<Func<TChild, TNumber>> selector)
+        where TNumber : struct, IComparable<TNumber>
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        ArgumentNullException.ThrowIfNull(collectionSelector);
+        ArgumentNullException.ThrowIfNull(selector);
+
+        if (filter is null) return query;
+
+        var value = filter.Value ?? throw new ArgumentException(
+            "A value is required for an active numeric filter.",
+            nameof(filter));
+        var childBody = BuildComparison(
+            selector.Body,
+            Expression.Constant(value, typeof(TNumber)),
+            filter.ValueTo is { } valueTo
+                ? Expression.Constant(valueTo, typeof(TNumber))
+                : null,
+            filter.Operator);
+        var childPredicate = Expression.Lambda<Func<TChild, bool>>(
+            childBody,
+            selector.Parameters);
+        var anyCall = Expression.Call(
+            typeof(Enumerable),
+            nameof(Enumerable.Any),
+            [typeof(TChild)],
+            collectionSelector.Body,
+            childPredicate);
+
+        return query.Where(Expression.Lambda<Func<TEntity, bool>>(
+            anyCall,
+            collectionSelector.Parameters));
+    }
+
     private static Expression BuildComparison(
         Expression member,
         Expression value,

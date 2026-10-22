@@ -18,7 +18,7 @@ public sealed class StorageWarehouse : Entity<Guid>
 
     public string? Description { get; private set; }
 
-    public ICollection<GoodsReceipt> GoodsReceipts { get; private set; } = [];
+    public ICollection<GoodsReceiptItem> GoodsReceiptItems { get; private set; } = [];
 
     public void Update(string title, string? description)
     {

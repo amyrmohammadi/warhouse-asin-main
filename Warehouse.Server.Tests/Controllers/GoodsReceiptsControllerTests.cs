@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using System.Reflection;
+using ClosedXML.Excel;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -6,9 +8,12 @@ using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
 using Warehouse.Application.Common.Authorization;
 using Warehouse.Application.Common.Models;
+using Warehouse.Application.Common.Models.Auditing;
 using Warehouse.Application.Common.Models.Inventory;
+using Warehouse.Application.Features.Auditing.Queries.GetGoodsReceiptItemHistory;
 using Warehouse.Application.Features.Inventory.GoodsReceipts.Commands.CreateGoodsReceipt;
 using Warehouse.Application.Features.Inventory.GoodsReceipts.Commands.UpdateGoodsReceipt;
+using Warehouse.Application.Features.Inventory.GoodsReceipts.Queries.GetGoodsReceiptItemRows;
 using Warehouse.Domain.Enums;
 using Warehouse.Server.Contracts.Inventory;
 using Warehouse.Server.Controllers;
@@ -17,6 +22,102 @@ namespace Warehouse.Server.Tests.Controllers;
 
 public sealed class GoodsReceiptsControllerTests
 {
+    [Theory]
+    [InlineData(nameof(GoodsReceiptsController.Import), PermissionPolicyNames.Inventory.GoodsReceiptsImport)]
+    [InlineData(nameof(GoodsReceiptsController.ExportItems), PermissionPolicyNames.Inventory.GoodsReceiptsExport)]
+    [InlineData(nameof(GoodsReceiptsController.GetItemHistory), PermissionPolicyNames.Inventory.GoodsReceiptHistoryRead)]
+    public void ImportAndExport_UseTheirDedicatedPolicies(string actionName, string expectedPolicy)
+    {
+        var action = typeof(GoodsReceiptsController).GetMethod(actionName)!;
+        var authorize = action.GetCustomAttribute<AuthorizeAttribute>();
+
+        Assert.NotNull(authorize);
+        Assert.Equal(expectedPolicy, authorize.Policy);
+    }
+
+    [Fact]
+    public async Task GetItemHistory_ForwardsItemIdAndReturnsResult()
+    {
+        var sender = Substitute.For<ISender>();
+        var auth = Substitute.For<IAuthorizationService>();
+        var itemId = Guid.NewGuid();
+        var expected = Result<GoodsReceiptItemHistoryResult>.Success(
+            new GoodsReceiptItemHistoryResult(itemId, "کالا", []));
+        sender.Send(
+                Arg.Is<GetGoodsReceiptItemHistoryQuery>(query => query.ItemId == itemId),
+                Arg.Any<CancellationToken>())
+            .Returns(expected);
+        var controller = new GoodsReceiptsController(sender, auth);
+
+        var response = await controller.GetItemHistory(itemId, default);
+
+        var ok = Assert.IsType<OkObjectResult>(response.Result);
+        Assert.Same(expected, ok.Value);
+    }
+
+    [Fact]
+    public async Task ExportItems_FetchesAllFilteredRowsInFiveHundredRowBatches()
+    {
+        var sender = Substitute.For<ISender>();
+        var auth = Substitute.For<IAuthorizationService>();
+        var requests = new List<GetGoodsReceiptItemRowsQuery>();
+        var firstBatch = Enumerable.Range(1, 500)
+            .Select(index => ExportRow($"کالای {index}"))
+            .ToArray();
+        var secondBatch = new[] { ExportRow("کالای 501") };
+
+        sender.Send(Arg.Any<GetGoodsReceiptItemRowsQuery>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var request = call.Arg<GetGoodsReceiptItemRowsQuery>();
+                requests.Add(request);
+                var items = request.PageNumber == 1 ? firstBatch : secondBatch;
+                return Result<GoodsReceiptItemRowListResult>.Success(new GoodsReceiptItemRowListResult(
+                    items,
+                    501,
+                    501,
+                    request.PageNumber,
+                    request.PageSize));
+            });
+        var controller = new GoodsReceiptsController(sender, auth)
+        { ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() } };
+
+        var response = await controller.ExportItems(
+            new GetGoodsReceiptItemRowsQuery { Search = "فیلتر" },
+            default);
+
+        var file = Assert.IsType<FileStreamResult>(response);
+        Assert.Equal(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            file.ContentType);
+        Assert.Collection(
+            requests,
+            request =>
+            {
+                Assert.Equal(1, request.PageNumber);
+                Assert.Equal(500, request.PageSize);
+                Assert.Equal("فیلتر", request.Search);
+            },
+            request =>
+            {
+                Assert.Equal(2, request.PageNumber);
+                Assert.Equal(500, request.PageSize);
+                Assert.Equal("فیلتر", request.Search);
+            });
+
+        using var workbook = new XLWorkbook(file.FileStream);
+        var worksheet = workbook.Worksheet("ورودی کالا");
+        Assert.Equal(502, worksheet.LastRowUsed()!.RowNumber());
+        Assert.Equal(new[]
+        {
+            "ردیف", "تاریخ", "عنوان کالا", "کد کالا", "تعداد", "واحد", "توضیحات",
+            "تحویل دهنده", "فاکتور", "شماره فاکتور", "طرف حساب", "شماره رسید",
+            "انبار", "شماره صفحه", "عملیات"
+        }, worksheet.Row(1).Cells(1, 15).Select(cell => cell.GetString()));
+        Assert.Equal("کالای 501", worksheet.Cell(502, 3).GetString());
+        Assert.Equal(501, worksheet.Cell(502, 1).GetValue<int>());
+    }
+
     [Theory]
     [InlineData(true, null)]
     [InlineData(true, InvoiceStatus.DoesNotHave)]
@@ -32,11 +133,12 @@ public sealed class GoodsReceiptsControllerTests
         var controller = new GoodsReceiptsController(sender, auth)
         { ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() } };
 
-        var response = await controller.Create(Request() with { InvoiceStatus = status }, default);
+        var response = await controller.Create(Request(status), default);
 
         Assert.IsType<CreatedAtActionResult>(response.Result);
         await sender.Received(1).Send(Arg.Is<CreateGoodsReceiptCommand>(command =>
-            command.InvoiceStatus == (invoicePermission ? status : null)), Arg.Any<CancellationToken>());
+            command.Items.Single().InvoiceStatus == (invoicePermission ? status : null)),
+            Arg.Any<CancellationToken>());
     }
 
     [Theory]
@@ -87,7 +189,72 @@ public sealed class GoodsReceiptsControllerTests
         await sender.DidNotReceive().Send(Arg.Any<UpdateGoodsReceiptCommand>(), Arg.Any<CancellationToken>());
     }
 
-    private static CreateGoodsReceiptRequest Request() => new(DateTimeOffset.UtcNow, null,
-        Guid.NewGuid(), null, Guid.NewGuid(), InvoiceStatus.DoesNotHave, null, null, null, null, "1",
-        [new CreateGoodsReceiptItemRequest(Guid.NewGuid(), null, null, null, 1, null, null)]);
+    [Fact]
+    public async Task Create_NewProductWithMasterDataManageButWithoutProductsCreate_IsForbidden()
+    {
+        var sender = Substitute.For<ISender>();
+        var auth = Substitute.For<IAuthorizationService>();
+        auth.AuthorizeAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<object?>(), Arg.Any<string>())
+            .Returns(call => call.Arg<string>() == PermissionPolicyNames.MasterData.Manage
+                ? AuthorizationResult.Success() : AuthorizationResult.Failed());
+        var controller = new GoodsReceiptsController(sender, auth)
+        { ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() } };
+
+        var response = await controller.Create(RequestWithNewProduct(), default);
+
+        Assert.IsType<ForbidResult>(response.Result);
+        await sender.DidNotReceive().Send(Arg.Any<CreateGoodsReceiptCommand>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Create_NewProductWithProductsCreate_IsAllowed()
+    {
+        var sender = Substitute.For<ISender>();
+        var auth = Substitute.For<IAuthorizationService>();
+        auth.AuthorizeAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<object?>(), Arg.Any<string>())
+            .Returns(call => call.Arg<string>() == PermissionPolicyNames.MasterData.ProductsCreate
+                ? AuthorizationResult.Success() : AuthorizationResult.Failed());
+        sender.Send(Arg.Any<CreateGoodsReceiptCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result<GoodsReceiptSummary>.Success(new GoodsReceiptSummary()));
+        var controller = new GoodsReceiptsController(sender, auth)
+        { ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() } };
+
+        var response = await controller.Create(RequestWithNewProduct(), default);
+
+        Assert.IsType<CreatedAtActionResult>(response.Result);
+        await sender.Received(1).Send(Arg.Any<CreateGoodsReceiptCommand>(), Arg.Any<CancellationToken>());
+    }
+
+    private static CreateGoodsReceiptRequest Request(
+        InvoiceStatus? status = InvoiceStatus.DoesNotHave) => new(
+        DateTimeOffset.UtcNow, null, Guid.NewGuid(), null, "1",
+        [new CreateGoodsReceiptItemRequest(
+            Guid.NewGuid(), null, null, null, Guid.NewGuid(), status, null,
+            null, null, null, 1, null, null)]);
+
+    private static CreateGoodsReceiptRequest RequestWithNewProduct() => new(
+        DateTimeOffset.UtcNow, null, Guid.NewGuid(), null, "1",
+        [new CreateGoodsReceiptItemRequest(
+            null, "کالای جدید", "NEW-1", Guid.NewGuid(), Guid.NewGuid(),
+            InvoiceStatus.DoesNotHave, null, null, null, null, 1, null, null)]);
+
+    private static GoodsReceiptItemRowSummary ExportRow(string productTitle) => new()
+    {
+        Id = Guid.NewGuid(),
+        GoodsReceiptId = Guid.NewGuid(),
+        ProductId = Guid.NewGuid(),
+        ProductTitle = productTitle,
+        ProductCode = "P-1",
+        UnitOfMeasureTitle = "عدد",
+        Quantity = 2.5m,
+        ItemDescription = "توضیحات",
+        EnteredAtUtc = new DateTimeOffset(2026, 10, 21, 8, 0, 0, TimeSpan.Zero),
+        DelivererFullName = "تحویل دهنده",
+        WarehouseTitle = "انبار اصلی",
+        InvoiceStatus = InvoiceStatus.HasInvoice,
+        InvoiceNumber = "I-1",
+        Counterparty = "طرف حساب",
+        ReceiptNumber = "R-1",
+        PageNumber = "10"
+    };
 }

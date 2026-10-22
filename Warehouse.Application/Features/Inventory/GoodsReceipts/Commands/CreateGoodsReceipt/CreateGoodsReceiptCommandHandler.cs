@@ -21,15 +21,6 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
         CreateGoodsReceiptCommand request, CancellationToken cancellationToken,
         GoodsReceipt? existing = null, bool updateInitial = true, bool updateInvoice = true)
     {
-        var warehouseRepository = unitOfWork.Repository<StorageWarehouse>();
-        var warehouse = await warehouseRepository.GetByIdAsync(
-            request.WarehouseId,
-            cancellationToken);
-        if (warehouse is null)
-        {
-            return Result<GoodsReceiptSummary>.Error("انبار انتخاب‌شده پیدا نشد.");
-        }
-
         await unitOfWork.BeginTransaction(cancellationToken);
         try
         {
@@ -43,16 +34,6 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                 return Result<GoodsReceiptSummary>.Error(delivererError);
             }
 
-            var (supplier, supplierError) = await ResolveSupplierAsync(
-                request.SupplierId,
-                request.SupplierTitle,
-                cancellationToken);
-            if (supplierError is not null)
-            {
-                await unitOfWork.RollBackTransaction(cancellationToken);
-                return Result<GoodsReceiptSummary>.Error(supplierError);
-            }
-
             var resolvedItems = await ResolveProductsAsync(request.Items, cancellationToken);
             if (!resolvedItems.IsSuccess)
             {
@@ -60,85 +41,123 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                 return Result<GoodsReceiptSummary>.Error(resolvedItems.Messages);
             }
 
+            var warehouseRepository = unitOfWork.Repository<StorageWarehouse>();
+            var warehouseIds = request.Items.Select(item => item.WarehouseId).Distinct().ToArray();
+            var warehouses = await warehouseRepository.ToListAsync(
+                warehouseRepository.Entities.Where(item => warehouseIds.Contains(item.Id)),
+                cancellationToken);
+            if (warehouses.Count != warehouseIds.Length)
+            {
+                await unitOfWork.RollBackTransaction(cancellationToken);
+                return Result<GoodsReceiptSummary>.Error("یک یا چند انبار انتخاب‌شده پیدا نشد.");
+            }
+            var warehousesById = warehouses.ToDictionary(item => item.Id);
+
+            var preparedItems = new List<PreparedItem>(request.Items.Count);
+            var supplierCache = new Dictionary<string, Supplier?>(StringComparer.Ordinal);
+            foreach (var pair in resolvedItems.Data!.Zip(request.Items))
+            {
+                var source = pair.Second;
+                var supplierKey = source.SupplierId?.ToString() ??
+                                  NormalizeSupplierTitle(source.SupplierTitle ?? string.Empty);
+                if (!supplierCache.TryGetValue(supplierKey, out var supplier))
+                {
+                    var resolvedSupplier = await ResolveSupplierAsync(
+                        source.SupplierId, source.SupplierTitle, cancellationToken);
+                    if (resolvedSupplier.Error is not null)
+                    {
+                        await unitOfWork.RollBackTransaction(cancellationToken);
+                        return Result<GoodsReceiptSummary>.Error(resolvedSupplier.Error);
+                    }
+                    supplier = resolvedSupplier.Supplier;
+                    supplierCache[supplierKey] = supplier;
+                }
+                preparedItems.Add(new PreparedItem(
+                    pair.First,
+                    warehousesById[source.WarehouseId],
+                    source.InvoiceStatus,
+                    source.InvoiceNumber,
+                    supplier,
+                    source.ReceiptNumber));
+            }
+
             var receipt = existing ?? new GoodsReceipt(
                 request.EnteredAtUtc,
                 request.Description,
                 deliverer!.Id,
-                request.WarehouseId,
-                request.InvoiceStatus,
-                request.InvoiceNumber,
-                supplier?.Id,
-                request.ReceiptNumber,
                 request.PageNumber);
 
-            if (existing is not null)
+            if (existing is not null && updateInitial)
+                receipt.UpdateInitialEntry(request.EnteredAtUtc, request.Description,
+                    deliverer!.Id, request.PageNumber);
+
+            var itemRepository = unitOfWork.Repository<GoodsReceiptItem>();
+            var oldItems = existing is null ? [] : await itemRepository.ToListAsync(
+                itemRepository.Entities
+                    .Where(item => item.GoodsReceiptId == receipt.Id)
+                    .OrderBy(item => item.SortOrder)
+                    .ThenBy(item => item.Id),
+                cancellationToken);
+            var oldItemsByProduct = oldItems
+                .GroupBy(item => item.ProductId)
+                .ToDictionary(group => group.Key, group => new Queue<GoodsReceiptItem>(group));
+            var matchedOldItemIds = new HashSet<Guid>();
+
+            for (var sortOrder = 0; sortOrder < preparedItems.Count; sortOrder++)
             {
-                if (updateInitial)
-                    receipt.UpdateInitialEntry(request.EnteredAtUtc, request.Description,
-                        deliverer!.Id, warehouse.Id, request.PageNumber);
-                if (updateInvoice)
-                    receipt.UpdateReceiptInvoice(request.InvoiceStatus, request.InvoiceNumber,
-                        supplier?.Id, request.ReceiptNumber);
+                var item = preparedItems[sortOrder];
+                GoodsReceiptItem? old = null;
+                if (oldItemsByProduct.TryGetValue(item.Product.ProductId, out var candidates) &&
+                    candidates.Count > 0)
+                {
+                    old = candidates.Dequeue();
+                    matchedOldItemIds.Add(old.Id);
+                }
+                if (old is null)
+                {
+                    if (!updateInitial && existing is not null) continue;
+                    receipt.AddItem(
+                        item.Product.ProductId, item.Warehouse.Id, item.InvoiceStatus,
+                        item.InvoiceNumber, item.Supplier?.Id, item.ReceiptNumber,
+                        item.Product.Quantity, item.Product.RequestNumber, item.Product.Description,
+                        sortOrder);
+                    if (existing is not null)
+                        await itemRepository.AddAsync(receipt.Items.Last(), cancellationToken);
+                    continue;
+                }
+
+                var tracked = await itemRepository.GetByIdAsync(old.Id, cancellationToken);
+                tracked!.Update(
+                    updateInitial ? item.Warehouse.Id : old.WarehouseId,
+                    updateInvoice ? item.InvoiceStatus : old.InvoiceStatus,
+                    updateInvoice ? item.InvoiceNumber : old.InvoiceNumber,
+                    updateInvoice ? item.Supplier?.Id : old.SupplierId,
+                    updateInvoice ? item.ReceiptNumber : old.ReceiptNumber,
+                    updateInitial ? item.Product.Quantity : old.Quantity,
+                    updateInitial ? item.Product.RequestNumber : old.RequestNumber,
+                    updateInitial ? item.Product.Description : old.Description,
+                    updateInitial ? sortOrder : old.SortOrder);
             }
-            if (existing is null || updateInitial)
+
+            if (existing is not null && updateInitial)
             {
-                var itemRepository = unitOfWork.Repository<GoodsReceiptItem>();
-                var oldItems = existing is null ? [] : await itemRepository.ToListAsync(
-                    itemRepository.Entities.Where(item => item.GoodsReceiptId == receipt.Id), cancellationToken);
-                var requestedIds = resolvedItems.Data!.Select(item => item.ProductId).ToHashSet();
-                foreach (var old in oldItems)
+                foreach (var old in oldItems.Where(item => !matchedOldItemIds.Contains(item.Id)))
                 {
                     var tracked = await itemRepository.GetByIdAsync(old.Id, cancellationToken);
-                    if (!requestedIds.Contains(old.ProductId))
-                        await itemRepository.DeleteAsync(tracked!, cancellationToken);
-                }
-                foreach (var item in resolvedItems.Data!)
-                {
-                    var old = oldItems.FirstOrDefault(old => old.ProductId == item.ProductId);
-                    if (old is null)
-                    {
-                        receipt.AddItem(item.ProductId, item.Quantity, item.RequestNumber, item.Description);
-                        if (existing is not null)
-                            await itemRepository.AddAsync(receipt.Items.Last(), cancellationToken);
-                    }
-                    else
-                    {
-                        var tracked = await itemRepository.GetByIdAsync(old.Id, cancellationToken);
-                        tracked!.Update(item.Quantity, item.RequestNumber, item.Description);
-                    }
+                    await itemRepository.DeleteAsync(tracked!, cancellationToken);
                 }
             }
+
+            var receiptRepository = unitOfWork.Repository<GoodsReceipt>();
             if (existing is null)
-                await unitOfWork.Repository<GoodsReceipt>().AddAsync(receipt, cancellationToken);
+                await receiptRepository.AddAsync(receipt, cancellationToken);
             await unitOfWork.SaveAsync(cancellationToken);
             await unitOfWork.CommitTransaction(cancellationToken);
 
-            return Result<GoodsReceiptSummary>.Success(new GoodsReceiptSummary
-            {
-                Id = receipt.Id,
-                EnteredAtUtc = receipt.EnteredAtUtc,
-                Description = receipt.Description,
-                DelivererId = deliverer!.Id,
-                DelivererFullName = deliverer.FullName,
-                WarehouseId = warehouse.Id,
-                WarehouseTitle = warehouse.Title,
-                InvoiceStatus = receipt.InvoiceStatus,
-                InvoiceNumber = receipt.InvoiceNumber,
-                SupplierId = supplier?.Id,
-                Counterparty = supplier?.Title,
-                ReceiptNumber = receipt.ReceiptNumber,
-                PageNumber = receipt.PageNumber,
-                Items = resolvedItems.Data!.Select(item => new GoodsReceiptItemSummary
-                {
-                    ProductId = item.ProductId,
-                    ProductTitle = item.ProductTitle,
-                    ProductCode = item.ProductCode,
-                    UnitOfMeasureTitle = item.UnitTitle,
-                    Quantity = item.Quantity,
-                    RequestNumber = item.RequestNumber,
-                    Description = item.Description
-                }).ToArray()
-            });
+            var summaries = await receiptRepository.ToListAsync(
+                receiptRepository.Entities.Where(item => item.Id == receipt.Id).ToSummary(),
+                cancellationToken);
+            return Result<GoodsReceiptSummary>.Success(summaries[0]);
         }
         catch
         {
@@ -233,6 +252,7 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
             .Select(item => item.ProductId!.Value)
             .Distinct()
             .ToArray();
+
         var existingProducts = await productRepository.ToListAsync(
             productRepository.Entities
                 .Where(product => existingIds.Contains(product.Id))
@@ -281,7 +301,8 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
 
             var duplicateCode = duplicateProducts.FirstOrDefault(
                 product => newCodeKeys.Contains(product.NormalizedCode));
-            if (duplicateCode is not null)
+
+            if (duplicateCode is not null && duplicateCode.Code != "-")
             {
                 return Result<IReadOnlyCollection<ResolvedItem>>.Error(
                     $"کد کالا «{duplicateCode.Code}» قبلاً ثبت شده است؛ کالا را از فهرست انتخاب کنید.");
@@ -304,6 +325,8 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
         var unitsById = storedUnits.ToDictionary(unit => unit.Id);
 
         var existingById = existingProducts.ToDictionary(product => product.Id);
+        var createdProducts = new Dictionary<string, (Product Product, string UnitTitle)>(
+            StringComparer.Ordinal);
         var result = new List<ResolvedItem>(items.Count);
         foreach (var item in items)
         {
@@ -322,17 +345,26 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
             }
 
             var unit = unitsById[item.UnitOfMeasureId!.Value];
-            var newProduct = new Product(
-                item.ProductTitle!,
-                item.ProductCode!,
-                unit.Id,
-                null);
-            await productRepository.AddAsync(newProduct, cancellationToken);
+            var codeKey = Product.CreateComparisonKey(item.ProductCode!);
+            var productKey = Product.IsPlaceholderCode(item.ProductCode!)
+                ? $"{codeKey}:{Product.CreateComparisonKey(item.ProductTitle!)}:{unit.Id}"
+                : codeKey;
+            if (!createdProducts.TryGetValue(productKey, out var created))
+            {
+                var product = new Product(
+                    item.ProductTitle!,
+                    item.ProductCode!,
+                    unit.Id,
+                    null);
+                await productRepository.AddAsync(product, cancellationToken);
+                created = (product, unit.Title);
+                createdProducts[productKey] = created;
+            }
             result.Add(new ResolvedItem(
-                newProduct.Id,
-                newProduct.Title,
-                newProduct.Code,
-                unit.Title,
+                created.Product.Id,
+                created.Product.Title,
+                created.Product.Code,
+                created.UnitTitle,
                 item.Quantity,
                 item.RequestNumber,
                 item.Description));
@@ -356,4 +388,12 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
         decimal Quantity,
         string? RequestNumber,
         string? Description);
+
+    private sealed record PreparedItem(
+        ResolvedItem Product,
+        StorageWarehouse Warehouse,
+        Domain.Enums.InvoiceStatus? InvoiceStatus,
+        string? InvoiceNumber,
+        Supplier? Supplier,
+        string? ReceiptNumber);
 }

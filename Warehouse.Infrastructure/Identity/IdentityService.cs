@@ -130,6 +130,58 @@ internal sealed class IdentityService(
             : new IdentityOperationResult(false, GetErrors(result));
     }
 
+    public async Task<IdentityOperationResult> UpdateRoleAsync(
+        UpdateRoleRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var role = await roleManager.FindByIdAsync(request.RoleId.ToString());
+        if (role is null)
+        {
+            return FailedOperation("نقش موردنظر پیدا نشد.");
+        }
+
+        if (string.Equals(role.Name, DefaultRoles.Admin, StringComparison.OrdinalIgnoreCase))
+        {
+            return FailedOperation("ویرایش نقش پیش‌فرض مدیر سیستم مجاز نیست.");
+        }
+
+        var roleName = request.Name.Trim();
+        var duplicate = await roleManager.FindByNameAsync(roleName);
+        if (duplicate is not null && duplicate.Id != role.Id)
+        {
+            return FailedOperation("نقشی با این نام قبلاً ثبت شده است.");
+        }
+
+        role.Name = roleName;
+        var result = await roleManager.UpdateAsync(role);
+        return result.Succeeded
+            ? SuccessfulOperation()
+            : new IdentityOperationResult(false, GetErrors(result));
+    }
+
+    public async Task<IdentityOperationResult> DeleteRoleAsync(
+        DeleteRoleRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var role = await roleManager.FindByIdAsync(request.RoleId.ToString());
+        if (role is null)
+        {
+            return FailedOperation("نقش موردنظر پیدا نشد.");
+        }
+
+        if (string.Equals(role.Name, DefaultRoles.Admin, StringComparison.OrdinalIgnoreCase))
+        {
+            return FailedOperation("حذف نقش پیش‌فرض مدیر سیستم مجاز نیست.");
+        }
+
+        var result = await roleManager.DeleteAsync(role);
+        return result.Succeeded
+            ? SuccessfulOperation()
+            : new IdentityOperationResult(false, GetErrors(result));
+    }
+
     public async Task<TokenResult> LoginAsync(
         LoginRequest request,
         CancellationToken cancellationToken = default)

@@ -1023,6 +1023,12 @@
       display: none !important;
     }
 
+    .sidebar-mini-flyout
+    :deep( .sidebar-group-trigger.has-arrow::after ) {
+      content: none !important;
+      display: none !important;
+    }
+
     /* Main icon in mini sidebar */
 
     .sidebar-mini-flyout
@@ -1038,10 +1044,10 @@
     :deep( .sidebar-menu-vue > li:hover > .sidebar-group-trigger > .sidebar-main-icon ),
     .sidebar-mini-flyout
     :deep( .sidebar-menu-vue > li:focus-within > .sidebar-group-trigger > .sidebar-main-icon ) {
-      background: var(--primary, #0f766e) !important;
-      background-color: var(--primary, #0f766e) !important;
+      background: var(--primary, #2563eb) !important;
+      background-color: var(--primary, #2563eb) !important;
       color: #fff !important;
-      border-color: var(--primary, #0f766e) !important;
+      border-color: var(--primary, #2563eb) !important;
     }
 
     /* Icon font color */

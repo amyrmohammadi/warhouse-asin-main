@@ -29,6 +29,14 @@ export interface AuthSession extends LoginResponse {
 }
 
 const sessionKey = 'vue-clean-architecture.auth'
+const authChannelName = 'warehouse.auth-session'
+
+type AuthChannelMessage =
+  | { type: 'session-request'; requestId: string }
+  | { type: 'session-response'; requestId: string; session: AuthSession }
+  | { type: 'session-cleared' }
+
+let authChannel: BroadcastChannel | null = null
 
 interface StoredSession {
   session: AuthSession
@@ -61,6 +69,60 @@ function getStoredSession(): StoredSession | null {
     ? { session: temporarySession, storage: sessionStorage }
     : null
 }
+
+function isUsableSession(value: unknown): value is AuthSession {
+  if (!value || typeof value !== 'object') return false
+
+  const session = value as Partial<AuthSession>
+  return (
+    typeof session.userId === 'string' &&
+    typeof session.email === 'string' &&
+    typeof session.accessToken === 'string' &&
+    session.accessToken.length > 0 &&
+    typeof session.accessTokenExpiresAtUtc === 'string' &&
+    Date.parse(session.accessTokenExpiresAtUtc) > Date.now() &&
+    typeof session.refreshToken === 'string' &&
+    typeof session.refreshTokenExpiresAtUtc === 'string' &&
+    Array.isArray(session.permissions) &&
+    session.permissions.every((permission) => typeof permission === 'string')
+  )
+}
+
+function removeStoredSession(): void {
+  localStorage.removeItem(sessionKey)
+  sessionStorage.removeItem(sessionKey)
+}
+
+function handleAuthChannelMessage(event: MessageEvent<AuthChannelMessage>): void {
+  const message = event.data
+
+  if (message?.type === 'session-cleared') {
+    removeStoredSession()
+    return
+  }
+
+  if (message?.type !== 'session-request' || typeof message.requestId !== 'string') return
+
+  const session = getStoredSession()?.session
+  if (!isUsableSession(session)) return
+
+  getAuthChannel()?.postMessage({
+    type: 'session-response',
+    requestId: message.requestId,
+    session,
+  } satisfies AuthChannelMessage)
+}
+
+function getAuthChannel(): BroadcastChannel | null {
+  if (authChannel) return authChannel
+  if (typeof BroadcastChannel === 'undefined') return null
+
+  authChannel = new BroadcastChannel(authChannelName)
+  authChannel.addEventListener('message', handleAuthChannelMessage)
+  return authChannel
+}
+
+getAuthChannel()
 
 function normalizeMessages(payload: unknown, fallback: string): string[] {
   if (payload && typeof payload === 'object') {
@@ -152,6 +214,45 @@ export function getSession(): AuthSession | null {
   return getStoredSession()?.session ?? null
 }
 
+export async function restoreSessionFromOpenTab(timeoutMs = 500): Promise<AuthSession | null> {
+  const currentSession = getSession()
+  if (isUsableSession(currentSession)) return currentSession
+
+  const channel = getAuthChannel()
+  if (!channel) return null
+
+  const requestId =
+    typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+
+  return new Promise((resolve) => {
+    const finish = (session: AuthSession | null) => {
+      clearTimeout(timer)
+      channel.removeEventListener('message', handleResponse)
+      resolve(session)
+    }
+
+    const handleResponse = (event: MessageEvent<AuthChannelMessage>) => {
+      const message = event.data
+      if (
+        message?.type !== 'session-response' ||
+        message.requestId !== requestId ||
+        !isUsableSession(message.session)
+      ) {
+        return
+      }
+
+      sessionStorage.setItem(sessionKey, JSON.stringify(message.session))
+      finish(message.session)
+    }
+
+    channel.addEventListener('message', handleResponse)
+    const timer = setTimeout(() => finish(null), timeoutMs)
+    channel.postMessage({ type: 'session-request', requestId } satisfies AuthChannelMessage)
+  })
+}
+
 export async function synchronizeSessionPermissions(): Promise<AuthSession | null> {
   const stored = getStoredSession()
   if (!stored?.session.accessToken) return null
@@ -198,6 +299,6 @@ export function hasValidSession(): boolean {
 }
 
 export function clearSession(): void {
-  localStorage.removeItem(sessionKey)
-  sessionStorage.removeItem(sessionKey)
+  removeStoredSession()
+  getAuthChannel()?.postMessage({ type: 'session-cleared' } satisfies AuthChannelMessage)
 }

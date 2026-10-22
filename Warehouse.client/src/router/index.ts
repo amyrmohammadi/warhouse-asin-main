@@ -1,6 +1,11 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
-import { getSession, hasValidSession, synchronizeSessionPermissions } from '@/services/auth'
+import {
+  getSession,
+  hasValidSession,
+  restoreSessionFromOpenTab,
+  synchronizeSessionPermissions,
+} from '@/services/auth'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -127,7 +132,12 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
-  const isAuthenticated = hasValidSession()
+  let isAuthenticated = hasValidSession()
+
+  if (!isAuthenticated) {
+    await restoreSessionFromOpenTab()
+    isAuthenticated = hasValidSession()
+  }
 
   if (to.meta.requiresAuth && !isAuthenticated) {
     return { name: 'login', query: { redirect: to.fullPath } }

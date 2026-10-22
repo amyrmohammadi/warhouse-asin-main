@@ -1,7 +1,5 @@
+using System.ComponentModel.DataAnnotations.Schema;
 using Warehouse.Domain.Common;
-using Warehouse.Domain.Enums;
-using InvoiceStatusValue = Warehouse.Domain.Enums.InvoiceStatus;
-
 namespace Warehouse.Domain.Entities;
 
 public sealed class GoodsReceipt : Entity<Guid>
@@ -14,24 +12,12 @@ public sealed class GoodsReceipt : Entity<Guid>
         DateTimeOffset enteredAtUtc,
         string? description,
         Guid delivererId,
-        Guid warehouseId,
-        InvoiceStatus? invoiceStatus,
-        string? invoiceNumber,
-        Guid? supplierId,
-        string? receiptNumber,
         string pageNumber)
     {
         Id = Guid.NewGuid();
         EnteredAtUtc = enteredAtUtc.ToUniversalTime();
         Description = Normalize(description);
         DelivererId = delivererId;
-        WarehouseId = warehouseId;
-        InvoiceStatus = invoiceStatus;
-        InvoiceNumber = invoiceStatus == InvoiceStatusValue.HasInvoice
-            ? Normalize(invoiceNumber)
-            : null;
-        SupplierId = supplierId;
-        ReceiptNumber = Normalize(receiptNumber);
         PageNumber = pageNumber.Trim();
     }
 
@@ -43,55 +29,48 @@ public sealed class GoodsReceipt : Entity<Guid>
 
     public Person Deliverer { get; private set; } = null!;
 
-    public Guid WarehouseId { get; private set; }
-
-    public StorageWarehouse Warehouse { get; private set; } = null!;
-
-    public InvoiceStatus? InvoiceStatus { get; private set; }
-
-    public string? InvoiceNumber { get; private set; }
-
-    public Guid? SupplierId { get; private set; }
-
-    public Supplier? Supplier { get; private set; }
-
-    public string? ReceiptNumber { get; private set; }
-
     public string PageNumber { get; private set; } = string.Empty;
 
     public ICollection<GoodsReceiptItem> Items { get; private set; } = [];
 
+    [NotMapped]
+    public Guid? SupplierId => Items.FirstOrDefault()?.SupplierId;
+
+    [NotMapped]
+    public Supplier? Supplier => Items.FirstOrDefault()?.Supplier;
+
     public void AddItem(
         Guid productId,
+        Guid warehouseId,
+        Domain.Enums.InvoiceStatus? invoiceStatus,
+        string? invoiceNumber,
+        Guid? supplierId,
+        string? receiptNumber,
         decimal quantity,
         string? requestNumber,
-        string? description) =>
+        string? description,
+        int sortOrder) =>
         Items.Add(new GoodsReceiptItem(
             Id,
             productId,
+            warehouseId,
+            invoiceStatus,
+            invoiceNumber,
+            supplierId,
+            receiptNumber,
             quantity,
             requestNumber,
-            description));
+            description,
+            sortOrder));
 
     public void UpdateInitialEntry(DateTimeOffset enteredAtUtc, string? description,
-        Guid delivererId, Guid warehouseId, string pageNumber)
+        Guid delivererId, string pageNumber)
     {
         EnteredAtUtc = enteredAtUtc.ToUniversalTime();
         Description = Normalize(description);
         DelivererId = delivererId;
-        WarehouseId = warehouseId;
         PageNumber = pageNumber.Trim();
-    }
-
-    public void UpdateReceiptInvoice(InvoiceStatus? status, string? invoiceNumber,
-        Guid? supplierId, string? receiptNumber)
-    {
-        InvoiceStatus = status;
-        InvoiceNumber = status == InvoiceStatusValue.HasInvoice ? Normalize(invoiceNumber) : null;
-        SupplierId = supplierId;
-        ReceiptNumber = Normalize(receiptNumber);
     }
     private static string? Normalize(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }
- 

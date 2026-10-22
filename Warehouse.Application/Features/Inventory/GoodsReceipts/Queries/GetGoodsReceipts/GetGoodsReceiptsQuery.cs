@@ -2,18 +2,31 @@ using MediatR;
 using Warehouse.Application.Common.Models;
 using Warehouse.Application.Common.Models.Filtering;
 using Warehouse.Application.Common.Models.Inventory;
-using Warehouse.Domain.Enums;
 
 namespace Warehouse.Application.Features.Inventory.GoodsReceipts.Queries.GetGoodsReceipts;
 
 public sealed record GetGoodsReceiptsQuery
     : DataTableParameters, IRequest<Result<GoodsReceiptListResult>>
 {
-    public DateTimeOffset? EnteredFromUtc { get; init; }
+    public DateFilter? EnteredAt { get; init; }
 
-    public DateTimeOffset? EnteredToUtc { get; init; }
+    public TextFilter? PageNumberFilter { get; init; }
 
-    public string? PageNumberFilter { get; init; }
+    public InvoiceStatusFilter? InvoiceStatus { get; init; }
 
-    public InvoiceStatus? InvoiceStatus { get; init; }
+    public TextFilter? ProductTitle { get; init; }
+
+    public TextFilter? ProductCode { get; init; }
+
+    public NumericFilter<decimal>? Quantity { get; init; }
+
+    public TextFilter? InvoiceNumber { get; init; }
+
+    public TextFilter? ReceiptNumber { get; init; }
+
+    public Guid? WarehouseId { get; init; }
+
+    public Guid? DelivererId { get; init; }
+
+    public Guid? SupplierId { get; init; }
 }

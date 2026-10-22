@@ -170,28 +170,10 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("EnteredAtUtc")
                         .HasColumnType("datetimeoffset");
 
-                    b.Property<string>("InvoiceNumber")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("InvoiceStatus")
-                        .HasMaxLength(32)
-                        .HasColumnType("nvarchar(32)");
-
                     b.Property<string>("PageNumber")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("ReceiptNumber")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<Guid?>("SupplierId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid>("WarehouseId")
-                        .HasColumnType("uniqueidentifier");
 
                     b.HasKey("Id");
 
@@ -200,10 +182,6 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                     b.HasIndex("EnteredAtUtc");
 
                     b.HasIndex("PageNumber");
-
-                    b.HasIndex("SupplierId");
-
-                    b.HasIndex("WarehouseId");
 
                     b.ToTable("GoodsReceipts", "Business");
                 });
@@ -221,6 +199,14 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("GoodsReceiptId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("InvoiceNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("InvoiceStatus")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
                     b.Property<Guid>("ProductId")
                         .HasColumnType("uniqueidentifier");
 
@@ -228,16 +214,32 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 3)
                         .HasColumnType("decimal(18,3)");
 
+                    b.Property<string>("ReceiptNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
                     b.Property<string>("RequestNumber")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.Property<Guid?>("SupplierId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("WarehouseId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.HasKey("Id");
 
                     b.HasIndex("ProductId");
 
-                    b.HasIndex("GoodsReceiptId", "ProductId")
-                        .IsUnique();
+                    b.HasIndex("SupplierId");
+
+                    b.HasIndex("WarehouseId");
+
+                    b.HasIndex("GoodsReceiptId", "ProductId");
 
                     b.ToTable("GoodsReceiptItems", "Business");
                 });
@@ -629,22 +631,7 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("Warehouse.Domain.Entities.Supplier", "Supplier")
-                        .WithMany("GoodsReceipts")
-                        .HasForeignKey("SupplierId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("Warehouse.Domain.Entities.StorageWarehouse", "Warehouse")
-                        .WithMany("GoodsReceipts")
-                        .HasForeignKey("WarehouseId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
                     b.Navigation("Deliverer");
-
-                    b.Navigation("Supplier");
-
-                    b.Navigation("Warehouse");
                 });
 
             modelBuilder.Entity("Warehouse.Domain.Entities.GoodsReceiptItem", b =>
@@ -661,9 +648,24 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("Warehouse.Domain.Entities.Supplier", "Supplier")
+                        .WithMany("GoodsReceiptItems")
+                        .HasForeignKey("SupplierId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Warehouse.Domain.Entities.StorageWarehouse", "Warehouse")
+                        .WithMany("GoodsReceiptItems")
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.Navigation("GoodsReceipt");
 
                     b.Navigation("Product");
+
+                    b.Navigation("Supplier");
+
+                    b.Navigation("Warehouse");
                 });
 
             modelBuilder.Entity("Warehouse.Domain.Entities.Product", b =>
@@ -705,12 +707,12 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Warehouse.Domain.Entities.StorageWarehouse", b =>
                 {
-                    b.Navigation("GoodsReceipts");
+                    b.Navigation("GoodsReceiptItems");
                 });
 
             modelBuilder.Entity("Warehouse.Domain.Entities.Supplier", b =>
                 {
-                    b.Navigation("GoodsReceipts");
+                    b.Navigation("GoodsReceiptItems");
                 });
 #pragma warning restore 612, 618
         }

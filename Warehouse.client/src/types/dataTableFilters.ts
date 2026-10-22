@@ -13,6 +13,21 @@ export interface NumericFilterValue {
   valueTo?: number | null
 }
 
+export type TextFilterOperator = 'contains' | 'eq'
+
+export interface TextFilterValue {
+  operator: TextFilterOperator
+  value: string
+}
+
+export type DateFilterOperator = 'before' | 'after' | 'eq' | 'between'
+
+export interface DateFilterValue {
+  operator: DateFilterOperator
+  value: string
+  valueTo?: string
+}
+
 export interface DateRangeFilterValue {
   from: string
   to: string
@@ -34,6 +49,12 @@ export interface TextFilterDefinition extends BaseFilterDefinition {
   maxlength?: number
 }
 
+export interface TextComparisonFilterDefinition extends BaseFilterDefinition {
+  type: 'text-comparison'
+  placeholder?: string
+  maxlength?: number
+}
+
 export interface SelectFilterDefinition extends BaseFilterDefinition {
   type: 'select' | 'multiselect'
   options?: FilterOption[]
@@ -43,6 +64,10 @@ export interface SelectFilterDefinition extends BaseFilterDefinition {
 
 export interface DateFilterDefinition extends BaseFilterDefinition {
   type: 'date' | 'date-range'
+}
+
+export interface DateComparisonFilterDefinition extends BaseFilterDefinition {
+  type: 'date-comparison'
 }
 
 export interface BooleanFilterDefinition extends BaseFilterDefinition {
@@ -62,8 +87,10 @@ export interface NumericComparisonFilterDefinition extends BaseFilterDefinition 
 
 export type DataTableFilterDefinition =
   | TextFilterDefinition
+  | TextComparisonFilterDefinition
   | SelectFilterDefinition
   | DateFilterDefinition
+  | DateComparisonFilterDefinition
   | BooleanFilterDefinition
   | NumericComparisonFilterDefinition
 
@@ -71,6 +98,8 @@ export type DataTableFilterValue =
   | string
   | string[]
   | boolean
+  | TextFilterValue
+  | DateFilterValue
   | DateRangeFilterValue
   | NumericFilterValue
   | null

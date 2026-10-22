@@ -80,6 +80,7 @@ const unitOptionsLoading = ref(false)
 const unitMenuOpen = ref(false)
 const rowsById = new Map<string, Product>()
 const canManage = getSession()?.permissions.includes('MasterDataManage') ?? false
+const canCreate = getSession()?.permissions.includes('ProductsCreate') ?? false
 
 let activeListRequest: AbortController | null = null
 let activeOperationRequest: AbortController | null = null
@@ -357,7 +358,7 @@ function handleImportFile(event: Event): void {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   input.value = ''
-  if (!file || isImporting.value || !canManage) return
+  if (!file || isImporting.value || !canCreate) return
   if (!/\.(xlsx|xlsm)$/i.test(file.name) || file.size === 0 || file.size > 50 * 1024 * 1024) {
     toast.error('فایل xlsx یا xlsm غیرخالی با حجم حداکثر ۵۰ مگابایت انتخاب کنید.')
     return
@@ -375,7 +376,7 @@ function closeImportModal(): void {
 
 async function startImport(): Promise<void> {
   const file = pendingImportFile.value
-  if (!file || isImporting.value || !canManage) return
+  if (!file || isImporting.value || !canCreate) return
   importSummary.value = null
   const controller = new AbortController()
   importRequest = controller
@@ -476,6 +477,7 @@ async function ensureUnitOptions(): Promise<boolean> {
 }
 
 async function openCreateModal(): Promise<void> {
+  if (!canCreate) return
   const [rulesReady, unitsReady] = await Promise.all([
     ensureValidationRules(),
     ensureUnitOptions(),
@@ -678,7 +680,7 @@ onBeforeUnmount(() => {
                 تعریف و مدیریت کالاها و واحد اندازه‌گیری آن‌ها
               </p>
             </div>
-            <div v-if="canManage" class="d-flex align-items-center" style="gap: 0.5rem">
+            <div v-if="canCreate" class="d-flex align-items-center" style="gap: 0.5rem">
             <button
               class="btn btn-primary btn-sm mobile-icon-button"
               type="button"

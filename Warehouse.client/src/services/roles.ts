@@ -166,6 +166,76 @@ export async function createRole(name: string, signal?: AbortSignal): Promise<vo
   }
 }
 
+export async function updateRole(
+  roleId: string,
+  name: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  const session = getSession()
+  if (!session?.accessToken) {
+    throw new RolesApiError('نشست شما منقضی شده است. لطفاً دوباره وارد شوید.', 401)
+  }
+
+  let response: Response
+  try {
+    response = await fetch(`/endpoint/admin/roles/${encodeURIComponent(roleId)}`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${session.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ name }),
+      signal,
+    })
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') throw error
+    throw new RolesApiError('ارتباط با سرور برقرار نشد.', 0)
+  }
+
+  await ensureRoleOperationSucceeded(response, 'ویرایش نقش انجام نشد.')
+}
+
+export async function deleteRole(roleId: string, signal?: AbortSignal): Promise<void> {
+  const session = getSession()
+  if (!session?.accessToken) {
+    throw new RolesApiError('نشست شما منقضی شده است. لطفاً دوباره وارد شوید.', 401)
+  }
+
+  let response: Response
+  try {
+    response = await fetch(`/endpoint/admin/roles/${encodeURIComponent(roleId)}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${session.accessToken}` },
+      signal,
+    })
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') throw error
+    throw new RolesApiError('ارتباط با سرور برقرار نشد.', 0)
+  }
+
+  await ensureRoleOperationSucceeded(response, 'حذف نقش انجام نشد.')
+}
+
+async function ensureRoleOperationSucceeded(
+  response: Response,
+  fallbackMessage: string,
+): Promise<void> {
+  if (response.status === 401) clearSession()
+
+  let result: ApiResult<unknown> | null = null
+  try {
+    result = (await response.json()) as ApiResult<unknown>
+  } catch {
+    // پیام متناسب با وضعیت HTTP در ادامه برگردانده می‌شود.
+  }
+
+  if (!response.ok || !result?.isSuccess) {
+    const message = result?.messages?.find(Boolean)
+      ?? (response.status === 403 ? 'شما مجوز مدیریت نقش‌ها را ندارید.' : fallbackMessage)
+    throw new RolesApiError(message, response.status)
+  }
+}
+
 export async function getRolePolicies(
   roleName: string,
   signal?: AbortSignal,

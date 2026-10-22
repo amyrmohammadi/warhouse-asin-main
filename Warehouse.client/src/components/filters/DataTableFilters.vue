@@ -1,14 +1,18 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
+import DateFilter from '@/components/filters/DateFilter.vue'
 import NumericFilter from '@/components/filters/NumericFilter.vue'
+import TextFilter from '@/components/filters/TextFilter.vue'
 import type {
   DataTableFilterDefinition,
   DataTableFilterValue,
   DataTableFilterValues,
+  DateFilterValue,
   DateRangeFilterValue,
   FilterOption,
   NumericFilterValue,
+  TextFilterValue,
 } from '@/types/dataTableFilters'
 
 const props = withDefaults(
@@ -64,20 +68,28 @@ watch(
   { deep: true },
 )
 
-onMounted(async () => {
+/**
+ * گزینه‌های فیلترهای انتخابی تنها زمانی بارگذاری می‌شوند که کاربر پنل فیلترها را باز کند؛
+ * تا آن زمان فهرست کامل داده‌ها از سرور دریافت نمی‌شود.
+ */
+async function loadPendingOptions(): Promise<void> {
   await Promise.all(
     props.definitions.map(async (definition) => {
       if (definition.type !== 'select' && definition.type !== 'multiselect') return
       if (!definition.loadOptions) return
+      if (resolvedOptions.value[definition.key]) return
+
       loadingOptions.value[definition.key] = true
       try {
         resolvedOptions.value[definition.key] = await definition.loadOptions()
+      } catch {
+        resolvedOptions.value[definition.key] = []
       } finally {
         loadingOptions.value[definition.key] = false
       }
     }),
   )
-})
+}
 
 onBeforeUnmount(() => {
   if (searchTimer) clearTimeout(searchTimer)
@@ -88,6 +100,7 @@ function togglePanel(): void {
   if (panelOpen.value) {
     draftFilters.value = cloneValues(props.modelValue)
     errors.value = {}
+    void loadPendingOptions()
   }
 }
 
@@ -169,6 +182,39 @@ function normalizeAndValidate(): DataTableFilterValues | null {
       continue
     }
 
+    if (definition.type === 'text-comparison') {
+      const value = asTextComparison(rawValue)
+      const text = value?.value.trim() ?? ''
+      if (!value || !text) {
+        nextErrors[definition.key] = 'وارد کردن مقدار الزامی است.'
+        continue
+      }
+      normalized[definition.key] = { operator: value.operator, value: text }
+      continue
+    }
+
+    if (definition.type === 'date-comparison') {
+      const value = asDateComparison(rawValue)
+      if (!value?.value) {
+        nextErrors[definition.key] = 'انتخاب تاریخ الزامی است.'
+        continue
+      }
+      if (value.operator === 'between') {
+        if (!value.valueTo) {
+          nextErrors[definition.key] = 'انتخاب انتهای بازه الزامی است.'
+          continue
+        }
+        if (value.value > value.valueTo) {
+          nextErrors[definition.key] = 'ابتدای بازه نباید بعد از انتهای آن باشد.'
+          continue
+        }
+        normalized[definition.key] = { ...value }
+      } else {
+        normalized[definition.key] = { operator: value.operator, value: value.value }
+      }
+      continue
+    }
+
     if (definition.type === 'numeric-comparison') {
       const value = asNumeric(rawValue)
       if (!value || value.value === null || !Number.isFinite(value.value)) {
@@ -242,6 +288,7 @@ function cloneValues(values: DataTableFilterValues): DataTableFilterValues {
 function hasValue(value: DataTableFilterValue | undefined): boolean {
   if (value === null || value === undefined || value === '') return false
   if (Array.isArray(value)) return value.length > 0
+  if (isTextComparison(value) || isDateComparison(value)) return Boolean(value.value)
   if (isNumeric(value)) return value.value !== null
   if (isDateRange(value)) return Boolean(value.from || value.to)
   return true
@@ -249,6 +296,14 @@ function hasValue(value: DataTableFilterValue | undefined): boolean {
 
 function asNumeric(value: DataTableFilterValue | undefined): NumericFilterValue | null {
   return isNumeric(value) ? value : null
+}
+
+function asTextComparison(value: DataTableFilterValue | undefined): TextFilterValue | null {
+  return isTextComparison(value) ? value : null
+}
+
+function asDateComparison(value: DataTableFilterValue | undefined): DateFilterValue | null {
+  return isDateComparison(value) ? value : null
 }
 
 function asDateRange(value: DataTableFilterValue | undefined): DateRangeFilterValue {
@@ -260,7 +315,36 @@ function asStringArray(value: DataTableFilterValue | undefined): string[] {
 }
 
 function isNumeric(value: unknown): value is NumericFilterValue {
-  return Boolean(value && typeof value === 'object' && 'operator' in value && 'value' in value)
+  return Boolean(
+    value
+      && typeof value === 'object'
+      && 'operator' in value
+      && ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'between'].includes(String(value.operator))
+      && 'value' in value
+      && (typeof value.value === 'number' || value.value === null)
+  )
+}
+
+function isTextComparison(value: unknown): value is TextFilterValue {
+  return Boolean(
+    value
+      && typeof value === 'object'
+      && 'operator' in value
+      && ['contains', 'eq'].includes(String(value.operator))
+      && 'value' in value
+      && typeof value.value === 'string',
+  )
+}
+
+function isDateComparison(value: unknown): value is DateFilterValue {
+  return Boolean(
+    value
+      && typeof value === 'object'
+      && 'operator' in value
+      && ['before', 'after', 'eq', 'between'].includes(String(value.operator))
+      && 'value' in value
+      && typeof value.value === 'string',
+  )
 }
 
 function isDateRange(value: unknown): value is DateRangeFilterValue {
@@ -280,6 +364,22 @@ function formatValue(
     return numeric.operator === 'between'
       ? `${numeric.value} تا ${numeric.valueTo}`
       : `${labels[numeric.operator]} ${numeric.value}`
+  }
+  if (definition.type === 'text-comparison') {
+    const text = asTextComparison(value)
+    if (!text) return ''
+    return `${text.operator === 'eq' ? 'مساوی با' : 'شامل'} ${text.value}`
+  }
+  if (definition.type === 'date-comparison') {
+    const date = asDateComparison(value)
+    if (!date) return ''
+    const labels = { before: 'قبل از', after: 'بعد از', eq: '=', between: 'بازه' }
+    return date.operator === 'between'
+      ? `${date.value} تا ${date.valueTo}`
+      : `${labels[date.operator]} ${date.value}`
+  }
+  if (definition.type === 'select' && typeof value === 'string') {
+    return optionsFor(definition).find(option => option.value === value)?.label ?? value
   }
   if (Array.isArray(value)) return value.join('، ')
   if (isDateRange(value)) return [value.from, value.to].filter(Boolean).join(' تا ')
@@ -322,8 +422,31 @@ function formatValue(
       <div v-if="panelOpen" class="data-table-filters__panel">
         <div class="data-table-filters__grid">
           <div v-for="definition in definitions" :key="definition.key" class="data-table-filters__field">
+            <slot
+              :name="`filter-${definition.key}`"
+              :definition="definition"
+              :value="draftFilters[definition.key]"
+              :error="errors[definition.key]"
+              :set-value="(value: DataTableFilterValue) => setDraftValue(definition.key, value)"
+            >
+            <TextFilter
+              v-if="definition.type === 'text-comparison'"
+              :definition="definition"
+              :model-value="asTextComparison(draftFilters[definition.key])"
+              :error="errors[definition.key]"
+              @update:model-value="setDraftValue(definition.key, $event)"
+            />
+
+            <DateFilter
+              v-else-if="definition.type === 'date-comparison'"
+              :definition="definition"
+              :model-value="asDateComparison(draftFilters[definition.key])"
+              :error="errors[definition.key]"
+              @update:model-value="setDraftValue(definition.key, $event)"
+            />
+
             <NumericFilter
-              v-if="definition.type === 'numeric-comparison'"
+              v-else-if="definition.type === 'numeric-comparison'"
               :definition="definition"
               :model-value="asNumeric(draftFilters[definition.key])"
               :error="errors[definition.key]"
@@ -408,6 +531,7 @@ function formatValue(
                 {{ errors[definition.key] }}
               </small>
             </template>
+            </slot>
           </div>
         </div>
 
@@ -464,11 +588,14 @@ function formatValue(
   align-items: center; border-radius: 50%; display: inline-flex; height: 1.3rem;
   justify-content: center; min-width: 1.3rem;
 }
-.data-table-filters__panel {
-  background: var(--surface);
-  border: 1px solid var(--border-color); border-radius: 0.85rem; margin-top: 0.85rem;
-  overflow: hidden; padding: 0.75rem;
-}
+  .data-table-filters__panel {
+    background: color-mix(in srgb, var(--surface) 45%, var(--background));
+    border: 1px solid var(--border-color);
+    border-radius: 0.85rem;
+    margin-top: 0.85rem;
+    overflow: hidden;
+    padding: 0.75rem;
+  }
 .data-table-filters__grid { display: grid; gap: 0.75rem; grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .data-table-filters__field > label {
   color: var(--text-primary); display: block; font-size: 0.8125rem;

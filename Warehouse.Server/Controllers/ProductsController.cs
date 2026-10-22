@@ -12,13 +12,17 @@ using Warehouse.Application.Features.MasterData.Products.Commands.UpdateProduct;
 using Warehouse.Application.Features.MasterData.Products.Queries.GetProductById;
 using Warehouse.Application.Features.MasterData.Products.Queries.GetProducts;
 using Warehouse.Application.Features.MasterData.Products.Queries.GetProductValidationRules;
+using Warehouse.Application.Features.MasterData.Products.Queries.SearchProducts;
 using Warehouse.Server.Contracts.MasterData;
 
 namespace Warehouse.Server.Controllers;
 
 [ApiController]
 [Route("endpoint/master-data/products")]
-public sealed class ProductsController(ISender sender, IMapper mapper) : ControllerBase
+public sealed class ProductsController(
+    ISender sender,
+    IMapper mapper,
+    IAuthorizationService authorizationService) : ControllerBase
 {
     [Authorize(Policy = PermissionPolicyNames.MasterData.Read)]
     [HttpGet("validation-rules")]
@@ -28,18 +32,33 @@ public sealed class ProductsController(ISender sender, IMapper mapper) : Control
         return Ok(result);
     }
 
-    [Authorize(Policy = PermissionPolicyNames.MasterData.Read)]
+    [Authorize]
     [HttpGet]
     [ProducesResponseType(typeof(Result<MasterDataListResult<ProductSummary>>), StatusCodes.Status200OK)]
     public async Task<ActionResult<Result<MasterDataListResult<ProductSummary>>>> GetAll(
         [FromQuery] GetProductsQuery query,
         CancellationToken cancellationToken)
     {
+        if (!await CanReadProductsAsync()) return Forbid();
+
         var result = await sender.Send(query, cancellationToken);
         return Ok(result);
     }
 
-    [Authorize(Policy = PermissionPolicyNames.MasterData.Read)]
+    [Authorize]
+    [HttpGet("lookup")]
+    [ProducesResponseType(typeof(Result<IReadOnlyCollection<ProductSummary>>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<Result<IReadOnlyCollection<ProductSummary>>>> Search(
+        [FromQuery] SearchProductsQuery query,
+        CancellationToken cancellationToken)
+    {
+        if (!await CanReadProductsAsync()) return Forbid();
+
+        var result = await sender.Send(query, cancellationToken);
+        return Ok(result);
+    }
+
+    [Authorize]
     [HttpGet("{id:guid}")]
     [ProducesResponseType(typeof(Result<ProductSummary>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(Result<ProductSummary>), StatusCodes.Status404NotFound)]
@@ -47,11 +66,13 @@ public sealed class ProductsController(ISender sender, IMapper mapper) : Control
         Guid id,
         CancellationToken cancellationToken)
     {
+        if (!await CanReadProductsAsync()) return Forbid();
+
         var result = await sender.Send(new GetProductByIdQuery(id), cancellationToken);
         return result.IsSuccess ? Ok(result) : NotFound(result);
     }
 
-    [Authorize(Policy = PermissionPolicyNames.MasterData.Manage)]
+    [Authorize(Policy = PermissionPolicyNames.MasterData.ProductsCreate)]
     [HttpPost]
     [ProducesResponseType(typeof(Result<ProductSummary>), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(Result<ProductSummary>), StatusCodes.Status400BadRequest)]
@@ -65,7 +86,7 @@ public sealed class ProductsController(ISender sender, IMapper mapper) : Control
             : BadRequest(result);
     }
 
-    [Authorize(Policy = PermissionPolicyNames.MasterData.Manage)]
+    [Authorize(Policy = PermissionPolicyNames.MasterData.ProductsCreate)]
     [HttpPost("import")]
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(51 * 1024 * 1024)]
@@ -122,5 +143,24 @@ public sealed class ProductsController(ISender sender, IMapper mapper) : Control
     {
         var result = await sender.Send(new DeleteProductCommand(id), cancellationToken);
         return result.IsSuccess ? Ok(result) : NotFound(result);
+    }
+
+    private async Task<bool> CanReadProductsAsync()
+    {
+        var policies = new[]
+        {
+            PermissionPolicyNames.MasterData.Read,
+            PermissionPolicyNames.MasterData.ProductsCreate,
+            PermissionPolicyNames.Inventory.GoodsReceiptsRead,
+            PermissionPolicyNames.Inventory.GoodsReceiptsInitialEntry,
+            PermissionPolicyNames.Inventory.GoodsReceiptsReceiptInvoiceOperations
+        };
+
+        foreach (var policy in policies)
+        {
+            if ((await authorizationService.AuthorizeAsync(User, policy)).Succeeded) return true;
+        }
+
+        return false;
     }
 }

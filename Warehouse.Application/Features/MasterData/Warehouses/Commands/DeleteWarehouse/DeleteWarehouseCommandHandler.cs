@@ -21,7 +21,7 @@ internal sealed class DeleteWarehouseCommandHandler(IUnitOfWork<Guid> unitOfWork
 
         if (await repository.CountAsync(
                 repository.Entities.Where(warehouse =>
-                    warehouse.Id == request.Id && warehouse.GoodsReceipts.Any()),
+                    warehouse.Id == request.Id && warehouse.GoodsReceiptItems.Any()),
                 cancellationToken) > 0)
         {
             return Result.Error("این انبار در تاریخچه ورود کالا استفاده شده و قابل حذف نیست.");

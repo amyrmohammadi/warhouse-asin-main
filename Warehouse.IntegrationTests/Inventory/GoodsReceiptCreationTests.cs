@@ -19,6 +19,118 @@ public sealed class GoodsReceiptCreationTests
     private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
 
     [Fact]
+    public async Task Create_AllowsRepeatedProduct_WhenRowsDiffer_AndRejectsExactDuplicates()
+    {
+        using var factory = new FullStackWebApplicationFactory();
+        await factory.InitializeDatabaseAsync();
+        Guid warehouseId;
+        Guid personId;
+        Guid productId;
+        Guid unitId;
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var warehouse = new StorageWarehouse("Warehouse", null);
+            var person = new Person("Deliverer", "");
+            var unit = new UnitOfMeasure("Unit", null);
+            var product = new Product("Product", "P-001", unit.Id, null);
+            database.AddRange(warehouse, person, unit, product);
+            await database.SaveChangesAsync();
+            warehouseId = warehouse.Id;
+            personId = person.Id;
+            productId = product.Id;
+            unitId = unit.Id;
+        }
+
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost"),
+            AllowAutoRedirect = false
+        });
+        var accessToken = await LoginAsync(client);
+
+        object Item(decimal quantity) => new
+        {
+            productId,
+            productTitle = (string?)null,
+            productCode = (string?)null,
+            unitOfMeasureId = (Guid?)null,
+            warehouseId,
+            invoiceStatus = (string?)null,
+            invoiceNumber = (string?)null,
+            supplierId = (Guid?)null,
+            supplierTitle = (string?)null,
+            receiptNumber = (string?)null,
+            quantity,
+            requestNumber = (string?)null,
+            description = (string?)null
+        };
+
+        HttpRequestMessage Request(object[] items)
+        {
+            var request = new HttpRequestMessage(HttpMethod.Post, "/endpoint/inventory/goods-receipts");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            request.Content = JsonContent.Create(new
+            {
+                enteredAtUtc = DateTimeOffset.UtcNow,
+                description = (string?)null,
+                delivererId = personId,
+                delivererFullName = (string?)null,
+                pageNumber = Guid.NewGuid().ToString("N"),
+                items
+            });
+            return request;
+        }
+
+        using (var request = Request([Item(1), Item(2)]))
+        using (var response = await client.SendAsync(request))
+        {
+            await AssertStatusAsync(response, HttpStatusCode.Created);
+            var envelope = await response.Content.ReadFromJsonAsync<ApiEnvelope<GoodsReceiptData>>(JsonOptions);
+            Assert.Equal(2, Assert.IsType<GoodsReceiptData>(
+                Assert.IsType<ApiEnvelope<GoodsReceiptData>>(envelope).Data).Items.Count);
+        }
+
+        using (var request = Request([Item(1), Item(1)]))
+        using (var response = await client.SendAsync(request))
+        {
+            await AssertStatusAsync(response, HttpStatusCode.BadRequest);
+        }
+
+        object NewItem(decimal quantity) => new
+        {
+            productId = (Guid?)null,
+            productTitle = "New Product",
+            productCode = "N-001",
+            unitOfMeasureId = (Guid?)unitId,
+            warehouseId,
+            invoiceStatus = (string?)null,
+            invoiceNumber = (string?)null,
+            supplierId = (Guid?)null,
+            supplierTitle = (string?)null,
+            receiptNumber = (string?)null,
+            quantity,
+            requestNumber = (string?)null,
+            description = (string?)null
+        };
+
+        using (var request = Request([NewItem(1), NewItem(2)]))
+        using (var response = await client.SendAsync(request))
+        {
+            await AssertStatusAsync(response, HttpStatusCode.Created);
+        }
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            Assert.Equal(1, await database.Products.CountAsync(product => product.Code == "N-001"));
+            var repeatedProduct = await database.Products.SingleAsync(product => product.Code == "N-001");
+            Assert.Equal(2, await database.GoodsReceiptItems.CountAsync(
+                item => item.ProductId == repeatedProduct.Id));
+        }
+    }
+
+    [Fact]
     public async Task Create_WithTypedDelivererSupplierAndProduct_LinksReferencesAndRejectsNormalizedDuplicates()
     {
         using var factory = new FullStackWebApplicationFactory();
@@ -54,7 +166,8 @@ public sealed class GoodsReceiptCreationTests
             var database = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             var receipt = await database.GoodsReceipts
                 .Include(item => item.Deliverer)
-                .Include(item => item.Supplier)
+                .Include(item => item.Items)
+                    .ThenInclude(item => item.Supplier)
                 .Include(item => item.Items)
                     .ThenInclude(item => item.Product)
                 .SingleAsync(item => item.Id == created.Id);
@@ -223,12 +336,6 @@ public sealed class GoodsReceiptCreationTests
             description = (string?)null,
             delivererId,
             delivererFullName,
-            warehouseId,
-            invoiceStatus = "DoesNotHave",
-            invoiceNumber = (string?)null,
-            supplierId = (Guid?)null,
-            supplierTitle,
-            receiptNumber = (string?)null,
             pageNumber = Guid.NewGuid().ToString("N"),
             items = new[]
             {
@@ -238,6 +345,12 @@ public sealed class GoodsReceiptCreationTests
                     productTitle,
                     productCode,
                     unitOfMeasureId,
+                    warehouseId,
+                    invoiceStatus = "DoesNotHave",
+                    invoiceNumber = (string?)null,
+                    supplierId = (Guid?)null,
+                    supplierTitle,
+                    receiptNumber = (string?)null,
                     quantity = 1m,
                     requestNumber = (string?)null,
                     description = (string?)null
@@ -320,6 +433,15 @@ public sealed class GoodsReceiptCreationTests
 
         public string DelivererFullName { get; init; } = string.Empty;
 
+        public IReadOnlyCollection<GoodsReceiptItemData> Items { get; init; } = [];
+
+        public Guid? SupplierId => Items.FirstOrDefault()?.SupplierId;
+
+        public string? Counterparty => Items.FirstOrDefault()?.Counterparty;
+    }
+
+    private sealed class GoodsReceiptItemData
+    {
         public Guid? SupplierId { get; init; }
 
         public string? Counterparty { get; init; }

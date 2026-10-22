@@ -14,23 +14,25 @@ internal static class GoodsReceiptProjection
             Description = receipt.Description,
             DelivererId = receipt.DelivererId,
             DelivererFullName = receipt.Deliverer.FullName,
-            WarehouseId = receipt.WarehouseId,
-            WarehouseTitle = receipt.Warehouse.Title,
-            InvoiceStatus = receipt.InvoiceStatus,
-            InvoiceNumber = receipt.InvoiceNumber,
-            SupplierId = receipt.SupplierId,
-            Counterparty = receipt.Supplier == null ? null : receipt.Supplier.Title,
-            ReceiptNumber = receipt.ReceiptNumber,
             PageNumber = receipt.PageNumber,
             Items = receipt.Items
-                .OrderBy(item => item.Product.Title)
+                .OrderBy(item => item.SortOrder)
+                .ThenBy(item => item.Id)
                 .Select(item => new GoodsReceiptItemSummary
                 {
                     Id = item.Id,
                     ProductId = item.ProductId,
                     ProductTitle = item.Product.Title,
                     ProductCode = item.Product.Code,
+                    UnitOfMeasureId = item.Product.UnitOfMeasureId,
                     UnitOfMeasureTitle = item.Product.UnitOfMeasure.Title,
+                    WarehouseId = item.WarehouseId,
+                    WarehouseTitle = item.Warehouse.Title,
+                    InvoiceStatus = item.InvoiceStatus,
+                    InvoiceNumber = item.InvoiceNumber,
+                    SupplierId = item.SupplierId,
+                    Counterparty = item.Supplier == null ? null : item.Supplier.Title,
+                    ReceiptNumber = item.ReceiptNumber,
                     Quantity = item.Quantity,
                     RequestNumber = item.RequestNumber,
                     Description = item.Description

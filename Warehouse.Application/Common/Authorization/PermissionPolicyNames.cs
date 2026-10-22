@@ -25,13 +25,17 @@ public static class PermissionPolicyNames
     {
         public const string Read = nameof(AppPermission.MasterDataRead);
         public const string Manage = nameof(AppPermission.MasterDataManage);
+        public const string ProductsCreate = nameof(AppPermission.ProductsCreate);
     }
 
     public static class Inventory
     {
         public const string GoodsReceiptsRead = nameof(AppPermission.GoodsReceiptsRead);
+        public const string GoodsReceiptHistoryRead = nameof(AppPermission.GoodsReceiptHistoryRead);
         public const string GoodsReceiptsInitialEntry = nameof(AppPermission.GoodsReceiptsInitialEntry);
         public const string GoodsReceiptsReceiptInvoiceOperations = nameof(AppPermission.GoodsReceiptsReceiptInvoiceOperations);
+        public const string GoodsReceiptsImport = nameof(AppPermission.GoodsReceiptsImport);
+        public const string GoodsReceiptsExport = nameof(AppPermission.GoodsReceiptsExport);
     }
 
     public static IReadOnlyCollection<PermissionPolicyGroup> Groups { get; } =
@@ -63,15 +67,19 @@ public static class PermissionPolicyNames
             "عملیات انبار",
             [
                 new(Inventory.GoodsReceiptsRead, "مشاهده تاریخچه ورود کالا"),
+                new(Inventory.GoodsReceiptHistoryRead, "مشاهده تاریخچه تغییرات هر کالای ورودی"),
                 new(Inventory.GoodsReceiptsInitialEntry, "ورود اولیه کالا"),
-                new(Inventory.GoodsReceiptsReceiptInvoiceOperations, "عملیات رسید و فاکتور")
+                new(Inventory.GoodsReceiptsReceiptInvoiceOperations, "عملیات رسید و فاکتور"),
+                new(Inventory.GoodsReceiptsImport, "ایمپورت ورودی کالا"),
+                new(Inventory.GoodsReceiptsExport, "اکسپورت ورودی کالا")
             ]),
         new(
             "master-data",
             "داده‌های پایه",
             [
                 new(MasterData.Read, "مشاهده داده‌های پایه"),
-                new(MasterData.Manage, "مدیریت داده‌های پایه")
+                new(MasterData.Manage, "مدیریت داده‌های پایه"),
+                new(MasterData.ProductsCreate, "ثبت کالای جدید")
             ])
     ];
 

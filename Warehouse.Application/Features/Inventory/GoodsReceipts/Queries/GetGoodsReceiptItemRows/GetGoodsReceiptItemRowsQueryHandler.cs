@@ -1,8 +1,11 @@
 using MediatR;
+using Warehouse.Application.Common.Extensions;
 using Warehouse.Application.Common.Interfaces.Repositories;
 using Warehouse.Application.Common.Models;
+using Warehouse.Application.Common.Models.Filtering;
 using Warehouse.Application.Common.Models.Inventory;
 using Warehouse.Domain.Entities;
+using Warehouse.Domain.Enums;
 
 namespace Warehouse.Application.Features.Inventory.GoodsReceipts.Queries.GetGoodsReceiptItemRows;
 
@@ -21,18 +24,51 @@ internal sealed class GetGoodsReceiptItemRowsQueryHandler(IUnitOfWork<Guid> unit
         if (!string.IsNullOrWhiteSpace(search))
         {
             query = query.Where(item =>
+            item.GoodsReceipt.Deliverer.FullName.Contains(search) || 
+            item.GoodsReceipt.PageNumber.Contains(search) ||
                 item.Product.Title.Contains(search) ||
                 item.Product.Code.Contains(search) ||
-                item.Product.UnitOfMeasure.Title.Contains(search) ||
-                (item.RequestNumber != null && item.RequestNumber.Contains(search)) ||
-                (item.Description != null && item.Description.Contains(search)) ||
                 item.GoodsReceipt.PageNumber.Contains(search) ||
-                item.GoodsReceipt.Deliverer.FullName.Contains(search) ||
-                item.GoodsReceipt.Warehouse.Title.Contains(search) ||
-                (item.GoodsReceipt.InvoiceNumber != null && item.GoodsReceipt.InvoiceNumber.Contains(search)) ||
-                (item.GoodsReceipt.ReceiptNumber != null && item.GoodsReceipt.ReceiptNumber.Contains(search)) ||
-                (item.GoodsReceipt.Supplier != null &&
-                    item.GoodsReceipt.Supplier.Title.Contains(search)));
+                (item.InvoiceNumber != null && item.InvoiceNumber.Contains(search)) ||
+                (item.ReceiptNumber != null && item.ReceiptNumber.Contains(search)));
+        }
+
+        query = query
+            .ApplyDateFilter(request.EnteredAt, item => item.GoodsReceipt.EnteredAtUtc)
+            .ApplyTextFilter(request.ProductTitle, item => item.Product.Title)
+            .ApplyTextFilter(request.ProductCode, item => item.Product.Code)
+            .ApplyTextFilter(request.PageNumberFilter, item => item.GoodsReceipt.PageNumber)
+            .ApplyNumericFilter(request.Quantity, item => item.Quantity)
+            .ApplyTextFilter(request.InvoiceNumber, item => item.InvoiceNumber)
+            .ApplyTextFilter(request.ReceiptNumber, item => item.ReceiptNumber);
+
+        if (request.WarehouseId.HasValue)
+        {
+            query = query.Where(item => item.WarehouseId == request.WarehouseId.Value);
+        }
+
+        if (request.DelivererId.HasValue)
+        {
+            query = query.Where(item => item.GoodsReceipt.DelivererId == request.DelivererId.Value);
+        }
+
+        if (request.SupplierId.HasValue)
+        {
+            query = query.Where(item => item.SupplierId == request.SupplierId.Value);
+        }
+
+        if (request.InvoiceStatus.HasValue)
+        {
+            query = request.InvoiceStatus.Value switch
+            {
+                InvoiceStatusFilter.NotEntered =>
+                    query.Where(item => item.InvoiceStatus == null),
+                InvoiceStatusFilter.DoesNotHave =>
+                    query.Where(item => item.InvoiceStatus == InvoiceStatus.DoesNotHave),
+                InvoiceStatusFilter.HasInvoice =>
+                    query.Where(item => item.InvoiceStatus == InvoiceStatus.HasInvoice),
+                _ => query
+            };
         }
 
         var filteredCount = await repository.CountAsync(query, cancellationToken);
@@ -55,14 +91,14 @@ internal sealed class GetGoodsReceiptItemRowsQueryHandler(IUnitOfWork<Guid> unit
                 EnteredAtUtc = item.GoodsReceipt.EnteredAtUtc,
                 ReceiptDescription = item.GoodsReceipt.Description,
                 DelivererFullName = item.GoodsReceipt.Deliverer.FullName,
-                WarehouseTitle = item.GoodsReceipt.Warehouse.Title,
-                InvoiceStatus = item.GoodsReceipt.InvoiceStatus,
-                InvoiceNumber = item.GoodsReceipt.InvoiceNumber,
-                SupplierId = item.GoodsReceipt.SupplierId,
-                Counterparty = item.GoodsReceipt.Supplier == null
+                WarehouseTitle = item.Warehouse.Title,
+                InvoiceStatus = item.InvoiceStatus,
+                InvoiceNumber = item.InvoiceNumber,
+                SupplierId = item.SupplierId,
+                Counterparty = item.Supplier == null
                     ? null
-                    : item.GoodsReceipt.Supplier.Title,
-                ReceiptNumber = item.GoodsReceipt.ReceiptNumber,
+                    : item.Supplier.Title,
+                ReceiptNumber = item.ReceiptNumber,
                 PageNumber = item.GoodsReceipt.PageNumber
             }),
             cancellationToken);
@@ -95,10 +131,10 @@ internal sealed class GetGoodsReceiptItemRowsQueryHandler(IUnitOfWork<Guid> unit
             ("pagenumber", true) => query.OrderByDescending(item => item.GoodsReceipt.PageNumber).ThenByDescending(item => item.Id),
             ("delivererfullname", false) => query.OrderBy(item => item.GoodsReceipt.Deliverer.FullName).ThenBy(item => item.Id),
             ("delivererfullname", true) => query.OrderByDescending(item => item.GoodsReceipt.Deliverer.FullName).ThenByDescending(item => item.Id),
-            ("warehousetitle", false) => query.OrderBy(item => item.GoodsReceipt.Warehouse.Title).ThenBy(item => item.Id),
-            ("warehousetitle", true) => query.OrderByDescending(item => item.GoodsReceipt.Warehouse.Title).ThenByDescending(item => item.Id),
-            ("invoicestatus", false) => query.OrderBy(item => item.GoodsReceipt.InvoiceStatus).ThenBy(item => item.Id),
-            ("invoicestatus", true) => query.OrderByDescending(item => item.GoodsReceipt.InvoiceStatus).ThenByDescending(item => item.Id),
+            ("warehousetitle", false) => query.OrderBy(item => item.Warehouse.Title).ThenBy(item => item.Id),
+            ("warehousetitle", true) => query.OrderByDescending(item => item.Warehouse.Title).ThenByDescending(item => item.Id),
+            ("invoicestatus", false) => query.OrderBy(item => item.InvoiceStatus).ThenBy(item => item.Id),
+            ("invoicestatus", true) => query.OrderByDescending(item => item.InvoiceStatus).ThenByDescending(item => item.Id),
             ("enteredatutc", false) => query.OrderBy(item => item.GoodsReceipt.EnteredAtUtc).ThenBy(item => item.Id),
             _ => query.OrderByDescending(item => item.GoodsReceipt.EnteredAtUtc).ThenByDescending(item => item.Id)
         };

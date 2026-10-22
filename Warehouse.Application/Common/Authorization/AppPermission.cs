@@ -11,7 +11,11 @@ public enum AppPermission
     AuditLogsRead,
     MasterDataRead,
     MasterDataManage,
+    ProductsCreate,
     GoodsReceiptsRead,
+    GoodsReceiptHistoryRead,
     GoodsReceiptsInitialEntry,
-    GoodsReceiptsReceiptInvoiceOperations
+    GoodsReceiptsReceiptInvoiceOperations,
+    GoodsReceiptsImport,
+    GoodsReceiptsExport
 }

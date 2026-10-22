@@ -16,8 +16,6 @@ internal sealed class GetGoodsReceiptOptionsQueryHandler(IUnitOfWork<Guid> unitO
     {
         var peopleRepository = unitOfWork.Repository<Person>();
         var warehouseRepository = unitOfWork.Repository<StorageWarehouse>();
-        var productRepository = unitOfWork.Repository<Product>();
-        var supplierRepository = unitOfWork.Repository<Supplier>();
         var unitRepository = unitOfWork.Repository<UnitOfMeasure>();
 
         var people = await peopleRepository.ToListAsync(
@@ -32,29 +30,6 @@ internal sealed class GetGoodsReceiptOptionsQueryHandler(IUnitOfWork<Guid> unitO
             cancellationToken);
         var warehouses = await warehouseRepository.ToListAsync(
             warehouseRepository.Entities
-                .OrderBy(item => item.Title)
-                .Select(item => new TitledMasterDataSummary
-                {
-                    Id = item.Id,
-                    Title = item.Title,
-                    Description = item.Description
-                }),
-            cancellationToken);
-        var products = await productRepository.ToListAsync(
-            productRepository.Entities
-                .OrderBy(product => product.Title)
-                .Select(product => new ProductSummary
-                {
-                    Id = product.Id,
-                    Title = product.Title,
-                    Code = product.Code,
-                    UnitOfMeasureId = product.UnitOfMeasureId,
-                    UnitOfMeasureTitle = product.UnitOfMeasure.Title,
-                    Description = product.Description
-                }),
-            cancellationToken);
-        var suppliers = await supplierRepository.ToListAsync(
-            supplierRepository.Entities
                 .OrderBy(item => item.Title)
                 .Select(item => new TitledMasterDataSummary
                 {
@@ -78,8 +53,6 @@ internal sealed class GetGoodsReceiptOptionsQueryHandler(IUnitOfWork<Guid> unitO
         {
             People = people,
             Warehouses = warehouses,
-            Products = products,
-            Suppliers = suppliers,
             UnitsOfMeasure = units
         });
     }

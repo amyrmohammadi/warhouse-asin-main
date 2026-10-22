@@ -26,6 +26,10 @@ public sealed record CreateManagedUserRequest(
 
 public sealed record CreateRoleRequest(string Name);
 
+public sealed record UpdateRoleRequest(Guid RoleId, string Name);
+
+public sealed record DeleteRoleRequest(Guid RoleId);
+
 public sealed record LoginRequest(
     string Email,
     string Password);

@@ -9,79 +9,85 @@ public sealed class CreateGoodsReceiptValidationTests
     public async Task Send_WithoutItems_ThrowsValidationException()
     {
         await using var context = new ApplicationTestContext();
-        var command = CreateValidCommand() with { Items = [] };
-
-        await Assert.ThrowsAsync<ValidationException>(() => context.Sender.Send(command));
+        await Assert.ThrowsAsync<ValidationException>(
+            () => context.Sender.Send(CreateValidCommand() with { Items = [] }));
     }
 
     [Fact]
     public async Task Send_WithNewProductWithoutCodeAndUnit_ThrowsValidationException()
     {
         await using var context = new ApplicationTestContext();
-        var command = CreateValidCommand() with
+        var invalid = CreateValidItem() with
         {
-            Items = [new CreateGoodsReceiptItem(null, "کالای جدید", null, null, 2, null, null)]
+            ProductId = null, ProductTitle = "کالای جدید", ProductCode = null,
+            UnitOfMeasureId = null
         };
-
-        await Assert.ThrowsAsync<ValidationException>(() => context.Sender.Send(command));
+        await Assert.ThrowsAsync<ValidationException>(
+            () => context.Sender.Send(CreateValidCommand() with { Items = [invalid] }));
     }
 
     [Fact]
     public async Task Send_WithInvoiceAndWithoutInvoiceNumber_ThrowsValidationException()
     {
         await using var context = new ApplicationTestContext();
-        var command = CreateValidCommand() with
+        var invalid = CreateValidItem() with
         {
-            InvoiceStatus = InvoiceStatus.HasInvoice,
-            InvoiceNumber = null
+            InvoiceStatus = InvoiceStatus.HasInvoice, InvoiceNumber = null
         };
+        await Assert.ThrowsAsync<ValidationException>(
+            () => context.Sender.Send(CreateValidCommand() with { Items = [invalid] }));
+    }
 
-        await Assert.ThrowsAsync<ValidationException>(() => context.Sender.Send(command));
+    [Fact]
+    public async Task Send_WithCompletelyIdenticalItemRows_ThrowsValidationException()
+    {
+        await using var context = new ApplicationTestContext();
+        var item = CreateValidItem();
+
+        await Assert.ThrowsAsync<ValidationException>(
+            () => context.Sender.Send(CreateValidCommand() with { Items = [item, item] }));
     }
 
     [Fact]
     public async Task Send_WithNormalizedDuplicateNewProductTitles_ThrowsValidationException()
     {
         await using var context = new ApplicationTestContext();
-        var command = CreateValidCommand() with
+        var first = CreateValidItem() with
         {
-            Items =
-            [
-                new CreateGoodsReceiptItem(null, "کالای-آزمایشی", "A-1", Guid.NewGuid(), 1, null, null),
-                new CreateGoodsReceiptItem(null, "کالای آزمایشی", "B-2", Guid.NewGuid(), 1, null, null)
-            ]
+            ProductId = null, ProductTitle = "کالای-آزمایشی", ProductCode = "A-1",
+            UnitOfMeasureId = Guid.NewGuid()
         };
-
-        await Assert.ThrowsAsync<ValidationException>(() => context.Sender.Send(command));
+        var second = CreateValidItem() with
+        {
+            ProductId = null, ProductTitle = "کالای آزمایشی", ProductCode = "B-2",
+            UnitOfMeasureId = Guid.NewGuid()
+        };
+        await Assert.ThrowsAsync<ValidationException>(
+            () => context.Sender.Send(CreateValidCommand() with { Items = [first, second] }));
     }
 
     [Fact]
     public async Task Send_WithNormalizedDuplicateNewProductCodes_ThrowsValidationException()
     {
         await using var context = new ApplicationTestContext();
-        var command = CreateValidCommand() with
+        var first = CreateValidItem() with
         {
-            Items =
-            [
-                new CreateGoodsReceiptItem(null, "کالای اول", "ab- 12", Guid.NewGuid(), 1, null, null),
-                new CreateGoodsReceiptItem(null, "کالای دوم", "A B12", Guid.NewGuid(), 1, null, null)
-            ]
+            ProductId = null, ProductTitle = "کالای اول", ProductCode = "ab- 12",
+            UnitOfMeasureId = Guid.NewGuid()
         };
-
-        await Assert.ThrowsAsync<ValidationException>(() => context.Sender.Send(command));
+        var second = CreateValidItem() with
+        {
+            ProductId = null, ProductTitle = "کالای دوم", ProductCode = "A B12",
+            UnitOfMeasureId = Guid.NewGuid()
+        };
+        await Assert.ThrowsAsync<ValidationException>(
+            () => context.Sender.Send(CreateValidCommand() with { Items = [first, second] }));
     }
 
     private static CreateGoodsReceiptCommand CreateValidCommand() => new(
-        DateTimeOffset.UtcNow,
-        null,
-        Guid.NewGuid(),
-        null,
-        Guid.NewGuid(),
-        InvoiceStatus.DoesNotHave,
-        null,
-        null,
-        null,
-        null,
-        "12",
-        [new CreateGoodsReceiptItem(Guid.NewGuid(), null, null, null, 1, null, null)]);
+        DateTimeOffset.UtcNow, null, Guid.NewGuid(), null, "12", [CreateValidItem()]);
+
+    private static CreateGoodsReceiptItem CreateValidItem() => new(
+        Guid.NewGuid(), null, null, null, Guid.NewGuid(), InvoiceStatus.DoesNotHave,
+        null, null, null, null, 1, null, null);
 }

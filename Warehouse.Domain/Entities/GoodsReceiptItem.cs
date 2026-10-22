@@ -1,4 +1,6 @@
 using Warehouse.Domain.Common;
+using Warehouse.Domain.Enums;
+using InvoiceStatusValue = Warehouse.Domain.Enums.InvoiceStatus;
 
 namespace Warehouse.Domain.Entities;
 
@@ -11,16 +13,25 @@ public sealed class GoodsReceiptItem : Entity<Guid>
     internal GoodsReceiptItem(
         Guid goodsReceiptId,
         Guid productId,
+        Guid warehouseId,
+        InvoiceStatus? invoiceStatus,
+        string? invoiceNumber,
+        Guid? supplierId,
+        string? receiptNumber,
         decimal quantity,
         string? requestNumber,
-        string? description)
+        string? description,
+        int sortOrder)
     {
         Id = Guid.NewGuid();
         GoodsReceiptId = goodsReceiptId;
         ProductId = productId;
+        WarehouseId = warehouseId;
+        SetReceiptInvoice(invoiceStatus, invoiceNumber, supplierId, receiptNumber);
         Quantity = quantity;
         RequestNumber = Normalize(requestNumber);
         Description = Normalize(description);
+        SortOrder = sortOrder;
     }
 
     public Guid GoodsReceiptId { get; private set; }
@@ -31,17 +42,47 @@ public sealed class GoodsReceiptItem : Entity<Guid>
 
     public Product Product { get; private set; } = null!;
 
+    public Guid WarehouseId { get; private set; }
+
+    public StorageWarehouse Warehouse { get; private set; } = null!;
+
+    public InvoiceStatus? InvoiceStatus { get; private set; }
+
+    public string? InvoiceNumber { get; private set; }
+
+    public Guid? SupplierId { get; private set; }
+
+    public Supplier? Supplier { get; private set; }
+
+    public string? ReceiptNumber { get; private set; }
+
     public decimal Quantity { get; private set; }
 
     public string? RequestNumber { get; private set; }
 
     public string? Description { get; private set; }
 
-    public void Update(decimal quantity, string? requestNumber, string? description)
+    public int SortOrder { get; private set; }
+
+    public void Update(Guid warehouseId, InvoiceStatus? invoiceStatus, string? invoiceNumber,
+        Guid? supplierId, string? receiptNumber, decimal quantity, string? requestNumber,
+        string? description, int sortOrder)
     {
+        WarehouseId = warehouseId;
+        SetReceiptInvoice(invoiceStatus, invoiceNumber, supplierId, receiptNumber);
         Quantity = quantity;
         RequestNumber = Normalize(requestNumber);
         Description = Normalize(description);
+        SortOrder = sortOrder;
+    }
+
+    private void SetReceiptInvoice(InvoiceStatus? status, string? invoiceNumber,
+        Guid? supplierId, string? receiptNumber)
+    {
+        InvoiceStatus = status;
+        InvoiceNumber = status == InvoiceStatusValue.HasInvoice ? Normalize(invoiceNumber) : null;
+        SupplierId = supplierId;
+        ReceiptNumber = Normalize(receiptNumber);
     }
 
     private static string? Normalize(string? value) =>

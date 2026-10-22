@@ -43,12 +43,24 @@ defineExpose({ ask })
 
 <style>
 .app-confirm-dialog {
+  background: var(--surface) !important;
+  border: 1px solid var(--border-color);
+  color: var(--text-primary) !important;
   direction: rtl;
   font-family: inherit;
 }
 
-.app-confirm-dialog__title,
-.app-confirm-dialog__text {
+.app-confirm-dialog__title {
+  color: var(--text-primary) !important;
   text-align: center;
+}
+
+.app-confirm-dialog__text {
+  color: var(--text-secondary) !important;
+  text-align: center;
+}
+
+.app-confirm-dialog .swal2-actions button:focus {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 28%, transparent) !important;
 }
 </style>

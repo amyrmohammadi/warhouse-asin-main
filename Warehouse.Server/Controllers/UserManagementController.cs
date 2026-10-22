@@ -9,10 +9,12 @@ using Warehouse.Application.Features.Identity.Commands.ChangeUserPassword;
 using Warehouse.Application.Features.Identity.Commands.CreateManagedUser;
 using Warehouse.Application.Features.Identity.Commands.CreateRole;
 using Warehouse.Application.Features.Identity.Commands.CreateUser;
+using Warehouse.Application.Features.Identity.Commands.DeleteRole;
 using Warehouse.Application.Features.Identity.Commands.SetPoliciesForRole;
 using Warehouse.Application.Features.Identity.Commands.SetUserActiveStatus;
 using Warehouse.Application.Features.Identity.Commands.SetRolesForUser;
 using Warehouse.Application.Features.Identity.Commands.UpdateUser;
+using Warehouse.Application.Features.Identity.Commands.UpdateRole;
 using Warehouse.Application.Features.Identity.Queries.GetRolePolicies;
 using Warehouse.Application.Features.Identity.Queries.GetRoles;
 using Warehouse.Application.Features.Identity.Queries.GetUsers;
@@ -90,6 +92,37 @@ public sealed class UserManagementController(ISender sender) : ControllerBase
         return result.IsSuccess
             ? StatusCode(StatusCodes.Status201Created, result)
             : BadRequest(result);
+    }
+
+    [Authorize(Policy = PermissionPolicyNames.RoleManagement.RolesManage)]
+    [HttpPut("roles/{roleId:guid}")]
+    [ProducesResponseType(typeof(Result), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(Result), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<Result>> UpdateRole(
+        Guid roleId,
+        [FromBody] Warehouse.Server.Contracts.UserManagement.UpdateRoleRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await sender.Send(
+            new UpdateRoleCommand(roleId, request.Name),
+            cancellationToken);
+
+        return result.IsSuccess ? Ok(result) : BadRequest(result);
+    }
+
+    [Authorize(Policy = PermissionPolicyNames.RoleManagement.RolesManage)]
+    [HttpDelete("roles/{roleId:guid}")]
+    [ProducesResponseType(typeof(Result), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(Result), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<Result>> DeleteRole(
+        Guid roleId,
+        CancellationToken cancellationToken)
+    {
+        var result = await sender.Send(
+            new DeleteRoleCommand(roleId),
+            cancellationToken);
+
+        return result.IsSuccess ? Ok(result) : BadRequest(result);
     }
 
     [Authorize(Policy = PermissionPolicyNames.UserManagement.UsersManage)]

@@ -67,7 +67,9 @@ public sealed class ImportGoodsReceiptsTests
         {
             Assert.Empty(result.Data!.InvalidRows);
             Assert.Equal(1, result.Data.ImportedReceiptCount);
-            await receipts.Received(1).AddAsync(Arg.Is<GoodsReceipt>(r => r.InvoiceStatus == expected), Arg.Any<CancellationToken>());
+            await receipts.Received(1).AddAsync(
+                Arg.Is<GoodsReceipt>(r => r.Items.Single().InvoiceStatus == expected),
+                Arg.Any<CancellationToken>());
             await context.UnitOfWork.Received(1).SaveAsync(Arg.Any<CancellationToken>());
         }
     }
