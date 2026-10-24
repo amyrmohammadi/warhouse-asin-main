@@ -48,6 +48,7 @@ internal sealed class GetGoodsIssueDestinationsQueryHandler(IUnitOfWork<Guid> un
         var items = await repository.ToListAsync(query.Select(item => new TitledMasterDataSummary
         {
             Id = item.Id,
+            ConcurrencyStamp = item.ConcurrencyStamp,
             Title = item.Title,
             Description = item.Description
         }), cancellationToken);

@@ -56,6 +56,7 @@ internal sealed class GetGoodsIssuesQueryHandler(IUnitOfWork<Guid> unitOfWork)
         {
             query = query.Where(issue =>
                 issue.IssueNumber.Contains(search) ||
+                (issue.Description != null && issue.Description.Contains(search)) ||
                 issue.Issuer.FullName.Contains(search) ||
                 issue.Items.Any(item =>
                     item.ProductCode.Contains(search) ||

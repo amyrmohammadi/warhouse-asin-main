@@ -29,6 +29,7 @@ internal sealed class SearchProductsQueryHandler(IUnitOfWork<Guid> unitOfWork)
             select new ProductSummary
             {
                 Id = product.Id,
+                ConcurrencyStamp = product.ConcurrencyStamp,
                 Title = product.Title,
                 Code = product.Code,
                 UnitOfMeasureId = product.UnitOfMeasureId,

@@ -3,6 +3,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Warehouse.Application.Common.Authorization;
+using Warehouse.Application.Common.Concurrency;
 using Warehouse.Application.Common.Models;
 using Warehouse.Application.Common.Models.MasterData;
 using Warehouse.Application.Features.MasterData.Warehouses.Commands.CreateWarehouse;
@@ -68,6 +69,7 @@ public sealed class WarehousesController(ISender sender, IMapper mapper) : Contr
     [HttpPut("{id:guid}")]
     [ProducesResponseType(typeof(Result<TitledMasterDataSummary>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(Result<TitledMasterDataSummary>), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(Result<TitledMasterDataSummary>), StatusCodes.Status409Conflict)]
     public async Task<ActionResult<Result<TitledMasterDataSummary>>> Update(
         Guid id,
         [FromBody] TitledMasterDataRequest request,
@@ -75,7 +77,11 @@ public sealed class WarehousesController(ISender sender, IMapper mapper) : Contr
     {
         var command = mapper.Map<UpdateWarehouseCommand>(request) with { Id = id };
         var result = await sender.Send(command, cancellationToken);
-        return result.IsSuccess ? Ok(result) : NotFound(result);
+        return result.IsSuccess
+            ? Ok(result)
+            : result.Messages.Contains(ConcurrencyMessages.Conflict, StringComparer.Ordinal)
+                ? Conflict(result)
+                : NotFound(result);
     }
 
     [Authorize(Policy = PermissionPolicyNames.MasterData.Manage)]

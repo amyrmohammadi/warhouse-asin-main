@@ -1,4 +1,5 @@
 using MediatR;
+using Warehouse.Application.Common.Concurrency;
 using Warehouse.Application.Common.Interfaces.Repositories;
 using Warehouse.Application.Common.Models;
 using Warehouse.Application.Common.Models.MasterData;
@@ -21,6 +22,11 @@ internal sealed class UpdateWarehouseCommandHandler(IUnitOfWork<Guid> unitOfWork
                 "The requested warehouse was not found.");
         }
 
+        if (!item.TryAdvanceConcurrencyStamp(request.ConcurrencyStamp))
+        {
+            return Result<TitledMasterDataSummary>.Error(ConcurrencyMessages.Conflict);
+        }
+
         item.Update(request.Title, request.Description);
         await repository.UpdateAsync(item, cancellationToken);
         await unitOfWork.SaveAsync(cancellationToken);
@@ -28,6 +34,7 @@ internal sealed class UpdateWarehouseCommandHandler(IUnitOfWork<Guid> unitOfWork
         return Result<TitledMasterDataSummary>.Success(new TitledMasterDataSummary
         {
             Id = item.Id,
+            ConcurrencyStamp = item.ConcurrencyStamp,
             Title = item.Title,
             Description = item.Description
         });

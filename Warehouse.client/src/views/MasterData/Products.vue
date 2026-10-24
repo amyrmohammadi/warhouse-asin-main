@@ -546,6 +546,7 @@ const saveProduct = handleSubmit(async (values) => {
     code: values.code.trim(),
     unitOfMeasureTitle: values.unitOfMeasureTitle.trim(),
     description: values.description.trim() || null,
+    concurrencyStamp: itemBeingEdited?.concurrencyStamp ?? null,
   }
 
   try {
@@ -560,6 +561,7 @@ const saveProduct = handleSubmit(async (values) => {
     if (!hasExactUnit.value) {
       unitOptions.value.push({
         id: '',
+        concurrencyStamp: '',
         title: payload.unitOfMeasureTitle,
         description: null,
       })

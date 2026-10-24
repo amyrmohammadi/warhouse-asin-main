@@ -19,9 +19,9 @@ internal sealed class DeleteSupplierCommandHandler(IUnitOfWork<Guid> unitOfWork)
             return Result.Error("The requested supplier was not found.");
         }
 
-        var receiptItems = unitOfWork.Repository<GoodsReceiptItem>();
-        if (await receiptItems.CountAsync(
-                receiptItems.Entities.Where(item => item.SupplierId == request.Id),
+        var invoices = unitOfWork.Repository<Invoice>();
+        if (await invoices.CountAsync(
+                invoices.Entities.Where(invoice => invoice.SupplierId == request.Id),
                 cancellationToken) > 0)
         {
             return Result.Error(

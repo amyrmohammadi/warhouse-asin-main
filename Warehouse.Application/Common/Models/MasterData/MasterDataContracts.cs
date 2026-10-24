@@ -12,6 +12,8 @@ public sealed class TitledMasterDataSummary
 {
     public Guid Id { get; init; }
 
+    public Guid ConcurrencyStamp { get; init; }
+
     public string Title { get; init; } = string.Empty;
 
     public string? Description { get; init; }
@@ -21,6 +23,8 @@ public sealed class PersonSummary
 {
     public Guid Id { get; init; }
 
+    public Guid ConcurrencyStamp { get; init; }
+
     public string FullName { get; init; } = string.Empty;
 
     public string PhoneNumber { get; init; } = string.Empty;
@@ -29,6 +33,8 @@ public sealed class PersonSummary
 public sealed class ProductSummary
 {
     public Guid Id { get; init; }
+
+    public Guid ConcurrencyStamp { get; init; }
 
     public string Title { get; init; } = string.Empty;
 

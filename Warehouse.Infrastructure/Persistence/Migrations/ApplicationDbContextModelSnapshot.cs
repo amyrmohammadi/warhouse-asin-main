@@ -160,6 +160,16 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier")
+                        .HasDefaultValueSql("NEWID()");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
                     b.Property<string>("IssueNumber")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -188,6 +198,12 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier")
+                        .HasDefaultValueSql("NEWID()");
 
                     b.Property<string>("Description")
                         .HasMaxLength(1000)
@@ -271,6 +287,12 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier")
+                        .HasDefaultValueSql("NEWID()");
+
                     b.Property<Guid>("DelivererId")
                         .HasColumnType("uniqueidentifier");
 
@@ -310,9 +332,8 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("GoodsReceiptId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<string>("InvoiceNumber")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
+                    b.Property<Guid?>("InvoiceId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("InvoiceStatus")
                         .HasMaxLength(32)
@@ -336,17 +357,14 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                     b.Property<int>("SortOrder")
                         .HasColumnType("int");
 
-                    b.Property<Guid?>("SupplierId")
-                        .HasColumnType("uniqueidentifier");
-
                     b.Property<Guid>("WarehouseId")
                         .HasColumnType("uniqueidentifier");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ProductId");
+                    b.HasIndex("InvoiceId");
 
-                    b.HasIndex("SupplierId");
+                    b.HasIndex("ProductId");
 
                     b.HasIndex("WarehouseId");
 
@@ -355,11 +373,41 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                     b.ToTable("GoodsReceiptItems", "Business");
                 });
 
+            modelBuilder.Entity("Warehouse.Domain.Entities.Invoice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("InvoiceNumber")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<Guid?>("SupplierId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InvoiceNumber")
+                        .IsUnique();
+
+                    b.HasIndex("SupplierId");
+
+                    b.ToTable("Invoices", "Business");
+                });
+
             modelBuilder.Entity("Warehouse.Domain.Entities.Person", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier")
+                        .HasDefaultValueSql("NEWID()");
 
                     b.Property<string>("FullName")
                         .IsRequired()
@@ -398,6 +446,12 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
+
+                    b.Property<Guid>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier")
+                        .HasDefaultValueSql("NEWID()");
 
                     b.Property<string>("Description")
                         .HasMaxLength(1000)
@@ -442,6 +496,12 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier")
+                        .HasDefaultValueSql("NEWID()");
+
                     b.Property<string>("Description")
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
@@ -464,6 +524,12 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier")
+                        .HasDefaultValueSql("NEWID()");
+
                     b.Property<string>("Description")
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
@@ -485,6 +551,12 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier")
+                        .HasDefaultValueSql("NEWID()");
 
                     b.Property<string>("Description")
                         .HasMaxLength(1000)
@@ -790,16 +862,16 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("Warehouse.Domain.Entities.Invoice", "Invoice")
+                        .WithMany("GoodsReceiptItems")
+                        .HasForeignKey("InvoiceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Warehouse.Domain.Entities.Product", "Product")
                         .WithMany("GoodsReceiptItems")
                         .HasForeignKey("ProductId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-
-                    b.HasOne("Warehouse.Domain.Entities.Supplier", "Supplier")
-                        .WithMany("GoodsReceiptItems")
-                        .HasForeignKey("SupplierId")
-                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Warehouse.Domain.Entities.StorageWarehouse", "Warehouse")
                         .WithMany("GoodsReceiptItems")
@@ -809,11 +881,21 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
 
                     b.Navigation("GoodsReceipt");
 
+                    b.Navigation("Invoice");
+
                     b.Navigation("Product");
 
-                    b.Navigation("Supplier");
-
                     b.Navigation("Warehouse");
+                });
+
+            modelBuilder.Entity("Warehouse.Domain.Entities.Invoice", b =>
+                {
+                    b.HasOne("Warehouse.Domain.Entities.Supplier", "Supplier")
+                        .WithMany("Invoices")
+                        .HasForeignKey("SupplierId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Supplier");
                 });
 
             modelBuilder.Entity("Warehouse.Domain.Entities.Product", b =>
@@ -853,6 +935,11 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                     b.Navigation("Items");
                 });
 
+            modelBuilder.Entity("Warehouse.Domain.Entities.Invoice", b =>
+                {
+                    b.Navigation("GoodsReceiptItems");
+                });
+
             modelBuilder.Entity("Warehouse.Domain.Entities.Person", b =>
                 {
                     b.Navigation("GoodsIssues");
@@ -874,7 +961,7 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Warehouse.Domain.Entities.Supplier", b =>
                 {
-                    b.Navigation("GoodsReceiptItems");
+                    b.Navigation("Invoices");
                 });
 #pragma warning restore 612, 618
         }

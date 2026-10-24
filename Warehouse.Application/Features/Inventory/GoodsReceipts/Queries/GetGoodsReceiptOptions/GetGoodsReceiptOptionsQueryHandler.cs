@@ -24,6 +24,7 @@ internal sealed class GetGoodsReceiptOptionsQueryHandler(IUnitOfWork<Guid> unitO
                 .Select(person => new PersonSummary
                 {
                     Id = person.Id,
+                    ConcurrencyStamp = person.ConcurrencyStamp,
                     FullName = person.FullName,
                     PhoneNumber = person.PhoneNumber
                 }),
@@ -34,6 +35,7 @@ internal sealed class GetGoodsReceiptOptionsQueryHandler(IUnitOfWork<Guid> unitO
                 .Select(item => new TitledMasterDataSummary
                 {
                     Id = item.Id,
+                    ConcurrencyStamp = item.ConcurrencyStamp,
                     Title = item.Title,
                     Description = item.Description
                 }),
@@ -44,6 +46,7 @@ internal sealed class GetGoodsReceiptOptionsQueryHandler(IUnitOfWork<Guid> unitO
                 .Select(item => new TitledMasterDataSummary
                 {
                     Id = item.Id,
+                    ConcurrencyStamp = item.ConcurrencyStamp,
                     Title = item.Title,
                     Description = item.Description
                 }),

@@ -24,7 +24,8 @@ public sealed class MasterDataRequestMappingProfile : Profile
             .ConstructUsing(request => new UpdateUnitOfMeasureCommand(
                 Guid.Empty,
                 request.Title,
-                request.Description));
+                request.Description,
+                request.ConcurrencyStamp ?? Guid.Empty));
         CreateMap<TitledMasterDataRequest, CreateSupplierCommand>()
             .ConstructUsing(request => new CreateSupplierCommand(
                 request.Title,
@@ -33,7 +34,8 @@ public sealed class MasterDataRequestMappingProfile : Profile
             .ConstructUsing(request => new UpdateSupplierCommand(
                 Guid.Empty,
                 request.Title,
-                request.Description));
+                request.Description,
+                request.ConcurrencyStamp ?? Guid.Empty));
         CreateMap<TitledMasterDataRequest, CreateWarehouseCommand>()
             .ConstructUsing(request => new CreateWarehouseCommand(
                 request.Title,
@@ -42,7 +44,8 @@ public sealed class MasterDataRequestMappingProfile : Profile
             .ConstructUsing(request => new UpdateWarehouseCommand(
                 Guid.Empty,
                 request.Title,
-                request.Description));
+                request.Description,
+                request.ConcurrencyStamp ?? Guid.Empty));
 
         CreateMap<PersonRequest, CreatePersonCommand>()
             .ConstructUsing(request => new CreatePersonCommand(
@@ -53,7 +56,8 @@ public sealed class MasterDataRequestMappingProfile : Profile
             .ConstructUsing(request => new UpdatePersonCommand(
                 Guid.Empty,
                 request.FullName,
-                request.PhoneNumber));
+                request.PhoneNumber,
+                request.ConcurrencyStamp ?? Guid.Empty));
 
         CreateMap<ProductRequest, CreateProductCommand>()
             .ConstructUsing(request => new CreateProductCommand(
@@ -67,6 +71,7 @@ public sealed class MasterDataRequestMappingProfile : Profile
                 request.Title,
                 request.Code,
                 request.UnitOfMeasureTitle,
-                request.Description));
+                request.Description,
+                request.ConcurrencyStamp ?? Guid.Empty));
     }
 }

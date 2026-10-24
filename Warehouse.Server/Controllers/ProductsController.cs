@@ -4,6 +4,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Warehouse.Application.Common.Authorization;
+using Warehouse.Application.Common.Concurrency;
 using Warehouse.Application.Common.Models;
 using Warehouse.Application.Common.Models.MasterData;
 using Warehouse.Application.Features.MasterData.Products.Commands.CreateProduct;
@@ -123,6 +124,7 @@ public sealed class ProductsController(
     [HttpPut("{id:guid}")]
     [ProducesResponseType(typeof(Result<ProductSummary>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(Result<ProductSummary>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(Result<ProductSummary>), StatusCodes.Status409Conflict)]
     public async Task<ActionResult<Result<ProductSummary>>> Update(
         Guid id,
         [FromBody] ProductRequest request,
@@ -130,7 +132,11 @@ public sealed class ProductsController(
     {
         var command = mapper.Map<UpdateProductCommand>(request) with { Id = id };
         var result = await sender.Send(command, cancellationToken);
-        return result.IsSuccess ? Ok(result) : BadRequest(result);
+        return result.IsSuccess
+            ? Ok(result)
+            : result.Messages.Contains(ConcurrencyMessages.Conflict, StringComparer.Ordinal)
+                ? Conflict(result)
+                : BadRequest(result);
     }
 
     [Authorize(Policy = PermissionPolicyNames.MasterData.Manage)]
@@ -155,7 +161,8 @@ public sealed class ProductsController(
             PermissionPolicyNames.Inventory.GoodsReceiptsInitialEntry,
             PermissionPolicyNames.Inventory.GoodsReceiptsReceiptInvoiceOperations,
             PermissionPolicyNames.Inventory.GoodsIssuesRead,
-            PermissionPolicyNames.Inventory.GoodsIssuesManage
+            PermissionPolicyNames.Inventory.GoodsIssuesCreate,
+            PermissionPolicyNames.Inventory.GoodsIssuesUpdate
         };
 
         foreach (var policy in policies)

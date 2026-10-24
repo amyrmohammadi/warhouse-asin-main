@@ -10,6 +10,7 @@ internal static class GoodsReceiptProjection
         query.Select(receipt => new GoodsReceiptSummary
         {
             Id = receipt.Id,
+            ConcurrencyStamp = receipt.ConcurrencyStamp,
             EnteredAtUtc = receipt.EnteredAtUtc,
             Description = receipt.Description,
             DelivererId = receipt.DelivererId,
@@ -29,9 +30,11 @@ internal static class GoodsReceiptProjection
                     WarehouseId = item.WarehouseId,
                     WarehouseTitle = item.Warehouse.Title,
                     InvoiceStatus = item.InvoiceStatus,
-                    InvoiceNumber = item.InvoiceNumber,
-                    SupplierId = item.SupplierId,
-                    Counterparty = item.Supplier == null ? null : item.Supplier.Title,
+                    InvoiceNumber = item.Invoice == null ? null : item.Invoice.InvoiceNumber,
+                    SupplierId = item.Invoice == null ? null : item.Invoice.SupplierId,
+                    Counterparty = item.Invoice == null || item.Invoice.Supplier == null
+                        ? null
+                        : item.Invoice.Supplier.Title,
                     ReceiptNumber = item.ReceiptNumber,
                     Quantity = item.Quantity,
                     RequestNumber = item.RequestNumber,

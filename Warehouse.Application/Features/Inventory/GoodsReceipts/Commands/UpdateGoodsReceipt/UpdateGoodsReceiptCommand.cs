@@ -1,5 +1,6 @@
 using FluentValidation;
 using MediatR;
+using Warehouse.Application.Common.Concurrency;
 using Warehouse.Application.Common.Interfaces.Repositories;
 using Warehouse.Application.Common.Models;
 using Warehouse.Application.Common.Models.Inventory;
@@ -9,7 +10,8 @@ using Warehouse.Domain.Entities;
 namespace Warehouse.Application.Features.Inventory.GoodsReceipts.Commands.UpdateGoodsReceipt;
 
 public sealed record UpdateGoodsReceiptCommand(Guid Id, CreateGoodsReceiptCommand Values,
-    bool CanEditInitialEntry, bool CanEditReceiptInvoice) : IRequest<Result<GoodsReceiptSummary>>;
+    bool CanEditInitialEntry, bool CanEditReceiptInvoice, Guid ConcurrencyStamp = default)
+    : IRequest<Result<GoodsReceiptSummary>>;
 
 internal sealed class UpdateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfWork)
     : IRequestHandler<UpdateGoodsReceiptCommand, Result<GoodsReceiptSummary>>
@@ -20,6 +22,8 @@ internal sealed class UpdateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
             return Result<GoodsReceiptSummary>.Error("مجوز ویرایش سند را ندارید.");
         var receipt = await unitOfWork.Repository<GoodsReceipt>().GetByIdAsync(request.Id, cancellationToken);
         if (receipt is null) return Result<GoodsReceiptSummary>.Error("سند ورود کالا پیدا نشد.");
+        if (!receipt.TryAdvanceConcurrencyStamp(request.ConcurrencyStamp))
+            return Result<GoodsReceiptSummary>.Error(ConcurrencyMessages.Conflict);
         var values = request.Values;
         var repository = unitOfWork.Repository<GoodsReceiptItem>();
         var storedItems = await repository.ToListAsync(
@@ -28,6 +32,16 @@ internal sealed class UpdateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                 .OrderBy(item => item.SortOrder)
                 .ThenBy(item => item.Id),
             cancellationToken);
+        var storedInvoiceIds = storedItems
+            .Where(item => item.InvoiceId.HasValue)
+            .Select(item => item.InvoiceId!.Value)
+            .Distinct()
+            .ToArray();
+        var invoiceRepository = unitOfWork.Repository<Invoice>();
+        var storedInvoices = await invoiceRepository.ToListAsync(
+            invoiceRepository.Entities.Where(invoice => storedInvoiceIds.Contains(invoice.Id)),
+            cancellationToken);
+        var invoicesById = storedInvoices.ToDictionary(invoice => invoice.Id);
         if (!request.CanEditInitialEntry)
         {
             var requestedByProduct = values.Items
@@ -50,8 +64,10 @@ internal sealed class UpdateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                     return new CreateGoodsReceiptItem(
                         item.ProductId, null, null, null, item.WarehouseId,
                         request.CanEditReceiptInvoice ? requested?.InvoiceStatus : item.InvoiceStatus,
-                        request.CanEditReceiptInvoice ? requested?.InvoiceNumber : item.InvoiceNumber,
-                        request.CanEditReceiptInvoice ? requested?.SupplierId : item.SupplierId,
+                        request.CanEditReceiptInvoice ? requested?.InvoiceNumber :
+                            item.InvoiceId.HasValue ? invoicesById[item.InvoiceId.Value].InvoiceNumber : null,
+                        request.CanEditReceiptInvoice ? requested?.SupplierId :
+                            item.InvoiceId.HasValue ? invoicesById[item.InvoiceId.Value].SupplierId : null,
                         request.CanEditReceiptInvoice ? requested?.SupplierTitle : null,
                         request.CanEditReceiptInvoice ? requested?.ReceiptNumber : item.ReceiptNumber,
                         item.Quantity, item.RequestNumber, item.Description);
@@ -77,8 +93,12 @@ internal sealed class UpdateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                     return item with
                     {
                         InvoiceStatus = stored?.InvoiceStatus,
-                        InvoiceNumber = stored?.InvoiceNumber,
-                        SupplierId = stored?.SupplierId,
+                        InvoiceNumber = stored?.InvoiceId is Guid invoiceId
+                            ? invoicesById[invoiceId].InvoiceNumber
+                            : null,
+                        SupplierId = stored?.InvoiceId is Guid supplierInvoiceId
+                            ? invoicesById[supplierInvoiceId].SupplierId
+                            : null,
                         SupplierTitle = null,
                         ReceiptNumber = stored?.ReceiptNumber
                     };

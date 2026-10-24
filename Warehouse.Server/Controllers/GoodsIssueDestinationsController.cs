@@ -2,6 +2,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Warehouse.Application.Common.Authorization;
+using Warehouse.Application.Common.Concurrency;
 using Warehouse.Application.Common.Models;
 using Warehouse.Application.Common.Models.MasterData;
 using Warehouse.Application.Features.MasterData.GoodsIssueDestinations.Commands.CreateGoodsIssueDestination;
@@ -65,11 +66,22 @@ public sealed class GoodsIssueDestinationsController(
 
     [Authorize(Policy = PermissionPolicyNames.MasterData.Manage)]
     [HttpPut("{id:guid}")]
+    [ProducesResponseType(typeof(Result<TitledMasterDataSummary>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(Result<TitledMasterDataSummary>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(Result<TitledMasterDataSummary>), StatusCodes.Status409Conflict)]
     public async Task<ActionResult<Result<TitledMasterDataSummary>>> Update(
         Guid id, [FromBody] TitledMasterDataRequest request, CancellationToken cancellationToken)
     {
-        var result = await sender.Send(new UpdateGoodsIssueDestinationCommand(id, request.Title, request.Description), cancellationToken);
-        return result.IsSuccess ? Ok(result) : BadRequest(result);
+        var result = await sender.Send(new UpdateGoodsIssueDestinationCommand(
+            id,
+            request.Title,
+            request.Description,
+            request.ConcurrencyStamp ?? Guid.Empty), cancellationToken);
+        return result.IsSuccess
+            ? Ok(result)
+            : result.Messages.Contains(ConcurrencyMessages.Conflict, StringComparer.Ordinal)
+                ? Conflict(result)
+                : BadRequest(result);
     }
 
     [Authorize(Policy = PermissionPolicyNames.MasterData.Manage)]
@@ -86,7 +98,8 @@ public sealed class GoodsIssueDestinationsController(
         {
             PermissionPolicyNames.MasterData.Read,
             PermissionPolicyNames.Inventory.GoodsIssuesRead,
-            PermissionPolicyNames.Inventory.GoodsIssuesManage
+            PermissionPolicyNames.Inventory.GoodsIssuesCreate,
+            PermissionPolicyNames.Inventory.GoodsIssuesUpdate
         };
         foreach (var policy in policies)
             if ((await authorizationService.AuthorizeAsync(User, policy)).Succeeded) return true;

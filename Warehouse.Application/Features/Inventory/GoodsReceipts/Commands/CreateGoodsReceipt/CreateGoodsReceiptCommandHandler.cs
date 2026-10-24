@@ -54,30 +54,37 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
             var warehousesById = warehouses.ToDictionary(item => item.Id);
 
             var preparedItems = new List<PreparedItem>(request.Items.Count);
-            var supplierCache = new Dictionary<string, Supplier?>(StringComparer.Ordinal);
+            var invoiceCache = new Dictionary<string, Invoice>(StringComparer.OrdinalIgnoreCase);
             foreach (var pair in resolvedItems.Data!.Zip(request.Items))
             {
                 var source = pair.Second;
-                var supplierKey = source.SupplierId?.ToString() ??
-                                  NormalizeSupplierTitle(source.SupplierTitle ?? string.Empty);
-                if (!supplierCache.TryGetValue(supplierKey, out var supplier))
+                Invoice? invoice = null;
+                if (updateInvoice &&
+                    source.InvoiceStatus == Domain.Enums.InvoiceStatus.HasInvoice)
                 {
-                    var resolvedSupplier = await ResolveSupplierAsync(
-                        source.SupplierId, source.SupplierTitle, cancellationToken);
-                    if (resolvedSupplier.Error is not null)
+                    var invoiceNumber = Invoice.NormalizeNumber(source.InvoiceNumber!);
+                    if (!invoiceCache.TryGetValue(invoiceNumber, out invoice))
                     {
-                        await unitOfWork.RollBackTransaction(cancellationToken);
-                        return Result<GoodsReceiptSummary>.Error(resolvedSupplier.Error);
+                        var resolvedInvoice = await ResolveInvoiceAsync(
+                            invoiceNumber,
+                            source.SupplierId,
+                            source.SupplierTitle,
+                            cancellationToken);
+                        if (resolvedInvoice.Error is not null)
+                        {
+                            await unitOfWork.RollBackTransaction(cancellationToken);
+                            return Result<GoodsReceiptSummary>.Error(resolvedInvoice.Error);
+                        }
+
+                        invoice = resolvedInvoice.Invoice!;
+                        invoiceCache[invoiceNumber] = invoice;
                     }
-                    supplier = resolvedSupplier.Supplier;
-                    supplierCache[supplierKey] = supplier;
                 }
                 preparedItems.Add(new PreparedItem(
                     pair.First,
                     warehousesById[source.WarehouseId],
                     source.InvoiceStatus,
-                    source.InvoiceNumber,
-                    supplier,
+                    invoice,
                     source.ReceiptNumber));
             }
 
@@ -118,7 +125,7 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                     if (!updateInitial && existing is not null) continue;
                     receipt.AddItem(
                         item.Product.ProductId, item.Warehouse.Id, item.InvoiceStatus,
-                        item.InvoiceNumber, item.Supplier?.Id, item.ReceiptNumber,
+                        item.Invoice, item.ReceiptNumber,
                         item.Product.Quantity, item.Product.RequestNumber, item.Product.Description,
                         sortOrder);
                     if (existing is not null)
@@ -130,8 +137,8 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                 tracked!.Update(
                     updateInitial ? item.Warehouse.Id : old.WarehouseId,
                     updateInvoice ? item.InvoiceStatus : old.InvoiceStatus,
-                    updateInvoice ? item.InvoiceNumber : old.InvoiceNumber,
-                    updateInvoice ? item.Supplier?.Id : old.SupplierId,
+                    updateInvoice ? item.Invoice?.Id : old.InvoiceId,
+                    updateInvoice ? item.Invoice : old.Invoice,
                     updateInvoice ? item.ReceiptNumber : old.ReceiptNumber,
                     updateInitial ? item.Product.Quantity : old.Quantity,
                     updateInitial ? item.Product.RequestNumber : old.RequestNumber,
@@ -233,6 +240,40 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
         var newSupplier = new Supplier(supplierTitle, null);
         await repository.AddAsync(newSupplier, cancellationToken);
         return (newSupplier, null);
+    }
+
+    private async Task<(Invoice? Invoice, string? Error)> ResolveInvoiceAsync(
+        string invoiceNumber,
+        Guid? supplierId,
+        string? supplierTitle,
+        CancellationToken cancellationToken)
+    {
+        var invoiceRepository = unitOfWork.Repository<Invoice>();
+        var matches = await invoiceRepository.ToListAsync(
+            invoiceRepository.Entities
+                .Where(invoice => invoice.InvoiceNumber == invoiceNumber)
+                .Take(1),
+            cancellationToken);
+        if (matches.Count > 0)
+        {
+            var tracked = await invoiceRepository.GetByIdAsync(matches[0].Id, cancellationToken);
+            return tracked is null
+                ? (null, "فاکتور انتخاب‌شده پیدا نشد.")
+                : (tracked, null);
+        }
+
+        var resolvedSupplier = await ResolveSupplierAsync(
+            supplierId,
+            supplierTitle,
+            cancellationToken);
+        if (resolvedSupplier.Error is not null)
+        {
+            return (null, resolvedSupplier.Error);
+        }
+
+        var created = new Invoice(invoiceNumber, resolvedSupplier.Supplier?.Id);
+        await invoiceRepository.AddAsync(created, cancellationToken);
+        return (created, null);
     }
 
     private static string NormalizeSupplierTitle(string value) =>
@@ -393,7 +434,6 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
         ResolvedItem Product,
         StorageWarehouse Warehouse,
         Domain.Enums.InvoiceStatus? InvoiceStatus,
-        string? InvoiceNumber,
-        Supplier? Supplier,
+        Invoice? Invoice,
         string? ReceiptNumber);
 }

@@ -35,6 +35,8 @@ public sealed class ApplicationDbContext
 
     public DbSet<Supplier> Suppliers => Set<Supplier>();
 
+    public DbSet<Invoice> Invoices => Set<Invoice>();
+
     public DbSet<StorageWarehouse> Warehouses => Set<StorageWarehouse>();
 
     public DbSet<Person> People => Set<Person>();
@@ -149,6 +151,9 @@ public sealed class ApplicationDbContext
         {
             entity.ToTable("UnitsOfMeasure", "Business");
             entity.HasKey(item => item.Id);
+            entity.Property(item => item.ConcurrencyStamp)
+                .HasDefaultValueSql("NEWID()")
+                .IsConcurrencyToken();
             entity.Property(item => item.Title).HasMaxLength(200).IsRequired();
             entity.Property(item => item.Description).HasMaxLength(1000);
             entity.HasIndex(item => item.Title);
@@ -158,15 +163,34 @@ public sealed class ApplicationDbContext
         {
             entity.ToTable("Suppliers", "Business");
             entity.HasKey(item => item.Id);
+            entity.Property(item => item.ConcurrencyStamp)
+                .HasDefaultValueSql("NEWID()")
+                .IsConcurrencyToken();
             entity.Property(item => item.Title).HasMaxLength(200).IsRequired();
             entity.Property(item => item.Description).HasMaxLength(1000);
             entity.HasIndex(item => item.Title);
+        });
+
+        builder.Entity<Invoice>(entity =>
+        {
+            entity.ToTable("Invoices", "Business");
+            entity.HasKey(invoice => invoice.Id);
+            entity.Property(invoice => invoice.InvoiceNumber).HasMaxLength(100).IsRequired();
+            entity.HasIndex(invoice => invoice.InvoiceNumber).IsUnique();
+            entity.HasIndex(invoice => invoice.SupplierId);
+            entity.HasOne(invoice => invoice.Supplier)
+                .WithMany(supplier => supplier.Invoices)
+                .HasForeignKey(invoice => invoice.SupplierId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         builder.Entity<StorageWarehouse>(entity =>
         {
             entity.ToTable("Warehouses", "Business");
             entity.HasKey(item => item.Id);
+            entity.Property(item => item.ConcurrencyStamp)
+                .HasDefaultValueSql("NEWID()")
+                .IsConcurrencyToken();
             entity.Property(item => item.Title).HasMaxLength(200).IsRequired();
             entity.Property(item => item.Description).HasMaxLength(1000);
             entity.HasIndex(item => item.Title);
@@ -176,6 +200,9 @@ public sealed class ApplicationDbContext
         {
             entity.ToTable("People", "Business");
             entity.HasKey(person => person.Id);
+            entity.Property(person => person.ConcurrencyStamp)
+                .HasDefaultValueSql("NEWID()")
+                .IsConcurrencyToken();
             entity.Property(person => person.FullName).HasMaxLength(200).IsRequired();
             entity.Property(person => person.NormalizedFullName).HasMaxLength(200).IsRequired();
             entity.Property(person => person.PhoneNumber).HasMaxLength(32).IsRequired();
@@ -188,6 +215,9 @@ public sealed class ApplicationDbContext
         {
             entity.ToTable("Products", "Business");
             entity.HasKey(product => product.Id);
+            entity.Property(product => product.ConcurrencyStamp)
+                .HasDefaultValueSql("NEWID()")
+                .IsConcurrencyToken();
             entity.Property(product => product.Title).HasMaxLength(200).IsRequired();
             entity.Property(product => product.NormalizedTitle).HasMaxLength(200).IsRequired();
             entity.Property(product => product.Code).HasMaxLength(100).IsRequired();
@@ -209,6 +239,9 @@ public sealed class ApplicationDbContext
         {
             entity.ToTable("GoodsReceipts", "Business");
             entity.HasKey(receipt => receipt.Id);
+            entity.Property(receipt => receipt.ConcurrencyStamp)
+                .HasDefaultValueSql("NEWID()")
+                .IsConcurrencyToken();
             entity.Property(receipt => receipt.Description).HasMaxLength(1000);
             entity.Property(receipt => receipt.PageNumber).HasMaxLength(100).IsRequired();
             entity.HasIndex(receipt => receipt.EnteredAtUtc);
@@ -232,11 +265,10 @@ public sealed class ApplicationDbContext
                 .HasConversion<string>()
                 .HasMaxLength(32)
                 .IsRequired(false);
-            entity.Property(item => item.InvoiceNumber).HasMaxLength(100);
             entity.Property(item => item.ReceiptNumber).HasMaxLength(100);
             entity.HasIndex(item => item.ProductId);
             entity.HasIndex(item => item.WarehouseId);
-            entity.HasIndex(item => item.SupplierId);
+            entity.HasIndex(item => item.InvoiceId);
             entity.HasIndex(item => new { item.GoodsReceiptId, item.ProductId });
             entity.HasOne(item => item.GoodsReceipt)
                 .WithMany(receipt => receipt.Items)
@@ -250,9 +282,9 @@ public sealed class ApplicationDbContext
                 .WithMany(warehouse => warehouse.GoodsReceiptItems)
                 .HasForeignKey(item => item.WarehouseId)
                 .OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(item => item.Supplier)
-                .WithMany(supplier => supplier.GoodsReceiptItems)
-                .HasForeignKey(item => item.SupplierId)
+            entity.HasOne(item => item.Invoice)
+                .WithMany(invoice => invoice.GoodsReceiptItems)
+                .HasForeignKey(item => item.InvoiceId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
@@ -260,6 +292,9 @@ public sealed class ApplicationDbContext
         {
             entity.ToTable("GoodsIssueDestinations", "Business");
             entity.HasKey(item => item.Id);
+            entity.Property(item => item.ConcurrencyStamp)
+                .HasDefaultValueSql("NEWID()")
+                .IsConcurrencyToken();
             entity.Property(item => item.Title).HasMaxLength(200).IsRequired();
             entity.Property(item => item.Description).HasMaxLength(1000);
             entity.HasIndex(item => item.Title).IsUnique();
@@ -269,7 +304,11 @@ public sealed class ApplicationDbContext
         {
             entity.ToTable("GoodsIssues", "Business");
             entity.HasKey(issue => issue.Id);
+            entity.Property(issue => issue.ConcurrencyStamp)
+                .HasDefaultValueSql("NEWID()")
+                .IsConcurrencyToken();
             entity.Property(issue => issue.IssueNumber).HasMaxLength(100).IsRequired();
+            entity.Property(issue => issue.Description).HasMaxLength(1000);
             entity.HasIndex(issue => issue.IssueNumber).IsUnique();
             entity.HasIndex(issue => issue.IssuedAtUtc);
             entity.HasIndex(issue => issue.IssuerId);
@@ -341,6 +380,7 @@ public sealed class ApplicationDbContext
             foreach (var property in entry.Properties)
             {
                 var propertyName = property.Metadata.Name;
+                if (propertyName == "ConcurrencyStamp") continue;
 
                 if (property.IsTemporary)
                 {

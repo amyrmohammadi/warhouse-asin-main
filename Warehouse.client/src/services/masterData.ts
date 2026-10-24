@@ -3,6 +3,7 @@ import { clearSession, getSession } from '@/services/auth'
 
 export interface MasterDataItem {
   id: string
+  concurrencyStamp: string
   [key: string]: string | null
 }
 

@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 using Warehouse.Domain.Common;
 namespace Warehouse.Domain.Entities;
 
-public sealed class GoodsReceipt : Entity<Guid>
+public sealed class GoodsReceipt : ConcurrencyEntity<Guid>
 {
     private GoodsReceipt()
     {
@@ -34,17 +34,16 @@ public sealed class GoodsReceipt : Entity<Guid>
     public ICollection<GoodsReceiptItem> Items { get; private set; } = [];
 
     [NotMapped]
-    public Guid? SupplierId => Items.FirstOrDefault()?.SupplierId;
+    public Guid? SupplierId => Items.FirstOrDefault()?.Invoice?.SupplierId;
 
     [NotMapped]
-    public Supplier? Supplier => Items.FirstOrDefault()?.Supplier;
+    public Supplier? Supplier => Items.FirstOrDefault()?.Invoice?.Supplier;
 
     public void AddItem(
         Guid productId,
         Guid warehouseId,
         Domain.Enums.InvoiceStatus? invoiceStatus,
-        string? invoiceNumber,
-        Guid? supplierId,
+        Invoice? invoice,
         string? receiptNumber,
         decimal quantity,
         string? requestNumber,
@@ -55,8 +54,7 @@ public sealed class GoodsReceipt : Entity<Guid>
             productId,
             warehouseId,
             invoiceStatus,
-            invoiceNumber,
-            supplierId,
+            invoice,
             receiptNumber,
             quantity,
             requestNumber,

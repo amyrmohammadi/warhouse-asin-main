@@ -164,6 +164,7 @@ internal sealed class AuditTrailService(
         var productIds = ExtractIds(parsedRows, "ProductId").Append(item.ProductId).Distinct().ToArray();
         var warehouseIds = ExtractIds(parsedRows, "WarehouseId").ToArray();
         var supplierIds = ExtractIds(parsedRows, "SupplierId").ToArray();
+        var invoiceIds = ExtractIds(parsedRows, "InvoiceId").ToArray();
         var delivererIds = ExtractIds(parsedRows, "DelivererId").ToArray();
 
         var products = await dbContext.Products.AsNoTracking()
@@ -175,11 +176,21 @@ internal sealed class AuditTrailService(
         var suppliers = await dbContext.Suppliers.AsNoTracking()
             .Where(supplier => supplierIds.Contains(supplier.Id))
             .ToDictionaryAsync(supplier => supplier.Id, supplier => supplier.Title, cancellationToken);
+        var invoices = await dbContext.Invoices.AsNoTracking()
+            .Where(invoice => invoiceIds.Contains(invoice.Id))
+            .Select(invoice => new
+            {
+                invoice.Id,
+                Label = invoice.Supplier == null
+                    ? invoice.InvoiceNumber
+                    : invoice.InvoiceNumber + " - " + invoice.Supplier.Title
+            })
+            .ToDictionaryAsync(invoice => invoice.Id, invoice => invoice.Label, cancellationToken);
         var people = await dbContext.People.AsNoTracking()
             .Where(person => delivererIds.Contains(person.Id))
             .ToDictionaryAsync(person => person.Id, person => person.FullName, cancellationToken);
 
-        var lookups = new HistoryLookups(products, warehouses, suppliers, people);
+        var lookups = new HistoryLookups(products, warehouses, suppliers, invoices, people);
         var entries = parsedRows
             .Select(row => ToHistoryEntry(row, lookups))
             .Where(entry => entry.Changes.Count > 0)
@@ -242,6 +253,7 @@ internal sealed class AuditTrailService(
                 "ProductId" => lookups.Products.GetValueOrDefault(id, "کالای حذف‌شده"),
                 "WarehouseId" => lookups.Warehouses.GetValueOrDefault(id, "انبار حذف‌شده"),
                 "SupplierId" => lookups.Suppliers.GetValueOrDefault(id, "طرف حساب حذف‌شده"),
+                "InvoiceId" => lookups.Invoices.GetValueOrDefault(id, "فاکتور حذف‌شده"),
                 "DelivererId" => lookups.People.GetValueOrDefault(id, "تحویل‌دهنده حذف‌شده"),
                 _ => raw
             };
@@ -300,6 +312,7 @@ internal sealed class AuditTrailService(
         new("Description", "توضیحات کالا"),
         new("RequestNumber", "شماره درخواست"),
         new("InvoiceStatus", "وضعیت فاکتور"),
+        new("InvoiceId", "فاکتور"),
         new("InvoiceNumber", "شماره فاکتور"),
         new("SupplierId", "طرف حساب"),
         new("ReceiptNumber", "شماره رسید")
@@ -349,5 +362,6 @@ internal sealed class AuditTrailService(
         IReadOnlyDictionary<Guid, string> Products,
         IReadOnlyDictionary<Guid, string> Warehouses,
         IReadOnlyDictionary<Guid, string> Suppliers,
+        IReadOnlyDictionary<Guid, string> Invoices,
         IReadOnlyDictionary<Guid, string> People);
 }

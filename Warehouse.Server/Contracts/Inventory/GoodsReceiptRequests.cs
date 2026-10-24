@@ -8,7 +8,8 @@ public sealed record CreateGoodsReceiptRequest(
     Guid? DelivererId,
     string? DelivererFullName,
     string PageNumber,
-    IReadOnlyCollection<CreateGoodsReceiptItemRequest> Items);
+    IReadOnlyCollection<CreateGoodsReceiptItemRequest> Items,
+    Guid? ConcurrencyStamp = null);
 
 public sealed record CreateGoodsReceiptItemRequest(
     Guid? ProductId,

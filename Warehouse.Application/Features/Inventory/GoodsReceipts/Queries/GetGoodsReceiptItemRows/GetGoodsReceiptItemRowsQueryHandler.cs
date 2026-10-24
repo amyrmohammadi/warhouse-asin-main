@@ -29,7 +29,7 @@ internal sealed class GetGoodsReceiptItemRowsQueryHandler(IUnitOfWork<Guid> unit
                 item.Product.Title.Contains(search) ||
                 item.Product.Code.Contains(search) ||
                 item.GoodsReceipt.PageNumber.Contains(search) ||
-                (item.InvoiceNumber != null && item.InvoiceNumber.Contains(search)) ||
+                (item.Invoice != null && item.Invoice.InvoiceNumber.Contains(search)) ||
                 (item.ReceiptNumber != null && item.ReceiptNumber.Contains(search)));
         }
 
@@ -39,7 +39,7 @@ internal sealed class GetGoodsReceiptItemRowsQueryHandler(IUnitOfWork<Guid> unit
             .ApplyTextFilter(request.ProductCode, item => item.Product.Code)
             .ApplyTextFilter(request.PageNumberFilter, item => item.GoodsReceipt.PageNumber)
             .ApplyNumericFilter(request.Quantity, item => item.Quantity)
-            .ApplyTextFilter(request.InvoiceNumber, item => item.InvoiceNumber)
+            .ApplyTextFilter(request.InvoiceNumber, item => item.Invoice == null ? null : item.Invoice.InvoiceNumber)
             .ApplyTextFilter(request.ReceiptNumber, item => item.ReceiptNumber);
 
         if (request.WarehouseId.HasValue)
@@ -54,7 +54,8 @@ internal sealed class GetGoodsReceiptItemRowsQueryHandler(IUnitOfWork<Guid> unit
 
         if (request.SupplierId.HasValue)
         {
-            query = query.Where(item => item.SupplierId == request.SupplierId.Value);
+            query = query.Where(item => item.Invoice != null &&
+                item.Invoice.SupplierId == request.SupplierId.Value);
         }
 
         if (request.InvoiceStatus.HasValue)
@@ -93,11 +94,11 @@ internal sealed class GetGoodsReceiptItemRowsQueryHandler(IUnitOfWork<Guid> unit
                 DelivererFullName = item.GoodsReceipt.Deliverer.FullName,
                 WarehouseTitle = item.Warehouse.Title,
                 InvoiceStatus = item.InvoiceStatus,
-                InvoiceNumber = item.InvoiceNumber,
-                SupplierId = item.SupplierId,
-                Counterparty = item.Supplier == null
+                InvoiceNumber = item.Invoice == null ? null : item.Invoice.InvoiceNumber,
+                SupplierId = item.Invoice == null ? null : item.Invoice.SupplierId,
+                Counterparty = item.Invoice == null || item.Invoice.Supplier == null
                     ? null
-                    : item.Supplier.Title,
+                    : item.Invoice.Supplier.Title,
                 ReceiptNumber = item.ReceiptNumber,
                 PageNumber = item.GoodsReceipt.PageNumber
             }),

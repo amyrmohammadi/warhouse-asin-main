@@ -1,4 +1,5 @@
 using MediatR;
+using Warehouse.Application.Common.Concurrency;
 using Warehouse.Application.Common.Interfaces.Repositories;
 using Warehouse.Application.Common.Models;
 using Warehouse.Application.Common.Models.MasterData;
@@ -20,6 +21,11 @@ internal sealed class UpdatePersonCommandHandler(IUnitOfWork<Guid> unitOfWork)
             return Result<PersonSummary>.Error("The requested person was not found.");
         }
 
+        if (!person.TryAdvanceConcurrencyStamp(request.ConcurrencyStamp))
+        {
+            return Result<PersonSummary>.Error(ConcurrencyMessages.Conflict);
+        }
+
         var duplicateMessage = await PersonDataHelper.FindDuplicateMessageAsync(
             unitOfWork,
             request.FullName,
@@ -37,6 +43,7 @@ internal sealed class UpdatePersonCommandHandler(IUnitOfWork<Guid> unitOfWork)
         return Result<PersonSummary>.Success(new PersonSummary
         {
             Id = person.Id,
+            ConcurrencyStamp = person.ConcurrencyStamp,
             FullName = person.FullName,
             PhoneNumber = person.PhoneNumber
         });

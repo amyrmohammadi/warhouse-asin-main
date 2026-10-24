@@ -22,6 +22,7 @@ internal sealed class GetUnitOfMeasureByIdQueryHandler(IUnitOfWork<Guid> unitOfW
             : Result<TitledMasterDataSummary>.Success(new TitledMasterDataSummary
             {
                 Id = item.Id,
+                ConcurrencyStamp = item.ConcurrencyStamp,
                 Title = item.Title,
                 Description = item.Description
             });

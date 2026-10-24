@@ -23,4 +23,17 @@ public sealed class PermissionPolicyNamesTests
                 Assert.NotEmpty(group.Policies);
             });
     }
+
+    [Fact]
+    public void Groups_SeparateGoodsReceiptsFromGoodsIssues()
+    {
+        var receiptGroup = PermissionPolicyNames.Groups.Single(group => group.Key == "goods-receipts");
+        var issueGroup = PermissionPolicyNames.Groups.Single(group => group.Key == "goods-issues");
+
+        Assert.Equal("ورود کالا", receiptGroup.DisplayName);
+        Assert.All(receiptGroup.Policies, policy => Assert.StartsWith("GoodsReceipt", policy.Name));
+        Assert.Equal("خروج کالا", issueGroup.DisplayName);
+        Assert.All(issueGroup.Policies, policy => Assert.StartsWith("GoodsIssue", policy.Name));
+        Assert.DoesNotContain(PermissionPolicyNames.Groups, group => group.Key == "inventory");
+    }
 }

@@ -20,8 +20,10 @@ export interface GoodsIssueItem {
 
 export interface GoodsIssue {
   id: string
+  concurrencyStamp: string
   issueNumber: string
   issuedAtUtc: string
+  description: string | null
   issuerId: string
   issuerFullName: string
   items: GoodsIssueItem[]
@@ -31,6 +33,7 @@ export interface GoodsIssueItemRow extends GoodsIssueItem {
   goodsIssueId: string
   issueNumber: string
   issuedAtUtc: string
+  issueDescription: string | null
   issuerFullName: string
 }
 
@@ -62,9 +65,11 @@ export interface SaveGoodsIssueItem {
 export interface SaveGoodsIssueRequest {
   issueNumber: string
   issuedAtUtc: string
+  description: string | null
   issuerId: string | null
   issuerFullName: string | null
   items: SaveGoodsIssueItem[]
+  concurrencyStamp: string | null
 }
 
 export interface GoodsIssueListFilters {

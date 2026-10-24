@@ -7,4 +7,5 @@ namespace Warehouse.Application.Features.MasterData.UnitsOfMeasure.Commands.Upda
 public sealed record UpdateUnitOfMeasureCommand(
     Guid Id,
     string Title,
-    string? Description) : IRequest<Result<TitledMasterDataSummary>>;
+    string? Description,
+    Guid ConcurrencyStamp = default) : IRequest<Result<TitledMasterDataSummary>>;

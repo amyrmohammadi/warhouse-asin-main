@@ -6,6 +6,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Warehouse.Application.Common.Authorization;
+using Warehouse.Application.Common.Concurrency;
 using Warehouse.Application.Common.Models;
 using Warehouse.Application.Common.Models.Inventory;
 using Warehouse.Application.Features.Inventory.GoodsReceipts.Commands.CreateGoodsReceipt;
@@ -322,6 +323,7 @@ public sealed class GoodsReceiptsController(
     [HttpPut("{id:guid}")]
     [ProducesResponseType(typeof(Result<GoodsReceiptSummary>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(Result<GoodsReceiptSummary>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(Result<GoodsReceiptSummary>), StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<Result<GoodsReceiptSummary>>> Update(
         Guid id,
@@ -374,10 +376,14 @@ public sealed class GoodsReceiptsController(
                 item.Quantity,
                 item.RequestNumber,
                 item.Description)).ToArray());
-        var result = await sender.Send(new UpdateGoodsReceiptCommand(id, command, canInitialEntry, canManageReceiptInvoice), cancellationToken);
+        var result = await sender.Send(new UpdateGoodsReceiptCommand(
+            id, command, canInitialEntry, canManageReceiptInvoice,
+            request.ConcurrencyStamp ?? Guid.Empty), cancellationToken);
         return result.IsSuccess
             ? Ok(result)
-            : BadRequest(result);
+            : result.Messages.Contains(ConcurrencyMessages.Conflict, StringComparer.Ordinal)
+                ? Conflict(result)
+                : BadRequest(result);
     }
 
     [Authorize(Policy = PermissionPolicyNames.Inventory.GoodsReceiptsInitialEntry)]

@@ -5,8 +5,10 @@ namespace Warehouse.Application.Common.Models.Inventory;
 public sealed class GoodsIssueSummary
 {
     public Guid Id { get; init; }
+    public Guid ConcurrencyStamp { get; init; }
     public string IssueNumber { get; init; } = string.Empty;
     public DateTimeOffset IssuedAtUtc { get; init; }
+    public string? Description { get; init; }
     public Guid IssuerId { get; init; }
     public string IssuerFullName { get; init; } = string.Empty;
     public IReadOnlyCollection<GoodsIssueItemSummary> Items { get; init; } = [];
@@ -34,6 +36,7 @@ public sealed class GoodsIssueItemRowSummary : GoodsIssueItemSummary
     public Guid GoodsIssueId { get; init; }
     public string IssueNumber { get; init; } = string.Empty;
     public DateTimeOffset IssuedAtUtc { get; init; }
+    public string? IssueDescription { get; init; }
     public string IssuerFullName { get; init; } = string.Empty;
 }
 

@@ -9,8 +9,10 @@ internal static class GoodsIssueProjection
         query.Select(issue => new GoodsIssueSummary
         {
             Id = issue.Id,
+            ConcurrencyStamp = issue.ConcurrencyStamp,
             IssueNumber = issue.IssueNumber,
             IssuedAtUtc = issue.IssuedAtUtc,
+            Description = issue.Description,
             IssuerId = issue.IssuerId,
             IssuerFullName = issue.Issuer.FullName,
             Items = issue.Items

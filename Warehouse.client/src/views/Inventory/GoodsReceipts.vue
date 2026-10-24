@@ -133,6 +133,7 @@
   const modalOpen = ref(false)
   const receiptInvoiceModalOpen = ref(false)
   const editingReceiptId = ref<string | null>(null)
+  const editingConcurrencyStamp = ref<string | null>(null)
   const editLoading = ref(false)
   const saving = ref(false)
   const referenceLoading = ref(false)
@@ -937,6 +938,7 @@
     if (!await loadReferenceData()) return
     resetForm()
     editingReceiptId.value = null
+    editingConcurrencyStamp.value = null
     modalOpen.value = true
   }
 
@@ -949,6 +951,7 @@
       const receipt = await getGoodsReceipt(id)
       resetForm()
       editingReceiptId.value = id
+      editingConcurrencyStamp.value = receipt.concurrencyStamp
       const date = new Date(receipt.enteredAtUtc)
       date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
       Object.assign(form, {
@@ -1014,6 +1017,7 @@
     if (saving.value) return
     receiptInvoiceModalOpen.value = false
     editingReceiptId.value = null
+    editingConcurrencyStamp.value = null
     formError.value = ''
   }
 
@@ -1502,6 +1506,7 @@
         delivererId: form.delivererId || null,
         delivererFullName: form.delivererId ? null : form.delivererText.trim(),
         pageNumber: form.pageNumber.trim(),
+        concurrencyStamp: editingReceiptId.value ? editingConcurrencyStamp.value : null,
         items: items.map(item => ({
           productId: item.productId,
           productTitle: item.productId ? null : item.productText.trim(),

@@ -66,6 +66,7 @@ internal static class ProductDataHelper
     public static ProductSummary ToSummary(Product product, string unitTitle) => new()
     {
         Id = product.Id,
+        ConcurrencyStamp = product.ConcurrencyStamp,
         Title = product.Title,
         Code = product.Code,
         UnitOfMeasureId = product.UnitOfMeasureId,

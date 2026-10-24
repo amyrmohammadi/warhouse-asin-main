@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
 using Warehouse.Application.Common.Authorization;
+using Warehouse.Application.Common.Concurrency;
 using Warehouse.Application.Common.Models;
 using Warehouse.Application.Common.Models.Auditing;
 using Warehouse.Application.Common.Models.Inventory;
@@ -187,6 +188,23 @@ public sealed class GoodsReceiptsControllerTests
         var response = await controller.Update(Guid.NewGuid(), Request() with { DelivererId = null, DelivererFullName = "جدید" }, default);
         Assert.IsType<ForbidResult>(response.Result);
         await sender.DidNotReceive().Send(Arg.Any<UpdateGoodsReceiptCommand>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Update_WithConcurrencyConflict_ReturnsHttp409()
+    {
+        var sender = Substitute.For<ISender>();
+        var auth = Substitute.For<IAuthorizationService>();
+        auth.AuthorizeAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<object?>(), Arg.Any<string>())
+            .Returns(AuthorizationResult.Success());
+        sender.Send(Arg.Any<UpdateGoodsReceiptCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result<GoodsReceiptSummary>.Error(ConcurrencyMessages.Conflict));
+        var controller = new GoodsReceiptsController(sender, auth)
+        { ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() } };
+
+        var response = await controller.Update(Guid.NewGuid(), Request(), default);
+
+        Assert.IsType<ConflictObjectResult>(response.Result);
     }
 
     [Fact]

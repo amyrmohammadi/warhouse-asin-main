@@ -19,6 +19,8 @@ public enum AppPermission
     GoodsReceiptsImport,
     GoodsReceiptsExport,
     GoodsIssuesRead,
-    GoodsIssuesManage,
+    GoodsIssuesCreate,
+    GoodsIssuesUpdate,
+    GoodsIssuesDelete,
     GoodsIssuesExport
 }

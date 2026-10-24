@@ -37,6 +37,7 @@ internal sealed class CreateGoodsIssueDestinationCommandHandler(IUnitOfWork<Guid
     private static TitledMasterDataSummary ToSummary(GoodsIssueDestination item) => new()
     {
         Id = item.Id,
+        ConcurrencyStamp = item.ConcurrencyStamp,
         Title = item.Title,
         Description = item.Description
     };

@@ -53,6 +53,7 @@ internal sealed class GetUnitsOfMeasureQueryHandler(IUnitOfWork<Guid> unitOfWork
             .Select(item => new TitledMasterDataSummary
             {
                 Id = item.Id,
+                ConcurrencyStamp = item.ConcurrencyStamp,
                 Title = item.Title,
                 Description = item.Description
             })

@@ -1,5 +1,6 @@
 using FluentValidation;
 using MediatR;
+using Warehouse.Application.Common.Concurrency;
 using Warehouse.Application.Common.Interfaces.Repositories;
 using Warehouse.Application.Common.Models;
 using Warehouse.Application.Common.Models.MasterData;
@@ -8,7 +9,11 @@ using Warehouse.Domain.Entities;
 
 namespace Warehouse.Application.Features.MasterData.GoodsIssueDestinations.Commands.UpdateGoodsIssueDestination;
 
-public sealed record UpdateGoodsIssueDestinationCommand(Guid Id, string Title, string? Description)
+public sealed record UpdateGoodsIssueDestinationCommand(
+    Guid Id,
+    string Title,
+    string? Description,
+    Guid ConcurrencyStamp = default)
     : IRequest<Result<TitledMasterDataSummary>>;
 
 internal sealed class UpdateGoodsIssueDestinationCommandValidator
@@ -28,6 +33,8 @@ internal sealed class UpdateGoodsIssueDestinationCommandHandler(IUnitOfWork<Guid
         var repository = unitOfWork.Repository<GoodsIssueDestination>();
         var item = await repository.GetByIdAsync(request.Id, cancellationToken);
         if (item is null) return Result<TitledMasterDataSummary>.Error("مقصد پیدا نشد.");
+        if (!item.TryAdvanceConcurrencyStamp(request.ConcurrencyStamp))
+            return Result<TitledMasterDataSummary>.Error(ConcurrencyMessages.Conflict);
         if (await repository.CountAsync(repository.Entities.Where(value =>
                 value.Id != request.Id && value.Title == request.Title.Trim()), cancellationToken) > 0)
             return Result<TitledMasterDataSummary>.Error("این مقصد قبلاً ثبت شده است.");
@@ -37,6 +44,7 @@ internal sealed class UpdateGoodsIssueDestinationCommandHandler(IUnitOfWork<Guid
         return Result<TitledMasterDataSummary>.Success(new TitledMasterDataSummary
         {
             Id = item.Id,
+            ConcurrencyStamp = item.ConcurrencyStamp,
             Title = item.Title,
             Description = item.Description
         });

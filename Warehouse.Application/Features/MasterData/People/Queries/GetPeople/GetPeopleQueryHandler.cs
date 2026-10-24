@@ -52,6 +52,7 @@ internal sealed class GetPeopleQueryHandler(IUnitOfWork<Guid> unitOfWork)
             .Select(person => new PersonSummary
             {
                 Id = person.Id,
+                ConcurrencyStamp = person.ConcurrencyStamp,
                 FullName = person.FullName,
                 PhoneNumber = person.PhoneNumber
             })

@@ -3,6 +3,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Warehouse.Application.Common.Authorization;
+using Warehouse.Application.Common.Concurrency;
 using Warehouse.Application.Common.Models;
 using Warehouse.Application.Common.Models.MasterData;
 using Warehouse.Application.Features.MasterData.People.Commands.CreatePerson;
@@ -69,6 +70,7 @@ public sealed class PeopleController(ISender sender, IMapper mapper) : Controlle
     [HttpPut("{id:guid}")]
     [ProducesResponseType(typeof(Result<PersonSummary>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(Result<PersonSummary>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(Result<PersonSummary>), StatusCodes.Status409Conflict)]
     public async Task<ActionResult<Result<PersonSummary>>> Update(
         Guid id,
         [FromBody] PersonRequest request,
@@ -76,7 +78,11 @@ public sealed class PeopleController(ISender sender, IMapper mapper) : Controlle
     {
         var command = mapper.Map<UpdatePersonCommand>(request) with { Id = id };
         var result = await sender.Send(command, cancellationToken);
-        return result.IsSuccess ? Ok(result) : BadRequest(result);
+        return result.IsSuccess
+            ? Ok(result)
+            : result.Messages.Contains(ConcurrencyMessages.Conflict, StringComparer.Ordinal)
+                ? Conflict(result)
+                : BadRequest(result);
     }
 
     [Authorize(Policy = PermissionPolicyNames.MasterData.Manage)]

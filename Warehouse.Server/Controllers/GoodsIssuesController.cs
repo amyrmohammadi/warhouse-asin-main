@@ -4,6 +4,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Warehouse.Application.Common.Authorization;
+using Warehouse.Application.Common.Concurrency;
 using Warehouse.Application.Common.Models;
 using Warehouse.Application.Common.Models.Inventory;
 using Warehouse.Application.Features.Inventory.GoodsIssues.Commands.DeleteGoodsIssue;
@@ -54,7 +55,7 @@ public sealed class GoodsIssuesController(
         return result.IsSuccess ? Ok(result) : NotFound(result);
     }
 
-    [Authorize(Policy = PermissionPolicyNames.Inventory.GoodsIssuesManage)]
+    [Authorize(Policy = PermissionPolicyNames.Inventory.GoodsIssuesCreate)]
     [HttpPost]
     public async Task<ActionResult<Result<GoodsIssueSummary>>> Create(
         [FromBody] SaveGoodsIssueRequest request,
@@ -67,8 +68,9 @@ public sealed class GoodsIssuesController(
             : BadRequest(result);
     }
 
-    [Authorize(Policy = PermissionPolicyNames.Inventory.GoodsIssuesManage)]
+    [Authorize(Policy = PermissionPolicyNames.Inventory.GoodsIssuesUpdate)]
     [HttpPut("{id:guid}")]
+    [ProducesResponseType(typeof(Result<GoodsIssueSummary>), StatusCodes.Status409Conflict)]
     public async Task<ActionResult<Result<GoodsIssueSummary>>> Update(
         Guid id,
         [FromBody] SaveGoodsIssueRequest request,
@@ -76,10 +78,14 @@ public sealed class GoodsIssuesController(
     {
         if (CreatesMasterData(request) && !await CanManageMasterDataAsync()) return Forbid();
         var result = await sender.Send(ToCommand(id, request), cancellationToken);
-        return result.IsSuccess ? Ok(result) : BadRequest(result);
+        return result.IsSuccess
+            ? Ok(result)
+            : result.Messages.Contains(ConcurrencyMessages.Conflict, StringComparer.Ordinal)
+                ? Conflict(result)
+                : BadRequest(result);
     }
 
-    [Authorize(Policy = PermissionPolicyNames.Inventory.GoodsIssuesManage)]
+    [Authorize(Policy = PermissionPolicyNames.Inventory.GoodsIssuesDelete)]
     [HttpDelete("{id:guid}")]
     public async Task<ActionResult<Result>> Delete(Guid id, CancellationToken cancellationToken)
     {
@@ -96,9 +102,9 @@ public sealed class GoodsIssuesController(
         using var workbook = new XLWorkbook();
         var worksheet = workbook.Worksheets.Add("خروج کالا");
         worksheet.RightToLeft = true;
-        string[] headers = ["ردیف", "کد خروج", "تاریخ خروج", "خارج‌کننده", "کد کالا",
-            "عنوان کالا", "تعداد", "شماره اموال", "مقصد", "علت خروج", "توضیحات",
-            "واحد تحویل‌دهنده", "تاریخ عودت"];
+        string[] headers = ["ردیف", "کد خروج", "تاریخ خروج", "خارج‌کننده", "توضیحات کلی",
+            "کد کالا", "عنوان کالا", "تعداد", "شماره اموال", "مقصد", "علت خروج",
+            "توضیحات ردیف", "واحد تحویل‌دهنده", "تاریخ عودت"];
         for (var column = 1; column <= headers.Length; column++)
             worksheet.Cell(1, column).Value = headers[column - 1];
 
@@ -114,15 +120,16 @@ public sealed class GoodsIssuesController(
                 worksheet.Cell(row, 2).Value = item.IssueNumber;
                 worksheet.Cell(row, 3).Value = FormatPersianDate(item.IssuedAtUtc);
                 worksheet.Cell(row, 4).Value = item.IssuerFullName;
-                worksheet.Cell(row, 5).Value = item.ProductCode;
-                worksheet.Cell(row, 6).Value = item.ProductTitle ?? string.Empty;
-                worksheet.Cell(row, 7).Value = item.Quantity;
-                worksheet.Cell(row, 8).Value = item.AssetNumber ?? string.Empty;
-                worksheet.Cell(row, 9).Value = item.DestinationTitle;
-                worksheet.Cell(row, 10).Value = item.ExitReason;
-                worksheet.Cell(row, 11).Value = item.Description ?? string.Empty;
-                worksheet.Cell(row, 12).Value = item.DeliveringUnit;
-                worksheet.Cell(row, 13).Value = item.ReturnAtUtc.HasValue ? FormatPersianDate(item.ReturnAtUtc.Value) : string.Empty;
+                worksheet.Cell(row, 5).Value = item.IssueDescription ?? string.Empty;
+                worksheet.Cell(row, 6).Value = item.ProductCode;
+                worksheet.Cell(row, 7).Value = item.ProductTitle ?? string.Empty;
+                worksheet.Cell(row, 8).Value = item.Quantity;
+                worksheet.Cell(row, 9).Value = item.AssetNumber ?? string.Empty;
+                worksheet.Cell(row, 10).Value = item.DestinationTitle;
+                worksheet.Cell(row, 11).Value = item.ExitReason;
+                worksheet.Cell(row, 12).Value = item.Description ?? string.Empty;
+                worksheet.Cell(row, 13).Value = item.DeliveringUnit;
+                worksheet.Cell(row, 14).Value = item.ReturnAtUtc.HasValue ? FormatPersianDate(item.ReturnAtUtc.Value) : string.Empty;
                 row++;
             }
             if (result.Data.Items.Count < ExportBatchSize || row - 2 >= result.Data.FilteredCount) break;
@@ -142,11 +149,12 @@ public sealed class GoodsIssuesController(
     }
 
     private static SaveGoodsIssueCommand ToCommand(Guid? id, SaveGoodsIssueRequest request) => new(
-        id, request.IssueNumber, request.IssuedAtUtc, request.IssuerId, request.IssuerFullName,
+        id, request.IssueNumber, request.IssuedAtUtc, request.Description,
+        request.IssuerId, request.IssuerFullName,
         request.Items.Select(item => new SaveGoodsIssueItem(
             item.ProductId, item.ProductCode, item.Quantity, item.AssetNumber, item.DestinationId,
             item.DestinationTitle, item.ExitReason, item.Description, item.DeliveringUnit,
-            item.ReturnAtUtc)).ToArray());
+            item.ReturnAtUtc)).ToArray(), request.ConcurrencyStamp);
 
     private static bool CreatesMasterData(SaveGoodsIssueRequest request) =>
         (!request.IssuerId.HasValue && !string.IsNullOrWhiteSpace(request.IssuerFullName)) ||

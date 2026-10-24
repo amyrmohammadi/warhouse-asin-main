@@ -2,7 +2,7 @@ using Warehouse.Domain.Common;
 
 namespace Warehouse.Domain.Entities;
 
-public sealed class StorageWarehouse : Entity<Guid>
+public sealed class StorageWarehouse : ConcurrencyEntity<Guid>
 {
     private StorageWarehouse()
     {

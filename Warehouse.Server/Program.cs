@@ -53,6 +53,7 @@ public class Program
         });
         builder.Services.AddProblemDetails();
         builder.Services.AddExceptionHandler<FluentValidationExceptionHandler>();
+        builder.Services.AddExceptionHandler<ConcurrencyExceptionHandler>();
         builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
         var app = builder.Build();

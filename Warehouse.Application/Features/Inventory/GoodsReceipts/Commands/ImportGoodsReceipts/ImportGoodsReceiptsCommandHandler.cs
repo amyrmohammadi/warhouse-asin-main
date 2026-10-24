@@ -80,6 +80,26 @@ internal sealed class ImportGoodsReceiptsCommandHandler(
         var importedReceipts = 0;
         var importedItems = 0;
 
+        var requestedInvoiceNumbers = validation.Rows
+            .Where(row => row.InvoiceStatus == Domain.Enums.InvoiceStatus.HasInvoice)
+            .Select(row => Invoice.NormalizeNumber(row.Source.InvoiceNumber))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var invoiceRepository = unitOfWork.Repository<Invoice>();
+        var existingInvoices = await invoiceRepository.ToListAsync(
+            invoiceRepository.Entities.Where(invoice =>
+                requestedInvoiceNumbers.Contains(invoice.InvoiceNumber)),
+            token);
+        var invoicesByNumber = new Dictionary<string, Invoice>(StringComparer.OrdinalIgnoreCase);
+        foreach (var existingInvoice in existingInvoices)
+        {
+            var trackedInvoice = await invoiceRepository.GetByIdAsync(existingInvoice.Id, token);
+            if (trackedInvoice is not null)
+            {
+                invoicesByNumber.TryAdd(trackedInvoice.InvoiceNumber, trackedInvoice);
+            }
+        }
+
         await unitOfWork.BeginTransaction(token);
 
         try
@@ -126,13 +146,24 @@ internal sealed class ImportGoodsReceiptsCommandHandler(
                     row.Source.PageNumber
                 );
 
+                Invoice? invoice = null;
+                if (row.InvoiceStatus == Domain.Enums.InvoiceStatus.HasInvoice)
+                {
+                    var invoiceNumber = Invoice.NormalizeNumber(row.Source.InvoiceNumber);
+                    if (!invoicesByNumber.TryGetValue(invoiceNumber, out invoice))
+                    {
+                        invoice = new Invoice(invoiceNumber, row.SupplierId);
+                        await invoiceRepository.AddAsync(invoice, token);
+                        invoicesByNumber.Add(invoiceNumber, invoice);
+                    }
+                }
+
                 // فقط یک آیتم برای هر سند
                 receipt.AddItem(
                     row.ProductId,
                     row.WarehouseId,
                     row.InvoiceStatus,
-                    row.Source.InvoiceNumber,
-                    row.SupplierId,
+                    invoice,
                     row.Source.ReceiptNumber,
                     row.Source.Quantity!.Value,
                     null,

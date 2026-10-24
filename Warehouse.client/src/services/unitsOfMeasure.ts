@@ -5,6 +5,7 @@ const basePath = '/endpoint/master-data/units-of-measure'
 
 export interface UnitOfMeasure {
   id: string
+  concurrencyStamp: string
   title: string
   description: string | null
 }
@@ -33,6 +34,7 @@ export interface GetUnitsOfMeasureParameters {
 export interface SaveUnitOfMeasureRequest {
   title: string
   description: string | null
+  concurrencyStamp: string | null
 }
 
 export interface FieldValidationRules {

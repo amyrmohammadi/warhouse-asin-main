@@ -52,6 +52,7 @@ internal sealed class SearchGoodsIssueDestinationsQueryHandler(IUnitOfWork<Guid>
                 .Select(item => new TitledMasterDataSummary
                 {
                     Id = item.Id,
+                    ConcurrencyStamp = item.ConcurrencyStamp,
                     Title = item.Title,
                     Description = item.Description
                 }),

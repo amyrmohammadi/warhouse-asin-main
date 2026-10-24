@@ -7,6 +7,8 @@ public sealed class GoodsReceiptSummary
 {
     public Guid Id { get; init; }
 
+    public Guid ConcurrencyStamp { get; init; }
+
     public DateTimeOffset EnteredAtUtc { get; init; }
 
     public string? Description { get; init; }

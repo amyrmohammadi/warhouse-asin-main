@@ -1,4 +1,5 @@
 using MediatR;
+using Warehouse.Application.Common.Concurrency;
 using Warehouse.Application.Common.Interfaces.Repositories;
 using Warehouse.Application.Common.Models;
 using Warehouse.Application.Common.Models.MasterData;
@@ -18,6 +19,11 @@ internal sealed class UpdateProductCommandHandler(IUnitOfWork<Guid> unitOfWork)
         if (product is null)
         {
             return Result<ProductSummary>.Error("کالای مورد نظر پیدا نشد.");
+        }
+
+        if (!product.TryAdvanceConcurrencyStamp(request.ConcurrencyStamp))
+        {
+            return Result<ProductSummary>.Error(ConcurrencyMessages.Conflict);
         }
 
         var duplicateMessage = await ProductDataHelper.FindDuplicateMessageAsync(

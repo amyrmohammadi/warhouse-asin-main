@@ -30,6 +30,7 @@ internal sealed class CreatePersonCommandHandler(IUnitOfWork<Guid> unitOfWork)
         return Result<PersonSummary>.Success(new PersonSummary
         {
             Id = person.Id,
+            ConcurrencyStamp = person.ConcurrencyStamp,
             FullName = person.FullName,
             PhoneNumber = person.PhoneNumber
         });

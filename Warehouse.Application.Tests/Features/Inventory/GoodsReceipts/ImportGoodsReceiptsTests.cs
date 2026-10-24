@@ -24,12 +24,14 @@ public sealed class ImportGoodsReceiptsTests
         var units = Substitute.For<IRepositoryAsync<UnitOfMeasure, Guid>>();
         var warehouses = Substitute.For<IRepositoryAsync<StorageWarehouse, Guid>>();
         var suppliers = Substitute.For<IRepositoryAsync<Supplier, Guid>>();
+        var invoices = Substitute.For<IRepositoryAsync<Invoice, Guid>>();
         var people = Substitute.For<IRepositoryAsync<Person, Guid>>();
         var receipts = Substitute.For<IRepositoryAsync<GoodsReceipt, Guid>>();
         context.UnitOfWork.Repository<Product>().Returns(products);
         context.UnitOfWork.Repository<UnitOfMeasure>().Returns(units);
         context.UnitOfWork.Repository<StorageWarehouse>().Returns(warehouses);
         context.UnitOfWork.Repository<Supplier>().Returns(suppliers);
+        context.UnitOfWork.Repository<Invoice>().Returns(invoices);
         context.UnitOfWork.Repository<Person>().Returns(people);
         context.UnitOfWork.Repository<GoodsReceipt>().Returns(receipts);
         products.GetAllAsync(Arg.Any<CancellationToken>()).Returns([product]);
@@ -37,6 +39,11 @@ public sealed class ImportGoodsReceiptsTests
         warehouses.GetAllAsync(Arg.Any<CancellationToken>()).Returns([warehouse]);
         suppliers.GetAllAsync(Arg.Any<CancellationToken>()).Returns(Array.Empty<Supplier>());
         people.GetAllAsync(Arg.Any<CancellationToken>()).Returns(Array.Empty<Person>());
+        invoices.Entities.Returns(Array.Empty<Invoice>().AsQueryable());
+        invoices.ToListAsync(
+                Arg.Any<IQueryable<Invoice>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<Invoice>());
 
         using var workbook = new XLWorkbook();
         var sheet = workbook.Worksheets.Add("ورود کالا");

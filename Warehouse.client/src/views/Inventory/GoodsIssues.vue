@@ -5,6 +5,7 @@ import DataTable from 'datatables.net-vue3'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, shallowRef } from 'vue'
 import DatePicker from 'vue3-persian-datetime-picker'
 
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import DataTableFilters from '@/components/filters/DataTableFilters.vue'
 import GoodsIssueDestinationSelect from '@/components/selectors/GoodsIssueDestinationSelect.vue'
 import PersonSelect, { type PersonSelectOption } from '@/components/selectors/PersonSelect.vue'
@@ -19,7 +20,6 @@ import {
   getGoodsIssueOptions,
   getGoodsIssues,
   type GoodsIssue,
-  type GoodsIssueItemRow,
   type GoodsIssueListFilters,
   type GoodsIssueOptions,
   type SaveGoodsIssueRequest,
@@ -58,19 +58,36 @@ interface FormItem {
   returnAtLocal: string
 }
 
+interface ConfirmDialogInstance {
+  ask: (options: {
+    title: string
+    text?: string
+    icon?: 'warning'
+    confirmButtonText?: string
+    cancelButtonText?: string
+    confirmButtonColor?: string
+  }) => Promise<boolean>
+}
+
 const sessionPermissions = new Set(getSession()?.permissions ?? [])
-const canManage = sessionPermissions.has('GoodsIssuesManage')
+const canCreate = sessionPermissions.has('GoodsIssuesCreate')
+const canUpdate = sessionPermissions.has('GoodsIssuesUpdate')
+const canDelete = sessionPermissions.has('GoodsIssuesDelete')
+const canChange = canUpdate || canDelete
 const canExport = sessionPermissions.has('GoodsIssuesExport')
 const canManageMasterData = sessionPermissions.has('MasterDataManage')
 const mode = ref<TableMode>('items')
 const goodsEntryMode = ref<GoodsEntryMode>('list')
 const table = shallowRef<{ dt: Api } | null>(null)
+const confirmDialog = ref<ConfirmDialogInstance | null>(null)
 const options = ref<GoodsIssueOptions>({ people: [] })
 const loading = ref(false)
 const saving = ref(false)
 const exporting = ref(false)
+const deletingId = ref<string | null>(null)
 const modalOpen = ref(false)
 const editingId = ref<string | null>(null)
+const editingConcurrencyStamp = ref<string | null>(null)
 const search = ref('')
 const appliedSearch = ref('')
 const appliedFilters = ref<DataTableFilterValues>({})
@@ -86,6 +103,7 @@ const listModeMinimumRows = 4
 const form = reactive({
   issueNumber: '',
   issuedAtLocal: '',
+  description: '',
   issuerId: '' as string,
   issuerText: '',
   items: [] as FormItem[],
@@ -119,6 +137,7 @@ const issueColumns: ColumnsConfig[] = [
   { data: 'issueNumber', name: 'issueNumber', title: 'کد خروج', className: 'all' },
   { data: 'issuedAtUtc', name: 'issuedAtUtc', title: 'تاریخ خروج', className: 'all text-bold' },
   { data: 'issuerFullName', name: 'issuerFullName', title: 'خارج‌کننده', className: 'min-tablet-l' },
+  { data: 'description', name: 'description', title: 'توضیحات کلی', className: 'min-tablet-p text-wrap-cell', orderable: false },
   { data: 'items', name: 'itemCount', title: 'تعداد اقلام', className: 'min-tablet-l text-bold', orderable: false },
 ]
 
@@ -126,6 +145,7 @@ const itemColumns: ColumnsConfig[] = [
   createRowNumberColumn(),
   { data: 'issuedAtUtc', name: 'issuedAtUtc', title: 'تاریخ خروج', className: 'all text-bold' },
   { data: 'issueNumber', name: 'issueNumber', title: 'کد خروج', className: 'all' },
+  { data: 'issueDescription', name: 'issueDescription', title: 'توضیحات کلی', className: 'min-tablet-p text-wrap-cell', orderable: false },
   { data: 'productCode', name: 'productCode', title: 'کد کالا', className: 'min-tablet-l' },
   { data: 'productTitle', name: 'productTitle', title: 'عنوان کالا', className: 'all' },
   { data: 'quantity', name: 'quantity', title: 'تعداد', className: 'min-tablet-l text-bold' },
@@ -138,7 +158,7 @@ const itemColumns: ColumnsConfig[] = [
   { data: 'issuerFullName', name: 'issuerFullName', title: 'خارج‌کننده', className: 'min-desktop' },
 ]
 
-if (canManage) {
+if (canChange) {
   issueColumns.push({ data: 'id', name: 'actions', title: 'عملیات', className: 'min-tablet-p text-center actions-cell', orderable: false, searchable: false })
   itemColumns.push({ data: 'goodsIssueId', name: 'actions', title: 'عملیات', className: 'min-tablet-p text-center actions-cell', orderable: false, searchable: false })
 }
@@ -169,8 +189,10 @@ function newItem(): FormItem {
 
 function resetForm(): void {
   editingId.value = null
+  editingConcurrencyStamp.value = null
   form.issueNumber = ''
   form.issuedAtLocal = nowLocal()
+  form.description = ''
   form.issuerId = ''
   form.issuerText = ''
   form.items = [newItem()]
@@ -356,18 +378,20 @@ function selectIssuerFilter(person: PersonSelectOption, setValue: (value: DataTa
 }
 
 function openCreate(): void {
+  if (!canCreate) return
   resetForm()
   modalOpen.value = true
 }
 
-async function openEdit(row: GoodsIssue | GoodsIssueItemRow): Promise<void> {
-  if (!canManage || loading.value) return
+async function openEdit(id: string): Promise<void> {
+  if (!canUpdate || loading.value) return
   try {
-    const id = 'goodsIssueId' in row ? row.goodsIssueId : row.id
     const issue = await getGoodsIssue(id)
     editingId.value = id
+    editingConcurrencyStamp.value = issue.concurrencyStamp
     form.issueNumber = issue.issueNumber
     form.issuedAtLocal = toLocalDateTime(issue.issuedAtUtc)
+    form.description = issue.description ?? ''
     form.issuerId = issue.issuerId
     form.issuerText = issue.issuerFullName
     form.items = issue.items.map(item => ({
@@ -537,6 +561,7 @@ function validateForm(): string | null {
 }
 
 async function save(): Promise<void> {
+  if ((editingId.value && !canUpdate) || (!editingId.value && !canCreate)) return
   const error = validateForm()
   if (error) { formError.value = error; return }
   saving.value = true
@@ -544,8 +569,10 @@ async function save(): Promise<void> {
   const payload: SaveGoodsIssueRequest = {
     issueNumber: form.issueNumber.trim(),
     issuedAtUtc: new Date(form.issuedAtLocal).toISOString(),
+    description: form.description.trim() || null,
     issuerId: form.issuerId || null,
     issuerFullName: form.issuerId ? null : form.issuerText.trim(),
+    concurrencyStamp: editingId.value ? editingConcurrencyStamp.value : null,
     items: form.items.filter(itemHasContent).map(item => ({
       productId: item.productId,
       productCode: item.productCode.trim(),
@@ -571,14 +598,27 @@ async function save(): Promise<void> {
   } finally { saving.value = false }
 }
 
-async function remove(row: GoodsIssue | GoodsIssueItemRow): Promise<void> {
-  const id = 'goodsIssueId' in row ? row.goodsIssueId : row.id
-  if (!window.confirm('سند خروج و تمام اقلام آن حذف شود؟')) return
+async function remove(id: string): Promise<void> {
+  if (!canDelete || loading.value || deletingId.value || !confirmDialog.value) return
+  const confirmed = await confirmDialog.value.ask({
+    title: 'حذف سند خروج کالا',
+    text: 'با حذف این سند، تمام اقلام ثبت‌شده در آن نیز حذف می‌شوند. آیا از حذف مطمئن هستید؟',
+    icon: 'warning',
+    confirmButtonText: 'حذف',
+    cancelButtonText: 'انصراف',
+    confirmButtonColor: '#dc3545',
+  })
+  if (!confirmed) return
+  deletingId.value = id
   try {
     await deleteGoodsIssue(id)
     toast.success('سند خروج حذف شد.')
     reloadTable(false)
-  } catch (error) { toast.error(error instanceof Error ? error.message : 'حذف انجام نشد.') }
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : 'حذف انجام نشد.')
+  } finally {
+    deletingId.value = null
+  }
 }
 
 async function exportItems(): Promise<void> {
@@ -606,6 +646,7 @@ onBeforeUnmount(() => requestController?.abort())
 </script>
 
 <template>
+  <ConfirmDialog ref="confirmDialog" />
   <div class="container-fluid users-page goods-issues-page inventory-data-page">
     <div class="page-titles">
       <ol class="breadcrumb">
@@ -660,7 +701,7 @@ onBeforeUnmount(() => requestController?.abort())
               <span v-if="importing" class="spinner-border spinner-border-sm" aria-hidden="true"></span>
               <i v-else class="las la-file-import" aria-hidden="true"></i>
             </button> -->
-            <button v-if="exportItems"
+            <button v-if="canExport"
               class="btn btn-outline-success btn-sm goods-receipts-toolbar-icon goods-receipts-desktop-export"
               type="button" title="گزارش خروجی کالا" aria-label="گزارش ورودی کالا" :disabled="exporting"
               @click="exportItems">
@@ -685,7 +726,7 @@ onBeforeUnmount(() => requestController?.abort())
               </label>
             </div> -->
           </div>
-          <button class="btn btn-primary btn-sm mobile-icon-button goods-receipts-desktop-add" type="button"
+          <button v-if="canCreate" class="btn btn-primary btn-sm mobile-icon-button goods-receipts-desktop-add" type="button"
             title="ثبت خروج کالا" @click="openCreate">
             <i class="las la-plus ml-1"></i>
             <span class="mobile-button-label">ثبت خروج کالا</span>
@@ -693,23 +734,6 @@ onBeforeUnmount(() => requestController?.abort())
         </div>
 
 
-        <!-- <div class="goods-issues-actions"> -->
-          <!--<button v-if="canExport" class="btn btn-outline-primary"
-          type="button" :disabled="exporting" @click="exportItems">
-    <i class="las la-file-excel"></i> خروجی
-  </button>
-  <button v-if="canManage" class="btn btn-primary" type="button"
-          @click="openCreate">
-    <i class="las la-plus"></i> ثبت خروج
-  </button>-->
-
-          <!-- <button class="btn btn-primary btn-sm
-                        mobile-icon-button
-                        goods-receipts-desktop-add" type="button" title="ثبت خروجی" @click="openCreate">
-            <i class="las la-plus ml-1"></i>
-            <span class="mobile-button-label">ثبت خروج</span>
-          </button> -->
-        <!-- </div> -->
       </div>
       <div class="card-body">
         <DataTableFilters v-model="appliedFilters"
@@ -787,28 +811,31 @@ onBeforeUnmount(() => requestController?.abort())
             <template #column-description="{ cellData }">
               <span class="text-wrap-cell" :title="cellData || ''">{{ cellData || '—' }}</span>
             </template>
+            <template #column-issueDescription="{ cellData }">
+              <span class="text-wrap-cell" :title="cellData || ''">{{ cellData || '—' }}</span>
+            </template>
             <template #column-returnAtUtc="{ cellData }">
               {{ formatDate(cellData) }}
             </template>
             <template #column-itemCount="{ cellData }">
               <span class="badge light badge-info">{{ (cellData as GoodsIssue['items']).length }} کالا</span>
             </template>
-            <template v-if="canManage" #column-actions="{ rowData }">
+            <template v-if="canChange" #column-actions="{ cellData }">
               <div class="d-flex justify-content-center">
-                <button class="btn users-table__role-action"
+                <button v-if="canUpdate" class="btn users-table__role-action"
                         type="button"
                         title="ویرایش سند"
                         aria-label="ویرایش سند"
-                        :disabled="loading"
-                        @click="openEdit(rowData)">
+                        :disabled="loading || deletingId !== null"
+                        @click.stop="openEdit(String(cellData))">
                   <i class="las la-edit" aria-hidden="true"></i>
                 </button>
-                <button class="btn users-table__role-action text-danger"
+                <button v-if="canDelete" class="btn users-table__role-action text-danger"
                         type="button"
                         title="حذف سند"
                         aria-label="حذف سند"
-                        :disabled="loading"
-                        @click="remove(rowData)">
+                        :disabled="loading || deletingId !== null"
+                        @click.stop="remove(String(cellData))">
                   <i class="las la-trash" aria-hidden="true"></i>
                 </button>
               </div>
@@ -818,6 +845,7 @@ onBeforeUnmount(() => requestController?.abort())
                 <th>ردیف</th>
                 <th>تاریخ خروج</th>
                 <th>کد خروج</th>
+                <th>توضیحات کلی</th>
                 <th>کد کالا</th>
                 <th>عنوان کالا</th>
                 <th>تعداد</th>
@@ -828,15 +856,16 @@ onBeforeUnmount(() => requestController?.abort())
                 <th>واحد تحویل‌دهنده</th>
                 <th>تاریخ عودت</th>
                 <th>خارج‌کننده</th>
-                <th v-if="canManage">عملیات</th>
+                <th v-if="canChange">عملیات</th>
               </tr>
               <tr v-else>
                 <th>ردیف</th>
                 <th>کد خروج</th>
                 <th>تاریخ خروج</th>
                 <th>خارج‌کننده</th>
+                <th>توضیحات کلی</th>
                 <th>تعداد اقلام</th>
-                <th v-if="canManage">عملیات</th>
+                <th v-if="canChange">عملیات</th>
               </tr>
             </thead>
           </DataTable>
@@ -876,6 +905,11 @@ onBeforeUnmount(() => requestController?.abort())
                     label="خارج‌کننده" placeholder="انتخاب یا ورود خارج‌کننده" :allow-create="canManageMasterData"
                     required @update:model-value="form.issuerId = $event ?? ''"
                     @update:text="form.issuerText = $event" />
+                </div>
+                <div class="col-12 form-group">
+                  <label>توضیحات کلی</label>
+                  <textarea v-model="form.description" class="form-control" rows="2" maxlength="1000"
+                    placeholder="توضیحات کلی سند خروج"></textarea>
                 </div>
               </div>
               <div class="goods-issue-entry-header mb-2">

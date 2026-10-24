@@ -37,7 +37,9 @@ public static class PermissionPolicyNames
         public const string GoodsReceiptsImport = nameof(AppPermission.GoodsReceiptsImport);
         public const string GoodsReceiptsExport = nameof(AppPermission.GoodsReceiptsExport);
         public const string GoodsIssuesRead = nameof(AppPermission.GoodsIssuesRead);
-        public const string GoodsIssuesManage = nameof(AppPermission.GoodsIssuesManage);
+        public const string GoodsIssuesCreate = nameof(AppPermission.GoodsIssuesCreate);
+        public const string GoodsIssuesUpdate = nameof(AppPermission.GoodsIssuesUpdate);
+        public const string GoodsIssuesDelete = nameof(AppPermission.GoodsIssuesDelete);
         public const string GoodsIssuesExport = nameof(AppPermission.GoodsIssuesExport);
     }
 
@@ -66,17 +68,24 @@ public static class PermissionPolicyNames
                 new(Auditing.AuditLogsRead, "مشاهده گزارش فعالیت کاربران")
             ]),
         new(
-            "inventory",
-            "عملیات انبار",
+            "goods-receipts",
+            "ورود کالا",
             [
                 new(Inventory.GoodsReceiptsRead, "مشاهده تاریخچه ورود کالا"),
                 new(Inventory.GoodsReceiptHistoryRead, "مشاهده تاریخچه تغییرات هر کالای ورودی"),
                 new(Inventory.GoodsReceiptsInitialEntry, "ورود اولیه کالا"),
                 new(Inventory.GoodsReceiptsReceiptInvoiceOperations, "عملیات رسید و فاکتور"),
                 new(Inventory.GoodsReceiptsImport, "ایمپورت ورودی کالا"),
-                new(Inventory.GoodsReceiptsExport, "اکسپورت ورودی کالا"),
+                new(Inventory.GoodsReceiptsExport, "اکسپورت ورودی کالا")
+            ]),
+        new(
+            "goods-issues",
+            "خروج کالا",
+            [
                 new(Inventory.GoodsIssuesRead, "مشاهده تاریخچه خروج کالا"),
-                new(Inventory.GoodsIssuesManage, "ثبت و مدیریت خروج کالا"),
+                new(Inventory.GoodsIssuesCreate, "ثبت خروج کالا"),
+                new(Inventory.GoodsIssuesUpdate, "ویرایش خروج کالا"),
+                new(Inventory.GoodsIssuesDelete, "حذف خروج کالا"),
                 new(Inventory.GoodsIssuesExport, "اکسپورت خروج کالا")
             ]),
         new(

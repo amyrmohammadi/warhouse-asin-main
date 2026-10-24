@@ -7,4 +7,5 @@ namespace Warehouse.Application.Features.MasterData.Suppliers.Commands.UpdateSup
 public sealed record UpdateSupplierCommand(
     Guid Id,
     string Title,
-    string? Description) : IRequest<Result<TitledMasterDataSummary>>;
+    string? Description,
+    Guid ConcurrencyStamp = default) : IRequest<Result<TitledMasterDataSummary>>;

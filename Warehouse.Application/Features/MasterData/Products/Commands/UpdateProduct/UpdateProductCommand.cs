@@ -9,4 +9,5 @@ public sealed record UpdateProductCommand(
     string Title,
     string Code,
     string UnitOfMeasureTitle,
-    string? Description) : IRequest<Result<ProductSummary>>;
+    string? Description,
+    Guid ConcurrencyStamp = default) : IRequest<Result<ProductSummary>>;

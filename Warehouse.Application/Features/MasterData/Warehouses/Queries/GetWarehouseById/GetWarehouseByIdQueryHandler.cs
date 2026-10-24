@@ -22,6 +22,7 @@ internal sealed class GetWarehouseByIdQueryHandler(IUnitOfWork<Guid> unitOfWork)
             : Result<TitledMasterDataSummary>.Success(new TitledMasterDataSummary
             {
                 Id = item.Id,
+                ConcurrencyStamp = item.ConcurrencyStamp,
                 Title = item.Title,
                 Description = item.Description
             });

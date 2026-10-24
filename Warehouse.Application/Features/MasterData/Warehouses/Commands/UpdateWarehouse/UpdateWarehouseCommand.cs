@@ -7,4 +7,5 @@ namespace Warehouse.Application.Features.MasterData.Warehouses.Commands.UpdateWa
 public sealed record UpdateWarehouseCommand(
     Guid Id,
     string Title,
-    string? Description) : IRequest<Result<TitledMasterDataSummary>>;
+    string? Description,
+    Guid ConcurrencyStamp = default) : IRequest<Result<TitledMasterDataSummary>>;

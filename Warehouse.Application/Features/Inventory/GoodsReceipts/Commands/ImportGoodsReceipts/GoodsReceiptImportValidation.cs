@@ -74,8 +74,8 @@ internal static class GoodsReceiptImportValidation
                 _ => null
             };
             if (invoice is null && !string.IsNullOrWhiteSpace(row.Invoice)) messages.Add("وضعیت فاکتور باید «دارد» یا «ندارد» باشد.");
-            //if (invoice == InvoiceStatus.HasInvoice && row.InvoiceNumber.Length == 0)
-            //    messages.Add("برای وضعیت دارای فاکتور، شماره فاکتور الزامی است.");
+            if (invoice == InvoiceStatus.HasInvoice && row.InvoiceNumber.Length == 0)
+                messages.Add("برای وضعیت دارای فاکتور، شماره فاکتور الزامی است.");
             //if (invoice == InvoiceStatus.DoesNotHave && row.InvoiceNumber.Length > 0)
             //    messages.Add("وضعیت فاکتور «ندارد» است اما شماره فاکتور وارد شده است.");
             if (!canManageInvoice && (invoice == InvoiceStatus.HasInvoice || row.InvoiceNumber.Length > 0 || row.Supplier.Length > 0 || row.ReceiptNumber.Length > 0))

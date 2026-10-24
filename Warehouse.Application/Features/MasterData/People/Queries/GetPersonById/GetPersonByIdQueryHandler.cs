@@ -22,6 +22,7 @@ internal sealed class GetPersonByIdQueryHandler(IUnitOfWork<Guid> unitOfWork)
             : Result<PersonSummary>.Success(new PersonSummary
             {
                 Id = person.Id,
+                ConcurrencyStamp = person.ConcurrencyStamp,
                 FullName = person.FullName,
                 PhoneNumber = person.PhoneNumber
             });

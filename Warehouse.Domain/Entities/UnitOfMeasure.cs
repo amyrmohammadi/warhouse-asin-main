@@ -2,7 +2,7 @@ using Warehouse.Domain.Common;
 
 namespace Warehouse.Domain.Entities;
 
-public sealed class UnitOfMeasure : Entity<Guid>
+public sealed class UnitOfMeasure : ConcurrencyEntity<Guid>
 {
     private UnitOfMeasure()
     {

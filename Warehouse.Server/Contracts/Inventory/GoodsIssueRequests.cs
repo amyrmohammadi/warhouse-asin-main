@@ -3,9 +3,11 @@ namespace Warehouse.Server.Contracts.Inventory;
 public sealed record SaveGoodsIssueRequest(
     string IssueNumber,
     DateTimeOffset IssuedAtUtc,
+    string? Description,
     Guid? IssuerId,
     string? IssuerFullName,
-    IReadOnlyCollection<SaveGoodsIssueItemRequest> Items);
+    IReadOnlyCollection<SaveGoodsIssueItemRequest> Items,
+    Guid? ConcurrencyStamp = null);
 
 public sealed record SaveGoodsIssueItemRequest(
     Guid? ProductId,

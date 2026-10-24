@@ -2,7 +2,7 @@ using Warehouse.Domain.Common;
 
 namespace Warehouse.Domain.Entities;
 
-public sealed class GoodsIssueDestination : Entity<Guid>
+public sealed class GoodsIssueDestination : ConcurrencyEntity<Guid>
 {
     private GoodsIssueDestination() { }
 

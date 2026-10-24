@@ -20,6 +20,7 @@ internal sealed class GetProductByIdQueryHandler(IUnitOfWork<Guid> unitOfWork)
                 .Select(product => new ProductSummary
                 {
                     Id = product.Id,
+                    ConcurrencyStamp = product.ConcurrencyStamp,
                     Title = product.Title,
                     Code = product.Code,
                     UnitOfMeasureId = product.UnitOfMeasureId,

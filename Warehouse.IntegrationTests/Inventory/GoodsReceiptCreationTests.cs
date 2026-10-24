@@ -167,7 +167,8 @@ public sealed class GoodsReceiptCreationTests
             var receipt = await database.GoodsReceipts
                 .Include(item => item.Deliverer)
                 .Include(item => item.Items)
-                    .ThenInclude(item => item.Supplier)
+                    .ThenInclude(item => item.Invoice)
+                        .ThenInclude(invoice => invoice!.Supplier)
                 .Include(item => item.Items)
                     .ThenInclude(item => item.Product)
                 .SingleAsync(item => item.Id == created.Id);
@@ -346,8 +347,8 @@ public sealed class GoodsReceiptCreationTests
                     productCode,
                     unitOfMeasureId,
                     warehouseId,
-                    invoiceStatus = "DoesNotHave",
-                    invoiceNumber = (string?)null,
+                    invoiceStatus = "HasInvoice",
+                    invoiceNumber = $"INV-{productCode}",
                     supplierId = (Guid?)null,
                     supplierTitle,
                     receiptNumber = (string?)null,

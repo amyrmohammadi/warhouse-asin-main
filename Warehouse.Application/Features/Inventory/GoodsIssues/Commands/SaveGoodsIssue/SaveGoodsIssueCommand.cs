@@ -1,5 +1,6 @@
 using FluentValidation;
 using MediatR;
+using Warehouse.Application.Common.Concurrency;
 using Warehouse.Application.Common.Interfaces.Repositories;
 using Warehouse.Application.Common.Models;
 using Warehouse.Application.Common.Models.Inventory;
@@ -24,9 +25,11 @@ public sealed record SaveGoodsIssueCommand(
     Guid? Id,
     string IssueNumber,
     DateTimeOffset IssuedAtUtc,
+    string? Description,
     Guid? IssuerId,
     string? IssuerFullName,
-    IReadOnlyCollection<SaveGoodsIssueItem> Items) : IRequest<Result<GoodsIssueSummary>>;
+    IReadOnlyCollection<SaveGoodsIssueItem> Items,
+    Guid? ConcurrencyStamp = null) : IRequest<Result<GoodsIssueSummary>>;
 
 internal sealed class SaveGoodsIssueCommandValidator : AbstractValidator<SaveGoodsIssueCommand>
 {
@@ -37,6 +40,8 @@ internal sealed class SaveGoodsIssueCommandValidator : AbstractValidator<SaveGoo
             .MaximumLength(100).WithMessage("کد یا شماره خروج نباید بیشتر از ۱۰۰ نویسه باشد.");
         RuleFor(command => command.IssuedAtUtc)
             .NotEmpty().WithMessage("وارد کردن تاریخ خروج الزامی است.");
+        RuleFor(command => command.Description)
+            .MaximumLength(1000).WithMessage("توضیحات کلی نباید بیشتر از ۱۰۰۰ نویسه باشد.");
         RuleFor(command => command)
             .Must(command => command.IssuerId.HasValue || !string.IsNullOrWhiteSpace(command.IssuerFullName))
             .WithMessage("انتخاب یا وارد کردن خارج‌کننده الزامی است.");
@@ -77,6 +82,17 @@ internal sealed class SaveGoodsIssueCommandHandler(IUnitOfWork<Guid> unitOfWork)
         CancellationToken cancellationToken)
     {
         var issueRepository = unitOfWork.Repository<GoodsIssue>();
+        GoodsIssue? existingIssue = null;
+        if (request.Id.HasValue)
+        {
+            existingIssue = await issueRepository.GetByIdAsync(request.Id.Value, cancellationToken);
+            if (existingIssue is null)
+                return Result<GoodsIssueSummary>.Error("سند خروج کالا پیدا نشد.");
+            if (!request.ConcurrencyStamp.HasValue ||
+                !existingIssue.TryAdvanceConcurrencyStamp(request.ConcurrencyStamp.Value))
+                return Result<GoodsIssueSummary>.Error(ConcurrencyMessages.Conflict);
+        }
+
         var duplicate = await issueRepository.CountAsync(
             issueRepository.Entities.Where(issue =>
                 issue.IssueNumber == request.IssueNumber.Trim() && issue.Id != request.Id),
@@ -98,9 +114,8 @@ internal sealed class SaveGoodsIssueCommandHandler(IUnitOfWork<Guid> unitOfWork)
             GoodsIssue issue;
             if (request.Id.HasValue)
             {
-                issue = await issueRepository.GetByIdAsync(request.Id.Value, cancellationToken)
-                    ?? throw new InvalidOperationException("سند خروج کالا پیدا نشد.");
-                issue.Update(request.IssueNumber, request.IssuedAtUtc, issuerResult.Issuer.Id);
+                issue = existingIssue!;
+                issue.Update(request.IssueNumber, request.IssuedAtUtc, request.Description, issuerResult.Issuer.Id);
                 var itemRepository = unitOfWork.Repository<GoodsIssueItem>();
                 var oldItems = await itemRepository.ToListAsync(
                     itemRepository.Entities.Where(item => item.GoodsIssueId == issue.Id),
@@ -120,7 +135,8 @@ internal sealed class SaveGoodsIssueCommandHandler(IUnitOfWork<Guid> unitOfWork)
             }
             else
             {
-                issue = new GoodsIssue(request.IssueNumber, request.IssuedAtUtc, issuerResult.Issuer.Id);
+                issue = new GoodsIssue(
+                    request.IssueNumber, request.IssuedAtUtc, request.Description, issuerResult.Issuer.Id);
                 for (var index = 0; index < preparedResult.Data.Count; index++)
                 {
                     var item = preparedResult.Data[index];

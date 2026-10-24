@@ -355,6 +355,7 @@ const saveUnit = handleSubmit(async (values) => {
   const payload = {
     title: values.title.trim(),
     description: values.description.trim() || null,
+    concurrencyStamp: itemBeingEdited?.concurrencyStamp ?? null,
   }
 
   try {

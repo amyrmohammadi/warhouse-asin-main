@@ -413,6 +413,7 @@ const saveItem = handleSubmit(async (values) => {
       return [field.key, value || (required ? '' : null)]
     }),
   )
+  if (itemBeingEdited) payload.concurrencyStamp = itemBeingEdited.concurrencyStamp
   const displayValue = String(payload[props.config.fields[0].key] ?? '')
 
   try {

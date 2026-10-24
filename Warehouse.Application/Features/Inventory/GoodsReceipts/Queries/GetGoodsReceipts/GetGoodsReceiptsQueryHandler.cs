@@ -26,7 +26,7 @@ internal sealed class GetGoodsReceiptsQueryHandler(IUnitOfWork<Guid> unitOfWork)
             query = query.Where(receipt =>
                 receipt.PageNumber.Contains(search) || receipt.Deliverer.FullName.Contains(search)||
                 receipt.Items.Any(item =>
-                    (item.InvoiceNumber != null && item.InvoiceNumber.Contains(search)) ||
+                    (item.Invoice != null && item.Invoice.InvoiceNumber.Contains(search)) ||
                     (item.ReceiptNumber != null && item.ReceiptNumber.Contains(search)) ||
                     item.Product.Title.Contains(search) ||                  
                     item.Product.Code.Contains(search)));
@@ -68,7 +68,7 @@ internal sealed class GetGoodsReceiptsQueryHandler(IUnitOfWork<Guid> unitOfWork)
             .ApplyAnyTextFilter(
                 request.InvoiceNumber,
                 receipt => receipt.Items,
-                item => item.InvoiceNumber)
+                item => item.Invoice == null ? null : item.Invoice.InvoiceNumber)
             .ApplyAnyTextFilter(
                 request.ReceiptNumber,
                 receipt => receipt.Items,
@@ -88,7 +88,8 @@ internal sealed class GetGoodsReceiptsQueryHandler(IUnitOfWork<Guid> unitOfWork)
         if (request.SupplierId.HasValue)
         {
             query = query.Where(receipt =>
-                receipt.Items.Any(item => item.SupplierId == request.SupplierId.Value));
+                receipt.Items.Any(item => item.Invoice != null &&
+                    item.Invoice.SupplierId == request.SupplierId.Value));
         }
 
         var filteredCount = await repository.CountAsync(query, cancellationToken);

@@ -7,4 +7,5 @@ namespace Warehouse.Application.Features.MasterData.People.Commands.UpdatePerson
 public sealed record UpdatePersonCommand(
     Guid Id,
     string FullName,
-    string PhoneNumber) : IRequest<Result<PersonSummary>>;
+    string PhoneNumber,
+    Guid ConcurrencyStamp = default) : IRequest<Result<PersonSummary>>;

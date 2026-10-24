@@ -28,6 +28,7 @@ export interface GoodsReceiptItem {
 
 export interface GoodsReceipt {
   id: string
+  concurrencyStamp: string
   enteredAtUtc: string
   description: string | null
   delivererId: string
@@ -98,9 +99,9 @@ export interface GoodsReceiptItemHistory {
 }
 
 export interface GoodsReceiptOptions {
-  people: Array<{ id: string; fullName: string; phoneNumber: string }>
-  warehouses: Array<{ id: string; title: string; description: string | null }>
-  unitsOfMeasure: Array<{ id: string; title: string; description: string | null }>
+  people: Array<{ id: string; concurrencyStamp: string; fullName: string; phoneNumber: string }>
+  warehouses: Array<{ id: string; concurrencyStamp: string; title: string; description: string | null }>
+  unitsOfMeasure: Array<{ id: string; concurrencyStamp: string; title: string; description: string | null }>
 }
 
 export interface GoodsReceiptListParameters {
@@ -146,6 +147,7 @@ export interface CreateGoodsReceiptRequest {
   delivererFullName: string | null
   pageNumber: string
   items: CreateGoodsReceiptItemRequest[]
+  concurrencyStamp: string | null
 }
 
 interface ValidationProblemDetails {

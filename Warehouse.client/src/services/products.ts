@@ -16,6 +16,7 @@ const basePath = '/endpoint/master-data/products'
 
 export interface Product {
   id: string
+  concurrencyStamp: string
   title: string
   code: string
   unitOfMeasureId: string
@@ -66,6 +67,7 @@ export interface SaveProductRequest extends SaveMasterDataRequest {
   code: string
   unitOfMeasureTitle: string
   description: string | null
+  concurrencyStamp: string | null
 }
 
 export type ProductValidationRules = MasterDataValidationRules
