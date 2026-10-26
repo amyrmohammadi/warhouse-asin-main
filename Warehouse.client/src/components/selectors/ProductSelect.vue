@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 
-import { useFloatingMenu } from '@/composables/useFloatingMenu'
+import { useFloatingMenu } from './useFloatingMenu'
 import {
   getProductById,
   PRODUCT_SEARCH_MAX_RESULTS,
@@ -101,7 +101,7 @@ const FORWARDED_MENU_VARS = [
 ]
 
 // عرض منو همیشه برابر عرض ورودی است
-const { style: floatingStyle } = useFloatingMenu(controlElement, menuOpen, { menu: menuElement,minWidth:220 })
+const { style: floatingStyle } = useFloatingMenu(controlElement, menuOpen, { menu: menuElement, minWidth: 220 })
 
 const forwardedVars = ref<Record<string, string>>({})
 watch(menuOpen, open => {

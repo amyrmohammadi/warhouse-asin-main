@@ -1912,10 +1912,6 @@ table.dataTable tbody tr:nth-child(even) > td {
     }
 
 
-.vpd-input-group label{
-    height:35px;
-}
-
 @supports (height: 100dvh) {
   @media (max-width: 767px) {
     .dashboard-shell .deznav {

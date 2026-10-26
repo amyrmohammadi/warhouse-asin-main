@@ -80,7 +80,7 @@ const router = createRouter({
         {
           path: 'inventory/goods-issues',
           name: 'goods-issues',
-          component: () => import('@/views/Inventory/GoodsIssues.vue'),
+          component: () => import('@/views/Inventory/goods-issues/GoodsIssuesView.vue'),
           meta: {
             title: 'تاریخچه خروج کالا',
             requiredPermission: 'GoodsIssuesRead',

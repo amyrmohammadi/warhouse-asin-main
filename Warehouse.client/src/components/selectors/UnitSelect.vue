@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 
-import { useFloatingMenu } from '@/composables/useFloatingMenu'
+import { useFloatingMenu } from './useFloatingMenu'
 import type { UnitOfMeasure } from '@/services/unitsOfMeasure'
 
 defineOptions({ inheritAttrs: false }) // data-entry-* و بقیهٔ attrها روی خود input می‌نشینند

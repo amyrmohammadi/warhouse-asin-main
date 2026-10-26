@@ -84,20 +84,37 @@ export interface GoodsIssueListFilters {
   issuerId?: string
 }
 
+export interface GoodsIssueListParameters extends GoodsIssueListFilters {
+  pageNumber?: number
+  pageSize?: number
+  search?: string
+  sortBy?: string
+  sortDescending?: boolean
+  signal?: AbortSignal
+}
+
 export class GoodsIssuesApiError extends Error {
-  constructor(message: string, public readonly status: number) {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly fieldErrors: Record<string, string[]> = {},
+  ) {
     super(message)
     this.name = 'GoodsIssuesApiError'
   }
 }
 
-export function getGoodsIssues(mode: 'issues' | 'items', pageNumber: number, pageSize: number,
-  search: string, signal?: AbortSignal, filters: GoodsIssueListFilters = {}): Promise<GoodsIssueList<GoodsIssue | GoodsIssueItemRow>> {
-  const query = new URLSearchParams({ pageNumber: String(pageNumber), pageSize: String(pageSize) })
-  if (search.trim()) query.set('search', search.trim())
-  appendFilters(query, filters)
+export function getGoodsIssues(
+  mode: 'issues' | 'items',
+  parameters: GoodsIssueListParameters = {},
+): Promise<GoodsIssueList<GoodsIssue | GoodsIssueItemRow>> {
+  const query = new URLSearchParams({
+    pageNumber: String(parameters.pageNumber ?? 1),
+    pageSize: String(parameters.pageSize ?? 10),
+  })
+  appendListParameters(query, parameters)
   const path = mode === 'items' ? '/endpoint/inventory/goods-issues/items' : '/endpoint/inventory/goods-issues'
-  return request(`${path}?${query}`, { signal }, 'دریافت تاریخچه خروج کالا انجام نشد.')
+  return request(`${path}?${query}`, { signal: parameters.signal }, 'دریافت تاریخچه خروج کالا انجام نشد.')
 }
 
 export function getGoodsIssue(id: string, signal?: AbortSignal): Promise<GoodsIssue> {
@@ -108,31 +125,33 @@ export function getGoodsIssueOptions(signal?: AbortSignal): Promise<GoodsIssueOp
   return request('/endpoint/inventory/goods-issues/options', { signal }, 'دریافت اطلاعات فرم انجام نشد.')
 }
 
-export function createGoodsIssue(payload: SaveGoodsIssueRequest): Promise<GoodsIssue> {
-  return request('/endpoint/inventory/goods-issues', jsonRequest('POST', payload), 'ثبت خروج کالا انجام نشد.')
+export function createGoodsIssue(payload: SaveGoodsIssueRequest, signal?: AbortSignal): Promise<GoodsIssue> {
+  return request('/endpoint/inventory/goods-issues', jsonRequest('POST', payload, signal), 'ثبت خروج کالا انجام نشد.')
 }
 
-export function updateGoodsIssue(id: string, payload: SaveGoodsIssueRequest): Promise<GoodsIssue> {
-  return request(`/endpoint/inventory/goods-issues/${encodeURIComponent(id)}`, jsonRequest('PUT', payload), 'ویرایش خروج کالا انجام نشد.')
+export function updateGoodsIssue(id: string, payload: SaveGoodsIssueRequest, signal?: AbortSignal): Promise<GoodsIssue> {
+  return request(`/endpoint/inventory/goods-issues/${encodeURIComponent(id)}`, jsonRequest('PUT', payload, signal), 'ویرایش خروج کالا انجام نشد.')
 }
 
-export async function deleteGoodsIssue(id: string): Promise<void> {
-  await request(`/endpoint/inventory/goods-issues/${encodeURIComponent(id)}`, { method: 'DELETE' }, 'حذف خروج کالا انجام نشد.', false)
+export async function deleteGoodsIssue(id: string, signal?: AbortSignal): Promise<void> {
+  await request(`/endpoint/inventory/goods-issues/${encodeURIComponent(id)}`, { method: 'DELETE', signal }, 'حذف خروج کالا انجام نشد.', false)
 }
 
-export async function exportGoodsIssueItems(search: string, filters: GoodsIssueListFilters = {}): Promise<void> {
+export async function exportGoodsIssueItems(parameters: GoodsIssueListParameters = {}): Promise<Blob> {
   const query = new URLSearchParams()
-  if (search.trim()) query.set('search', search.trim())
-  appendFilters(query, filters)
-  const response = await authorizedFetch(`/endpoint/inventory/goods-issues/items/export?${query}`)
+  appendListParameters(query, parameters)
+  const response = await authorizedFetch(`/endpoint/inventory/goods-issues/items/export?${query}`, {
+    signal: parameters.signal,
+  })
   if (!response.ok) throw new GoodsIssuesApiError('دریافت فایل خروجی انجام نشد.', response.status)
-  const blob = await response.blob()
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = extractFileName(response.headers.get('content-disposition')) ?? 'goods-issues.xlsx'
-  link.click()
-  URL.revokeObjectURL(url)
+  return response.blob()
+}
+
+function appendListParameters(query: URLSearchParams, parameters: GoodsIssueListParameters): void {
+  if (parameters.search?.trim()) query.set('search', parameters.search.trim())
+  if (parameters.sortBy) query.set('sortBy', parameters.sortBy)
+  if (parameters.sortDescending !== undefined) query.set('sortDescending', String(parameters.sortDescending))
+  appendFilters(query, parameters)
 }
 
 function appendFilters(query: URLSearchParams, filters: GoodsIssueListFilters): void {
@@ -169,8 +188,8 @@ function appendDateFilter(query: URLSearchParams, key: string, filter?: DateFilt
   if (filter.operator === 'between' && filter.valueTo) query.set(`${key}.valueTo`, filter.valueTo)
 }
 
-function jsonRequest(method: string, payload: SaveGoodsIssueRequest): RequestInit {
-  return { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }
+function jsonRequest(method: string, payload: SaveGoodsIssueRequest, signal?: AbortSignal): RequestInit {
+  return { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal }
 }
 
 async function authorizedFetch(path: string, init: RequestInit = {}): Promise<Response> {
@@ -193,11 +212,20 @@ async function request<T>(path: string, init: RequestInit, fallback: string, req
   const result = payload as ApiResult<T> | null
   if (response.ok && result?.isSuccess && (!requireData || result.data !== null)) return result.data as T
   const problem = payload as { title?: string; detail?: string; errors?: Record<string, string[]> } | null
-  const validationMessage = Object.values(problem?.errors ?? {}).flat().find(Boolean)
-  throw new GoodsIssuesApiError(result?.messages?.find(Boolean) ?? validationMessage ?? problem?.detail ?? problem?.title ?? fallback, response.status)
-}
-
-function extractFileName(header: string | null): string | null {
-  const match = header?.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i)
-  return match ? decodeURIComponent(match[1]) : null
+  const fieldErrors = Object.fromEntries(
+    Object.entries(problem?.errors ?? {}).map(([key, messages]) => [
+      key.length ? key[0].toLowerCase() + key.slice(1) : key,
+      messages,
+    ]),
+  )
+  const validationMessage = Object.values(fieldErrors).flat().find(Boolean)
+  throw new GoodsIssuesApiError(
+    result?.messages?.find(Boolean)
+      ?? validationMessage
+      ?? problem?.detail
+      ?? problem?.title
+      ?? (response.status === 403 ? 'شما مجوز انجام این عملیات را ندارید.' : fallback),
+    response.status,
+    fieldErrors,
+  )
 }

@@ -118,3 +118,19 @@
     flex: 1 1 auto;
   }
 }
+
+
+.vpd-input-group {
+  align-items: stretch;
+  display: flex;
+}
+
+.vpd-input-group > .vpd-icon-btn {
+  align-items: center;
+  align-self: stretch;
+  box-sizing: border-box;
+  display: flex;
+  height: auto;
+  justify-content: center;
+  margin: 0;
+}
