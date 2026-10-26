@@ -20,10 +20,14 @@ internal sealed class UpdateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
     {
         if (!request.CanEditInitialEntry && !request.CanEditReceiptInvoice)
             return Result<GoodsReceiptSummary>.Error("مجوز ویرایش سند را ندارید.");
-        var receipt = await unitOfWork.Repository<GoodsReceipt>().GetByIdAsync(request.Id, cancellationToken);
-        if (receipt is null) return Result<GoodsReceiptSummary>.Error("سند ورود کالا پیدا نشد.");
+        var receipt = await unitOfWork.Repository<GoodsReceipt>()
+                      .GetByIdAsync(request.Id, cancellationToken);
+        if (receipt is null) return Result<GoodsReceiptSummary>
+                      .Error("سند ورود کالا پیدا نشد.");
         if (!receipt.TryAdvanceConcurrencyStamp(request.ConcurrencyStamp))
             return Result<GoodsReceiptSummary>.Error(ConcurrencyMessages.Conflict);
+
+            
         var values = request.Values;
         var repository = unitOfWork.Repository<GoodsReceiptItem>();
         var storedItems = await repository.ToListAsync(
@@ -50,8 +54,10 @@ internal sealed class UpdateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                 .ToDictionary(group => group.Key, group => new Queue<CreateGoodsReceiptItem>(group));
             values = values with
             {
-                EnteredAtUtc = receipt.EnteredAtUtc, Description = receipt.Description,
-                DelivererId = receipt.DelivererId, DelivererFullName = null,
+                EnteredAtUtc = receipt.EnteredAtUtc,
+                Description = receipt.Description,
+                DelivererId = receipt.DelivererId,
+                DelivererFullName = null,
                 PageNumber = receipt.PageNumber,
                 Items = storedItems.Select(item =>
                 {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 
+import { useFloatingMenu } from '@/composables/useFloatingMenu'
 import {
   getProductById,
   PRODUCT_SEARCH_MAX_RESULTS,
@@ -66,6 +67,8 @@ const inputId = `product-select-${componentId}`
 const listboxId = `${inputId}-listbox`
 
 const rootElement = ref<HTMLElement | null>(null)
+const controlElement = ref<HTMLElement | null>(null)
+const menuElement = ref<HTMLElement | null>(null)
 const localText = ref(props.text ?? '')
 const options = ref<Product[]>([])
 const selectedProduct = ref<Product | null>(null)
@@ -80,6 +83,37 @@ let lookupController: AbortController | null = null
 
 const trimmedText = computed(() => localText.value.trim())
 const searchReady = computed(() => trimmedText.value.length >= props.minSearchLength)
+
+/**
+ * منو به <body> منتقل می‌شود (Teleport) تا overflow مودال و جدول آن را نبُرد؛
+ * پس دیگر فرزند `.product-select` نیست و متغیرهای CSS ارثی را از دست می‌دهد.
+ * متغیرهای ظاهری `--product-select-menu-*` و `--product-select-option-*` را به منو منتقل می‌کنیم.
+ */
+const FORWARDED_MENU_VARS = [
+  '--product-select-menu-background',
+  '--product-select-menu-border-color',
+  '--product-select-menu-radius',
+  '--product-select-menu-shadow',
+  '--product-select-menu-color',
+  '--product-select-option-color',
+  '--product-select-option-hover-background',
+  '--product-select-option-hover-color',
+]
+
+// عرض منو همیشه برابر عرض ورودی است
+const { style: floatingStyle } = useFloatingMenu(controlElement, menuOpen, { menu: menuElement,minWidth:220 })
+
+const forwardedVars = ref<Record<string, string>>({})
+watch(menuOpen, open => {
+  if (!open || !controlElement.value) return
+  const computed = window.getComputedStyle(controlElement.value)
+  const next: Record<string, string> = {}
+  for (const name of FORWARDED_MENU_VARS) {
+    const value = computed.getPropertyValue(name).trim()
+    if (value) next[name] = value
+  }
+  forwardedVars.value = next
+}, { flush: 'pre' })
 
 /** مقدار متنی که در حال حاضر به کالای انتخاب‌شده مربوط است. */
 const currentTitle = computed(() => {
@@ -138,6 +172,14 @@ function openMenu(): void {
 function closeMenu(): void {
   menuOpen.value = false
   activeIndex.value = -1
+}
+
+/** Esc فقط منو را می‌بندد؛ مودال والد با همین Esc بسته نشود. */
+function handleEscape(event: KeyboardEvent): void {
+  if (!menuOpen.value) return
+  event.preventDefault()
+  event.stopPropagation()
+  closeMenu()
 }
 
 function scheduleSearch(term: string): void {
@@ -261,8 +303,11 @@ function handleBlur(): void {
   window.setTimeout(closeMenu, 120)
 }
 
+/** کلیک بیرون از ورودی و بیرون از منو (که حالا خارج از root است) منو را می‌بندد. */
 function handleDocumentMouseDown(event: MouseEvent): void {
-  if (!rootElement.value?.contains(event.target as Node)) closeMenu()
+  const target = event.target as Node
+  if (rootElement.value?.contains(target) || menuElement.value?.contains(target)) return
+  closeMenu()
 }
 
 onMounted(() => {
@@ -283,7 +328,7 @@ onBeforeUnmount(() => {
       <span v-if="required" class="text-danger">*</span>
     </label>
 
-    <div class="product-select__control">
+    <div ref="controlElement" class="product-select__control">
       <input
         :id="inputId"
         class="form-control"
@@ -305,38 +350,46 @@ onBeforeUnmount(() => {
         @keydown.down.prevent="moveActive(1)"
         @keydown.up.prevent="moveActive(-1)"
         @keydown.enter.prevent="handleEnter"
-        @keydown.esc.prevent="closeMenu" />
+        @keydown.esc="handleEscape" />
 
       <i class="las la-angle-down product-select__arrow" aria-hidden="true"></i>
 
-      <div v-if="menuOpen" :id="listboxId" class="product-select__menu" role="listbox">
-        <div v-if="loading" class="product-select__status">در حال جستجو...</div>
-        <div v-else-if="loadFailed" class="product-select__status">
-          دریافت فهرست کالاها انجام نشد.
-        </div>
-        <div v-else-if="!searchReady" class="product-select__status">
-          برای جستجو حداقل {{ minSearchLength }} کاراکتر وارد کنید.
-        </div>
-        <div v-else-if="!options.length" class="product-select__status">
-          {{ notFoundText }}
-        </div>
+      <Teleport to="body">
+        <div v-if="menuOpen"
+             :id="listboxId"
+             ref="menuElement"
+             class="product-select__menu"
+             :style="[floatingStyle, forwardedVars]"
+             role="listbox">
+          <div v-if="loading" class="product-select__status">در حال جستجو...</div>
+          <div v-else-if="loadFailed" class="product-select__status">
+            دریافت فهرست کالاها انجام نشد.
+          </div>
+          <div v-else-if="!searchReady" class="product-select__status">
+            برای جستجو حداقل {{ minSearchLength }} کاراکتر وارد کنید.
+          </div>
+          <div v-else-if="!options.length" class="product-select__status">
+            {{ notFoundText }}
+          </div>
 
-        <button v-for="(product, index) in options"
-                :key="product.id"
-                class="product-select__option"
-                :class="{ 'product-select__option--active': index === activeIndex }"
-                type="button"
-                role="option"
-                :aria-selected="product.id === modelValue"
-                @mousedown.prevent="chooseOption(product)"
-                @mouseenter="activeIndex = index">
-          <span class="product-select__option-title">{{ product.title }}</span>
-          <span class="product-select__option-meta">
-            <span class="product-select__option-code" dir="ltr">{{ product.code }}</span>
-            <span class="product-select__option-unit">{{ product.unitOfMeasureTitle }}</span>
-          </span>
-        </button>
-      </div>
+          <button v-for="(product, index) in options"
+                  :key="product.id"
+                  class="product-select__option"
+                  :class="{ 'product-select__option--active': index === activeIndex }"
+                  type="button"
+                  role="option"
+                  :aria-selected="product.id === modelValue"
+                  :title="product.title"
+                  @mousedown.prevent="chooseOption(product)"
+                  @mouseenter="activeIndex = index">
+            <span class="product-select__option-title">{{ product.title }}</span>
+            <span class="product-select__option-meta">
+              <span class="product-select__option-code" dir="ltr">{{ product.code }}</span>
+              <span class="product-select__option-unit">{{ product.unitOfMeasureTitle }}</span>
+            </span>
+          </button>
+        </div>
+      </Teleport>
     </div>
 
     <small v-if="error" class="invalid-feedback d-block" :class="errorClass">{{ error }}</small>
@@ -357,13 +410,15 @@ onBeforeUnmount(() => {
    *   --product-select-menu-background
    *   --product-select-menu-border-color
    *   --product-select-menu-radius
-   *   --product-select-menu-min-width
-   *   --product-select-menu-width
    *   --product-select-menu-shadow
    *   --product-select-menu-color
    *   --product-select-option-color
    *   --product-select-option-hover-background
    *   --product-select-option-hover-color
+   *
+   * منو به <body> منتقل می‌شود؛ مکان آن را useFloatingMenu تعیین می‌کند و عرضش همیشه
+   * برابر عرض ورودی است (متغیرهای --product-select-menu-width/min-width دیگر استفاده نمی‌شوند).
+   * متغیرهای بالا هنگام باز شدن از root خوانده و روی منو کپی می‌شوند.
    */
   .product-select {
     position: relative;
@@ -389,7 +444,7 @@ onBeforeUnmount(() => {
     border-style: solid;
     border-width: var(--product-select-input-border-width, 1px);
     color: var(--product-select-input-color, var(--text-primary));
-    padding-left: 2rem;
+    padding-left: .2rem;
   }
 
   .product-select__arrow {
@@ -401,21 +456,16 @@ onBeforeUnmount(() => {
     transform: translateY(-50%);
   }
 
+  /* position / top / left / width / max-height را useFloatingMenu به‌صورت inline می‌گذارد */
   .product-select__menu {
     background: var(--product-select-menu-background, var(--surface));
     border: 1px solid var(--product-select-menu-border-color, var(--border-color));
     border-radius: var(--product-select-menu-radius, .65rem);
     box-shadow: var(--product-select-menu-shadow, 0 .75rem 1.75rem rgba(15, 23, 42, .18));
     color: var(--product-select-menu-color, var(--text-primary));
-    max-height: 15rem;
-    min-width: var(--product-select-menu-min-width, 120px);
     overflow-y: auto;
     padding: .3rem;
-    position: absolute;
-    right: 0;
-    top: calc(100% + .35rem);
-    width: var(--product-select-menu-width, 100%);
-    z-index: 100070;
+    z-index: 100071;
   }
 
   .product-select__option {

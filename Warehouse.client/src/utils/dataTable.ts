@@ -4,7 +4,7 @@ export function createRowNumberColumn(): ColumnsConfig {
   return {
     data: null,
     name: 'rowNumber',
-    title: 'ردیف',
+    title: '#',
     className: 'all text-center data-table-row-number',
     orderable: false,
     searchable: false,

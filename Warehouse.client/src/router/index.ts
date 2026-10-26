@@ -71,7 +71,7 @@ const router = createRouter({
         {
           path: 'inventory/goods-receipts',
           name: 'goods-receipts',
-          component: () => import('@/views/Inventory/GoodsReceipts.vue'),
+          component: () => import('@/views/Inventory/goods-receipts/GoodsReceiptsView.vue'),
           meta: {
             title: 'تاریخچه ورود کالا',
             requiredPermission: 'GoodsReceiptsRead',

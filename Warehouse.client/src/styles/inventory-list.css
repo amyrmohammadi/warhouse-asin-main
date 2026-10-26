@@ -1,0 +1,55 @@
+/* استایل مشترک صفحه‌های لیست انبار (ورود / خروج). کلاس‌های .inventory-data-page و
+   .inventory-table-container از قبل روی هر دو صفحه هست. */
+
+.inventory-table-container .inventory-description-cell {
+  display: block;
+  font-size: .75rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.inventory-table-container .inventory-wide-column {
+  min-width: 10rem !important;
+  white-space: normal !important;
+  width: 10rem !important;
+}
+.inventory-table-container .inventory-quantity-cell { color: var(--text-primary); font-weight: 400; }
+
+::highlight(table-search) { background-color: #fde047; color: #111827; }
+
+@media (max-width: 767px) {
+  .inventory-data-page:has(.inventory-mobile-actions) { padding-bottom: calc(5rem + env(safe-area-inset-bottom)); }
+
+  .inventory-data-page > .card > .card-header { align-items: stretch; flex-direction: column; padding: .75rem; }
+  .inventory-data-page > .card > .card-header > div:first-child { min-width: 0; width: 100%; }
+  .inventory-data-page > .card > .card-header .card-title {
+    font-size: 1rem; line-height: 1.5; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .inventory-data-page > .card > .card-body { padding: .75rem; }
+
+  .inventory-table-container .dt-layout-table > div { border: 0 !important; border-radius: 0; overflow: visible; }
+  .inventory-table-container table.dataTable { table-layout: fixed; width: 100% !important; }
+  .inventory-table-container--items .inventory-date-column { width: 8rem !important; }
+  .inventory-table-container--items .inventory-product-title-column {
+    text-align: right !important; white-space: normal !important; width: auto !important;
+  }
+  .inventory-table-container table.dataTable > thead > tr > th,
+  .inventory-table-container table.dataTable > tbody > tr > td { border: 0 !important; }
+  .inventory-table-container table.dataTable > thead > tr > th::before,
+  .inventory-table-container table.dataTable > tbody > tr > td::before { display: none !important; }
+  .inventory-table-container table.dataTable.dtr-inline.collapsed > tbody > tr > td.dtr-control::before,
+  .inventory-table-container table.dataTable.dtr-inline.collapsed > tbody > tr > th.dtr-control::before {
+    background: transparent !important; border-radius: 0 !important; box-shadow: none !important; display: inline-block !important;
+  }
+  .inventory-table-container table.dataTable > tbody > tr.child > td {
+    background: var(--body-bg); padding: .35rem .55rem .65rem !important;
+  }
+  .inventory-table-container table.dataTable > tbody > tr.child ul.dtr-details { display: block; margin: 0; width: 100%; }
+  .inventory-table-container table.dataTable > tbody > tr.child ul.dtr-details > li {
+    align-items: start; display: grid; gap: .75rem; grid-template-columns: 6.5rem minmax(0, 1fr); padding: .55rem .2rem;
+  }
+  .inventory-table-container table.dataTable > tbody > tr.child ul.dtr-details > li:last-child { border-bottom: 0; }
+  .inventory-data-page .dt-container .dt-layout-row:last-child { align-items: stretch; gap: .65rem; }
+  .inventory-data-page .users-table-summary,
+  .inventory-data-page .users-table-pagination { justify-content: center; margin: 0; width: 100%; }
+}
