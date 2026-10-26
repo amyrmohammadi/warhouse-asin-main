@@ -40,7 +40,7 @@ function onFileChange(event: Event): void {
 
 <template>
   <div class="inventory-toolbar">
-    <label class="inventory-toolbar__mode mb-0">
+    <label v-if="modes.length > 1" class="inventory-toolbar__mode mb-0">
       <span>نوع نمایش</span>
       <select class="form-control form-control-sm" aria-label="نوع نمایش جدول" :value="mode"
               @change="emit('update:mode', ($event.target as HTMLSelectElement).value)">

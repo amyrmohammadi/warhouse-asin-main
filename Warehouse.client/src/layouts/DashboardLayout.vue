@@ -10,7 +10,12 @@
 
   import { useRoute, useRouter } from 'vue-router'
 
-  import { clearSession, getSession } from '@/services/auth'
+  import {
+    clearSession,
+    expireSession,
+    getSession,
+    sessionExpiredEvent,
+  } from '@/services/auth'
 
   import {
     getCurrentUserProfile,
@@ -97,6 +102,8 @@
 
   const session = ref(getSession())
 
+  let sessionExpirationTimer: ReturnType<typeof setTimeout> | null = null
+
   const currentProfile = ref<CurrentUserProfile | null>(null)
 
   const profileMenu = ref<HTMLElement | null>(null)
@@ -125,6 +132,10 @@
 
   const canReadGoodsIssues = computed(
     () => session.value?.permissions.includes('GoodsIssuesRead') ?? false
+  )
+
+  const canReadInvoices = computed(
+    () => session.value?.permissions.includes('InvoicesRead') ?? false
   )
 
   const canReadUserManagement = computed(
@@ -241,12 +252,23 @@
       handleProfileUpdated
     )
 
+    window.addEventListener(
+      sessionExpiredEvent,
+      handleSessionExpiredEvent
+    )
+
     storeTheme(colorTheme.value)
 
+    scheduleSessionExpiration()
     void loadCurrentProfile()
   })
 
   onBeforeUnmount(() => {
+    if (sessionExpirationTimer) {
+      clearTimeout(sessionExpirationTimer)
+      sessionExpirationTimer = null
+    }
+
     mobileMediaQuery.removeEventListener(
       'change',
       handleMobileModeChange
@@ -265,6 +287,11 @@
     window.removeEventListener(
       profileUpdatedEvent,
       handleProfileUpdated
+    )
+
+    window.removeEventListener(
+      sessionExpiredEvent,
+      handleSessionExpiredEvent
     )
 
     for (const [name, value] of Object.entries(
@@ -293,6 +320,7 @@
     () => route.fullPath,
     () => {
       session.value = getSession()
+      scheduleSessionExpiration()
       activeProfileMenu.value = null
 
       openSidebarGroup.value = getSidebarGroup(
@@ -316,6 +344,34 @@
   // Actions
   // ---------------------------------------------
 
+  function scheduleSessionExpiration(): void {
+    if (sessionExpirationTimer) clearTimeout(sessionExpirationTimer)
+    sessionExpirationTimer = null
+
+    const expiresAt = Date.parse(session.value?.accessTokenExpiresAtUtc ?? '')
+    if (!Number.isFinite(expiresAt)) return
+
+    const remainingMilliseconds = expiresAt - Date.now()
+    if (remainingMilliseconds <= 0) {
+      expireSession()
+      return
+    }
+
+    sessionExpirationTimer = setTimeout(
+      expireSession,
+      remainingMilliseconds,
+    )
+  }
+
+  function handleSessionExpiredEvent(): void {
+    sessionExpirationTimer = null
+    activeProfileMenu.value = null
+    void router.replace({
+      name: 'login',
+      query: { redirect: route.fullPath },
+    })
+  }
+
   async function logout(): Promise<void> {
     activeProfileMenu.value = null
 
@@ -337,7 +393,7 @@
         error instanceof ProfileApiError &&
         error.status === 401
       ) {
-        await logout()
+        expireSession()
       }
     }
   }
@@ -599,6 +655,15 @@
                         aria-expanded="false">
               <i class="las la-truck-loading"></i>
               <span class="nav-text">خروج کالا</span>
+            </RouterLink>
+          </li>
+
+          <li v-if="canReadInvoices">
+            <RouterLink class="ai-icon"
+                        to="/dashboard/inventory/invoices"
+                        aria-expanded="false">
+              <i class="las la-file-invoice"></i>
+              <span class="nav-text">فاکتورها</span>
             </RouterLink>
           </li>
 

@@ -22,5 +22,6 @@ public enum AppPermission
     GoodsIssuesCreate,
     GoodsIssuesUpdate,
     GoodsIssuesDelete,
-    GoodsIssuesExport
+    GoodsIssuesExport,
+    InvoicesRead
 }

@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import AuthThemeSwitch from '@/components/AuthThemeSwitch.vue'
-import { login } from '@/services/auth'
+import {
+  consumeSessionExpiredNotice,
+  login,
+  sessionExpiredEvent,
+} from '@/services/auth'
 import { toast } from '@/services/toast'
 
 defineOptions({ name: 'LoginView' })
@@ -11,11 +15,23 @@ defineOptions({ name: 'LoginView' })
 const route = useRoute()
 const router = useRouter()
 
-const email = ref('')
+const loginIdentifier = ref('')
 const password = ref('')
 const remember = ref(false)
 const loading = ref(false)
 const errorMessages = ref<string[]>([])
+
+function showSessionExpiredNotice(): void {
+  const expirationMessage = consumeSessionExpiredNotice()
+  if (expirationMessage) errorMessages.value = [expirationMessage]
+}
+
+onMounted(() => {
+  showSessionExpiredNotice()
+  window.addEventListener(sessionExpiredEvent, showSessionExpiredNotice)
+})
+
+onBeforeUnmount(() => window.removeEventListener(sessionExpiredEvent, showSessionExpiredNotice))
 
 const redirectPath = computed(() => {
   const requestedPath = route.query.redirect
@@ -27,22 +43,24 @@ const redirectPath = computed(() => {
 async function submit(): Promise<void> {
   errorMessages.value = []
 
-  if (!email.value || !password.value) {
-    errorMessages.value = ['ایمیل و رمز عبور الزامی است.']
+  if (!loginIdentifier.value || !password.value) {
+    errorMessages.value = ['ایمیل یا نام کاربری و رمز عبور الزامی است.']
     return
   }
 
   loading.value = true
   try {
-    await login({ email: email.value, password: password.value }, remember.value)
+    await login({ email: loginIdentifier.value, password: password.value }, remember.value)
     await router.replace(redirectPath.value)
   } catch (error) {
     const messages = error instanceof Error ? error.message.split('\n') : ['خطای ناشناخته‌ای رخ داد.']
-    const translatedMessages = messages.map((message) =>
-      message === 'The account is awaiting administrator approval.'
-        ? 'حساب شما هنوز توسط مدیر تأیید نشده است.'
-        : message,
-    )
+    const translatedMessages = messages.map((message) => {
+      if (message === 'The account is awaiting administrator approval.')
+        return 'حساب شما هنوز توسط مدیر تأیید نشده است.'
+      if (message === 'The email, username, or password is invalid.')
+        return 'ایمیل، نام کاربری یا رمز عبور نادرست است.'
+      return message
+    })
     toast.error(translatedMessages.join(' '), 'ورود ناموفق')
   } finally {
     loading.value = false
@@ -73,17 +91,18 @@ async function submit(): Promise<void> {
                     </ul>
                   </div>
 
-                  <form @submit.prevent="submit">
+                  <form autocomplete="on" @submit.prevent="submit">
                     <div class="form-group">
-                      <label class="mb-1 text-white" for="login-email"><strong>ایمیل</strong></label>
+                      <label class="mb-1 text-white" for="login-identifier"><strong>ایمیل یا نام کاربری</strong></label>
                       <input
-                        id="login-email"
-                        v-model.trim="email"
-                        type="email"
+                        id="login-identifier"
+                        v-model.trim="loginIdentifier"
+                        type="text"
+                        name="username"
                         class="form-control"
                         dir="ltr"
                         autocomplete="username"
-                        placeholder="hello@example.com"
+                        placeholder="نام کاربری یا ایمیل"
                         required
                       />
                     </div>
@@ -93,6 +112,7 @@ async function submit(): Promise<void> {
                         id="login-password"
                         v-model="password"
                         type="password"
+                        name="password"
                         class="form-control"
                         dir="ltr"
                         autocomplete="current-password"

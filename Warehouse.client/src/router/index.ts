@@ -87,6 +87,15 @@ const router = createRouter({
           },
         },
         {
+          path: 'inventory/invoices',
+          name: 'invoices',
+          component: () => import('@/views/Inventory/invoices/InvoicesView.vue'),
+          meta: {
+            title: 'فاکتورها',
+            requiredPermission: 'InvoicesRead',
+          },
+        },
+        {
           path: 'master-data/products',
           name: 'products',
           component: () => import('@/views/MasterData/Products.vue'),

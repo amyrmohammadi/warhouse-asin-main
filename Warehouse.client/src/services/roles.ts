@@ -1,5 +1,5 @@
 import type { ApiResult } from '@/services/auth'
-import { clearSession, getSession } from '@/services/auth'
+import { expireSession, getSession } from '@/services/auth'
 import type { NumericFilterValue } from '@/types/dataTableFilters'
 
 export interface RoleListItem {
@@ -90,7 +90,7 @@ export async function getRoles(parameters: GetRolesParameters = {}): Promise<Get
     throw new RolesApiError('ارتباط با سرور برقرار نشد.', 0)
   }
 
-  if (response.status === 401) clearSession()
+  if (response.status === 401) expireSession()
 
   let result: ApiResult<GetRolesResponse> | null = null
   try {
@@ -147,7 +147,7 @@ export async function createRole(name: string, signal?: AbortSignal): Promise<vo
     throw new RolesApiError('ارتباط با سرور برقرار نشد.', 0)
   }
 
-  if (response.status === 401) clearSession()
+  if (response.status === 401) expireSession()
 
   let result: ApiResult<unknown> | null = null
   try {
@@ -220,7 +220,7 @@ async function ensureRoleOperationSucceeded(
   response: Response,
   fallbackMessage: string,
 ): Promise<void> {
-  if (response.status === 401) clearSession()
+  if (response.status === 401) expireSession()
 
   let result: ApiResult<unknown> | null = null
   try {
@@ -259,7 +259,7 @@ export async function getRolePolicies(
     throw new RolesApiError('ارتباط با سرور برقرار نشد.', 0)
   }
 
-  if (response.status === 401) clearSession()
+  if (response.status === 401) expireSession()
 
   let result: ApiResult<GetRolePoliciesResponse> | null = null
   try {
@@ -309,7 +309,7 @@ export async function setRolePolicies(
     throw new RolesApiError('ارتباط با سرور برقرار نشد.', 0)
   }
 
-  if (response.status === 401) clearSession()
+  if (response.status === 401) expireSession()
 
   let result: ApiResult<unknown> | null = null
   try {

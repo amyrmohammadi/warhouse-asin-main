@@ -8,6 +8,14 @@
 .goods-issue-new-master-data--denied { color: #dc3545 !important; }
 .goods-issue-cell-note { display: block; font-size: .62rem; padding: .1rem .25rem; }
 .goods-issue-cell-error { font-size: .62rem; line-height: 1.2; padding: .1rem .25rem; }
+.goods-issue-header-fields :deep(.person-select__label) {
+  color: inherit;
+  display: inline-block;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  margin-bottom: .5rem;
+}
 
 .goods-issue-list-entry {
   background: var(--surface);
@@ -29,7 +37,7 @@
   --reason-width: 11rem;
   --description-width: 140px;
   --delivering-width: 110px;
-  --return-width: 120px;
+  --return-width: 130px;
   border-collapse: separate;
   border-spacing: 0;
   font-size: .74rem;

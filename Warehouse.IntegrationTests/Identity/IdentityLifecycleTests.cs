@@ -160,6 +160,12 @@ public sealed class IdentityLifecycleTests
             changedUserPassword);
         Assert.Empty(tokensBeforePolicyChange.Permissions);
 
+        var userNameTokens = await LoginAsync(
+            client,
+            "updated-created-user",
+            changedUserPassword);
+        Assert.Equal(tokensBeforePolicyChange.UserId, userNameTokens.UserId);
+
         using (var assignPolicyResponse = await SendAuthorizedJsonAsync(
                    client,
                    $"/endpoint/admin/roles/{DefaultRoles.User}/policies",

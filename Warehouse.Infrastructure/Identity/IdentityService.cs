@@ -19,7 +19,7 @@ internal sealed class IdentityService(
     ICurrentUserContext currentUserContext) : IIdentityService
 {
     private static readonly string[] InvalidCredentialsError =
-        ["The email or password is invalid."];
+        ["The email, username, or password is invalid."];
 
     private static readonly string[] InactiveAccountError =
         ["The account is awaiting administrator approval."];
@@ -188,7 +188,9 @@ internal sealed class IdentityService(
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var user = await userManager.FindByEmailAsync(request.Email.Trim());
+        var loginIdentifier = request.Email.Trim();
+        var user = await userManager.FindByEmailAsync(loginIdentifier)
+            ?? await userManager.FindByNameAsync(loginIdentifier);
         if (user is null)
         {
             return FailedToken(InvalidCredentialsError);

@@ -1,5 +1,5 @@
 import type { ApiResult } from '@/services/auth'
-import { clearSession, getSession } from '@/services/auth'
+import { expireSession, getSession } from '@/services/auth'
 import type { DateFilterValue, NumericFilterValue, TextFilterValue } from '@/types/dataTableFilters'
 
 export interface GoodsIssueItem {
@@ -197,7 +197,7 @@ async function authorizedFetch(path: string, init: RequestInit = {}): Promise<Re
   if (!session?.accessToken) throw new GoodsIssuesApiError('نشست شما منقضی شده است.', 401)
   try {
     const response = await fetch(path, { ...init, headers: { ...init.headers, Authorization: `Bearer ${session.accessToken}` } })
-    if (response.status === 401) clearSession()
+    if (response.status === 401) expireSession()
     return response
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') throw error

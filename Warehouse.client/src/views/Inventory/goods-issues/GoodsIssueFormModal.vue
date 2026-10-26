@@ -40,14 +40,14 @@ defineExpose({ openCreate, openEdit, removeDocument })
     <form id="goods-issue-form" novalidate @submit.prevent="save">
       <div v-if="formError" class="alert alert-danger py-2">{{ formError }}</div>
 
-      <div class="row">
-        <div class="col-md-4 form-group">
+      <div class="row goods-issue-header-fields">
+        <div class="col-md-3 form-group">
           <label>کد یا شماره خروج <span class="text-danger">*</span></label>
           <input v-model="form.issueNumber" class="form-control" :class="{ 'is-invalid': errors.get('issueNumber') }"
                  maxlength="100" :disabled="saving" @input="errors.clear('issueNumber')" />
           <small v-if="errors.get('issueNumber')" class="invalid-feedback d-block">{{ errors.get('issueNumber') }}</small>
         </div>
-        <div class="col-md-4 form-group">
+        <div class="col-md-3 form-group">
           <label>تاریخ خروج <span class="text-danger">*</span></label>
           <DatePicker v-model="form.issuedAtLocal" type="date" format="YYYY-MM-DDTHH:mm:ss"
                       display-format="jYYYY/jMM/jDD HH:mm" placeholder="تاریخ و ساعت را انتخاب کنید"
@@ -56,7 +56,7 @@ defineExpose({ openCreate, openEdit, removeDocument })
                       @input="errors.clear('issuedAtLocal')" />
           <small v-if="errors.get('issuedAtLocal')" class="invalid-feedback d-block">{{ errors.get('issuedAtLocal') }}</small>
         </div>
-        <div class="col-md-4 form-group">
+        <div class="col-md-3 form-group">
           <PersonSelect :model-value="form.issuerId || null" :text="form.issuerText" :options="people"
                         label="خارج‌کننده" placeholder="انتخاب یا ورود خارج‌کننده" required
                         :allow-create="canManageMasterData" :disabled="saving" :error="errors.get('issuer')"
@@ -69,7 +69,7 @@ defineExpose({ openCreate, openEdit, removeDocument })
             {{ canManageMasterData ? 'خارج‌کننده جدید هنگام ثبت اضافه می‌شود.' : 'مجوز افزودن خارج‌کننده جدید را ندارید؛ از فهرست انتخاب کنید.' }}
           </small>
         </div>
-        <div class="col-12 form-group">
+        <div class="col-md-6 form-group">
           <label>توضیحات کلی</label>
           <textarea v-model="form.description" class="form-control" rows="2" maxlength="1000"
                     :class="{ 'is-invalid': errors.get('description') }" :disabled="saving"

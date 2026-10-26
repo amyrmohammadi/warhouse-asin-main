@@ -30,10 +30,14 @@ export interface AuthSession extends LoginResponse {
 
 const sessionKey = 'vue-clean-architecture.auth'
 const authChannelName = 'warehouse.auth-session'
+const sessionExpiredNoticeKey = 'warehouse.auth-session-expired'
+export const sessionExpiredMessage = 'اعتبار نشست شما به پایان رسیده است. لطفاً دوباره وارد شوید.'
+export const sessionExpiredEvent = 'warehouse:auth-session-expired'
 
 type AuthChannelMessage =
   | { type: 'session-request'; requestId: string }
   | { type: 'session-response'; requestId: string; session: AuthSession }
+  | { type: 'session-expired' }
   | { type: 'session-cleared' }
 
 let authChannel: BroadcastChannel | null = null
@@ -98,6 +102,14 @@ function handleAuthChannelMessage(event: MessageEvent<AuthChannelMessage>): void
 
   if (message?.type === 'session-cleared') {
     removeStoredSession()
+    sessionStorage.removeItem(sessionExpiredNoticeKey)
+    return
+  }
+
+  if (message?.type === 'session-expired') {
+    removeStoredSession()
+    sessionStorage.setItem(sessionExpiredNoticeKey, sessionExpiredMessage)
+    window.dispatchEvent(new CustomEvent(sessionExpiredEvent))
     return
   }
 
@@ -262,7 +274,7 @@ export async function synchronizeSessionPermissions(): Promise<AuthSession | nul
   })
 
   if (response.status === 401) {
-    clearSession()
+    expireSession()
     return null
   }
 
@@ -291,7 +303,7 @@ export function hasValidSession(): boolean {
   if (!session?.accessToken || !session.accessTokenExpiresAtUtc) return false
 
   if (Date.parse(session.accessTokenExpiresAtUtc) <= Date.now()) {
-    clearSession()
+    expireSession()
     return false
   }
 
@@ -300,5 +312,20 @@ export function hasValidSession(): boolean {
 
 export function clearSession(): void {
   removeStoredSession()
+  sessionStorage.removeItem(sessionExpiredNoticeKey)
   getAuthChannel()?.postMessage({ type: 'session-cleared' } satisfies AuthChannelMessage)
+}
+
+/** نشست نامعتبر را پاک می‌کند و علت خروج را تا نمایش صفحه ورود نگه می‌دارد. */
+export function expireSession(): void {
+  removeStoredSession()
+  sessionStorage.setItem(sessionExpiredNoticeKey, sessionExpiredMessage)
+  getAuthChannel()?.postMessage({ type: 'session-expired' } satisfies AuthChannelMessage)
+  window.dispatchEvent(new CustomEvent(sessionExpiredEvent))
+}
+
+export function consumeSessionExpiredNotice(): string | null {
+  const message = sessionStorage.getItem(sessionExpiredNoticeKey)
+  sessionStorage.removeItem(sessionExpiredNoticeKey)
+  return message
 }

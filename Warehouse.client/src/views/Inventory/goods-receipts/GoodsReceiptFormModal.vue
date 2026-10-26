@@ -51,7 +51,7 @@ defineExpose({ openCreate, openEdit })
     <form id="goods-receipt-form" novalidate @submit.prevent="save">
       <div v-if="formError" class="alert alert-danger py-2">{{ formError }}</div>
 
-      <div class="row">
+      <div class="row goods-receipt-header-fields">
         <div class="col-md-3 form-group">
           <label>تاریخ و ساعت ورود <span class="text-danger">*</span></label>
           <DatePicker v-model="form.enteredAtLocal" type="date" format="YYYY-MM-DDTHH:mm:ss"
@@ -368,6 +368,15 @@ defineExpose({ openCreate, openEdit })
 </style>
 
 <style scoped>
+.goods-receipt-header-fields :deep(.person-select__label) {
+  color: inherit;
+  display: inline-block;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  margin-bottom: .5rem;
+}
+
 /* ───────── جدول ورود سریع (حالت list) ───────── */
 .receipt-list-entry {
   background: var(--surface);

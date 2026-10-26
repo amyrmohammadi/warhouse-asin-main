@@ -81,9 +81,9 @@ public sealed class LoginFeatureTests
         LoginCommand[] invalidCommands =
         [
             new("", "Password1!"),
-            new("invalid-email", "Password1!"),
+            new("   ", "Password1!"),
             new("user@example.com", ""),
-            new(new string('e', 250) + "@test.com", "Password1!"),
+            new(new string('u', 257), "Password1!"),
             new("user@example.com", new string('p', 129))
         ];
 

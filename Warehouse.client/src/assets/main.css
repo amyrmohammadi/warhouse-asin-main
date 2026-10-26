@@ -10,7 +10,8 @@
   /* Layout */
   --background: #f4f7fb;
   --surface: #ffffff;
-  --text-primary: #0f172a;
+  /* --text-primary: #0f172a; */
+   --text-primary: #323333;
   --text-secondary: #64748b;
   --border-color: #ccd5e0;
   /* Status */
@@ -733,10 +734,13 @@ table.dataTable thead > tr > td.dt-orderable-desc:hover {
   background: transparent;
 }
 
-.page-titles h4,
+.page-titles h4 {
+  color: var(--primary);
+}
+
 .page-titles .breadcrumb li.active a,
 .page-titles .breadcrumb li.active span {
-  color: var(--primary);
+  color: var(--text-secondary);
 }
 
 .page-titles .breadcrumb li,
@@ -1475,7 +1479,7 @@ body[data-app-theme='dark'] .table,
 body[data-app-theme='dark'] .table th,
 body[data-app-theme='dark'] .table td,
 body[data-app-theme='dark'] .text-black {
-  color: #f1f5f9 !important;
+  color: #cdd1d4 !important;
 }
 
 body[data-app-theme='dark'] .table th,

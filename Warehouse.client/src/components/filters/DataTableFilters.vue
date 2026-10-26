@@ -589,7 +589,7 @@ function formatValue(
   justify-content: center; min-width: 1.3rem;
 }
   .data-table-filters__panel {
-    background: color-mix(in srgb, var(--surface) 45%, var(--background));
+    background: var(--background);
     border: 1px solid var(--border-color);
     border-radius: 0.85rem;
     margin-top: 0.85rem;

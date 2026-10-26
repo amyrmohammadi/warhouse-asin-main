@@ -1,5 +1,5 @@
 import type { ApiResult } from '@/services/auth'
-import { clearSession, getSession } from '@/services/auth'
+import { expireSession, getSession } from '@/services/auth'
 
 const basePath = '/endpoint/master-data/units-of-measure'
 
@@ -165,7 +165,7 @@ async function request<T>(
     throw new UnitsOfMeasureApiError('ارتباط با سرور برقرار نشد.', 0)
   }
 
-  if (response.status === 401) clearSession()
+  if (response.status === 401) expireSession()
 
   let payload: ApiResult<T> | ValidationProblemDetails | null = null
   try {

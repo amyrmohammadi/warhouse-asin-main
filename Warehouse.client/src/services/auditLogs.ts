@@ -1,5 +1,5 @@
 import type { ApiResult } from '@/services/auth'
-import { clearSession, getSession } from '@/services/auth'
+import { expireSession, getSession } from '@/services/auth'
 
 export type AuditAction = 'Create' | 'Update' | 'Delete'
 
@@ -89,7 +89,7 @@ export async function getAuditLogs(
     throw new AuditLogsApiError('ارتباط با سرور برقرار نشد.', 0)
   }
 
-  if (response.status === 401) clearSession()
+  if (response.status === 401) expireSession()
 
   let result: ApiResult<GetAuditLogsResponse> | null = null
   try {

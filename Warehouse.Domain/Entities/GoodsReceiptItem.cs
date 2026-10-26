@@ -73,6 +73,9 @@ public sealed class GoodsReceiptItem : Entity<Guid>
         SortOrder = sortOrder;
     }
 
+    public void UpdateReceiptNumber(string? receiptNumber) =>
+        ReceiptNumber = Normalize(receiptNumber);
+
     private void SetReceiptInvoice(InvoiceStatus? status, Guid? invoiceId, Invoice? invoice,
         string? receiptNumber)
     {

@@ -1,5 +1,5 @@
 import type { ApiResult } from '@/services/auth'
-import { clearSession, getSession } from '@/services/auth'
+import { expireSession, getSession } from '@/services/auth'
 
 const basePath = '/endpoint/master-data/goods-issue-destinations'
 
@@ -71,7 +71,7 @@ async function request<T>(path: string, init: RequestInit, fallbackMessage: stri
     throw new GoodsIssueDestinationsApiError('ارتباط با سرور برقرار نشد.', 0)
   }
 
-  if (response.status === 401) clearSession()
+  if (response.status === 401) expireSession()
   let payload: ApiResult<T> | ValidationProblemDetails | null = null
   try { payload = await response.json() as ApiResult<T> | ValidationProblemDetails } catch { /* پاسخ بدون بدنه */ }
   const result = payload as ApiResult<T> | null

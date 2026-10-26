@@ -1,5 +1,5 @@
 import type { ApiResult } from '@/services/auth'
-import { clearSession, getSession } from '@/services/auth'
+import { expireSession, getSession } from '@/services/auth'
 import type { DateFilterValue, NumericFilterValue, TextFilterValue } from '@/types/dataTableFilters'
 
 const basePath = '/endpoint/inventory/goods-receipts'
@@ -239,7 +239,7 @@ export async function exportGoodsReceiptItems(
     throw new GoodsReceiptsApiError('ارتباط با سرور برقرار نشد.', 0)
   }
 
-  if (response.status === 401) clearSession()
+  if (response.status === 401) expireSession()
   if (response.ok) return response.blob()
 
   let message = response.status === 403
@@ -380,7 +380,7 @@ async function request<T>(
     throw new GoodsReceiptsApiError('ارتباط با سرور برقرار نشد.', 0)
   }
 
-  if (response.status === 401) clearSession()
+  if (response.status === 401) expireSession()
 
   let payload: ApiResult<T> | ValidationProblemDetails | null = null
   try {

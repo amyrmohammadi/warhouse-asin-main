@@ -36,4 +36,14 @@ public sealed class PermissionPolicyNamesTests
         Assert.All(issueGroup.Policies, policy => Assert.StartsWith("GoodsIssue", policy.Name));
         Assert.DoesNotContain(PermissionPolicyNames.Groups, group => group.Key == "inventory");
     }
+
+    [Fact]
+    public void Groups_ExposeInvoicesAsAnIndependentPermissionGroup()
+    {
+        var invoiceGroup = PermissionPolicyNames.Groups.Single(group => group.Key == "invoices");
+
+        var policy = Assert.Single(invoiceGroup.Policies);
+        Assert.Equal("فاکتورها", invoiceGroup.DisplayName);
+        Assert.Equal(PermissionPolicyNames.Inventory.InvoicesRead, policy.Name);
+    }
 }

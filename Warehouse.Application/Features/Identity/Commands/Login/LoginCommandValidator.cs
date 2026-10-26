@@ -8,7 +8,6 @@ internal sealed class LoginCommandValidator : AbstractValidator<LoginCommand>
     {
         RuleFor(command => command.Email)
             .NotEmpty()
-            .EmailAddress()
             .MaximumLength(256);
 
         RuleFor(command => command.Password)

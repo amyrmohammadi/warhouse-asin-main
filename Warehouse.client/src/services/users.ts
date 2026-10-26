@@ -1,5 +1,5 @@
 import type { ApiResult } from '@/services/auth'
-import { clearSession, getSession } from '@/services/auth'
+import { expireSession, getSession } from '@/services/auth'
 
 export interface UserListItem {
   id: string
@@ -103,7 +103,7 @@ export async function getUsers(parameters: GetUsersParameters): Promise<GetUsers
     throw new UsersApiError('ارتباط با سرور برقرار نشد.', 0)
   }
 
-  if (response.status === 401) clearSession()
+  if (response.status === 401) expireSession()
 
   let result: ApiResult<GetUsersResponse> | null = null
   try {
@@ -148,7 +148,7 @@ export async function createManagedUser(
     throw new UsersApiError('ارتباط با سرور برقرار نشد.', 0)
   }
 
-  if (response.status === 401) clearSession()
+  if (response.status === 401) expireSession()
 
   let result: ApiOperationResult | null = null
   try {
@@ -251,7 +251,7 @@ async function sendUserOperation(
     throw new UsersApiError('ارتباط با سرور برقرار نشد.', 0)
   }
 
-  if (response.status === 401) clearSession()
+  if (response.status === 401) expireSession()
 
   let result: ApiOperationResult | null = null
   try {

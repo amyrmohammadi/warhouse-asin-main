@@ -1,5 +1,5 @@
 import type { ApiResult } from '@/services/auth'
-import { clearSession, getSession } from '@/services/auth'
+import { expireSession, getSession } from '@/services/auth'
 
 export interface CurrentUserProfile {
   userId: string
@@ -105,7 +105,7 @@ async function send<T>(
     throw new ProfileApiError('ارتباط با سرور برقرار نشد.', 0)
   }
 
-  if (response.status === 401) clearSession()
+  if (response.status === 401) expireSession()
 
   let result: (ApiResult<T> & ApiOperationResult) | null = null
   try {

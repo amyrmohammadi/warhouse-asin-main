@@ -115,7 +115,7 @@ export function useGoodsIssueForm(deps: Dependencies) {
   const saving = ref(false)
   const formError = ref('')
   const form = reactive({ issueNumber: '', issuedAtLocal: '', description: '', issuerId: '', issuerText: '' })
-  const entry = useEntryRows<FormItem>({ create: newItem, hasContent: itemHasContent, minimumRows: 4 })
+  const entry = useEntryRows<FormItem>({ create: newItem, hasContent: itemHasContent, minimumRows: 8 })
 
   const isNewIssuer = (): boolean => !form.issuerId && Boolean(form.issuerText.trim())
   const isNewDestination = (item: FormItem): boolean =>

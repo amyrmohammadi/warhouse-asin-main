@@ -41,6 +41,7 @@ public static class PermissionPolicyNames
         public const string GoodsIssuesUpdate = nameof(AppPermission.GoodsIssuesUpdate);
         public const string GoodsIssuesDelete = nameof(AppPermission.GoodsIssuesDelete);
         public const string GoodsIssuesExport = nameof(AppPermission.GoodsIssuesExport);
+        public const string InvoicesRead = nameof(AppPermission.InvoicesRead);
     }
 
     public static IReadOnlyCollection<PermissionPolicyGroup> Groups { get; } =
@@ -87,6 +88,12 @@ public static class PermissionPolicyNames
                 new(Inventory.GoodsIssuesUpdate, "ویرایش خروج کالا"),
                 new(Inventory.GoodsIssuesDelete, "حذف خروج کالا"),
                 new(Inventory.GoodsIssuesExport, "اکسپورت خروج کالا")
+            ]),
+        new(
+            "invoices",
+            "فاکتورها",
+            [
+                new(Inventory.InvoicesRead, "مشاهده فاکتورها و کالاهای آن‌ها")
             ]),
         new(
             "master-data",
