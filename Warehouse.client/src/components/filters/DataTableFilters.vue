@@ -589,13 +589,14 @@ function formatValue(
   justify-content: center; min-width: 1.3rem;
 }
   .data-table-filters__panel {
-    background: var(--background);
+    background: #f2f3ff;
     border: 1px solid var(--border-color);
     border-radius: 0.85rem;
     margin-top: 0.85rem;
     overflow: hidden;
     padding: 0.75rem;
   }
+:global(body[data-app-theme='dark'] .data-table-filters__panel) { background: var(--background); }
 .data-table-filters__grid { display: grid; gap: 0.75rem; grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .data-table-filters__field > label {
   color: var(--text-primary); display: block; font-size: 0.8125rem;

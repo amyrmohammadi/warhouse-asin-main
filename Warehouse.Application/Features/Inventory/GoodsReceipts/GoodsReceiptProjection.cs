@@ -22,6 +22,8 @@ internal static class GoodsReceiptProjection
                 .Select(item => new GoodsReceiptItemSummary
                 {
                     Id = item.Id,
+                    GoodsIssueItemId = item.GoodsIssueItemId,
+                    IssueNumber = item.GoodsIssueItem == null ? null : item.GoodsIssueItem.GoodsIssue.IssueNumber,
                     ProductId = item.ProductId,
                     ProductTitle = item.Product.Title,
                     ProductCode = item.Product.Code,

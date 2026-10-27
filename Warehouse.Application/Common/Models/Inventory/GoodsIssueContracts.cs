@@ -17,17 +17,18 @@ public sealed class GoodsIssueSummary
 public class GoodsIssueItemSummary
 {
     public Guid Id { get; init; }
+    public IReadOnlyCollection<Guid> GoodsReceiptItemIds { get; init; } = [];
     public Guid? ProductId { get; init; }
     public string? ProductTitle { get; init; }
     public string? ProductUnitOfMeasureTitle { get; init; }
     public string ProductCode { get; init; } = string.Empty;
     public decimal Quantity { get; init; }
     public string? AssetNumber { get; init; }
-    public Guid DestinationId { get; init; }
-    public string DestinationTitle { get; init; } = string.Empty;
-    public string ExitReason { get; init; } = string.Empty;
+    public Guid? DestinationId { get; init; }
+    public string? DestinationTitle { get; init; }
+    public string? ExitReason { get; init; }
     public string? Description { get; init; }
-    public string DeliveringUnit { get; init; } = string.Empty;
+    public string? DeliveringUnit { get; init; }
     public DateTimeOffset? ReturnAtUtc { get; init; }
 }
 

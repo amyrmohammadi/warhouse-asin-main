@@ -22,12 +22,14 @@ import {
   exportGoodsReceiptItems,
   getGoodsReceiptItemHistory,
   getGoodsReceiptItems,
+  getGoodsReceiptMetrics,
   getGoodsReceipts,
   type EntityHistoryEntry,
   type GoodsReceipt,
   type GoodsReceiptImportSummary,
   type GoodsReceiptItemRow,
   type GoodsReceiptListParameters,
+  type GoodsReceiptMetrics,
   type InvoiceStatusFilter,
 } from '@/services/goodsReceipts'
 import type { Product } from '@/services/products'
@@ -62,8 +64,21 @@ const canImport = has('GoodsReceiptsImport')
 const canExport = has('GoodsReceiptsExport')
 const canEdit = canInitialEntry || canManageReceiptInvoice
 
+const metricCards = [
+  { key: 'itemsWithoutReceiptCount', permission: 'GoodsReceiptsMissingReceiptCountRead', title: 'کالاهای بدون رسید', tone: 'blue', mode: 'items' },
+  { key: 'itemsWithoutInvoiceCount', permission: 'GoodsReceiptsMissingInvoiceCountRead', title: 'کالای بدون فاکتور', tone: 'amber', mode: 'items' },
+  { key: 'todayItemCount', permission: 'GoodsReceiptsTodayItemCountRead', title: 'تعداد اقلام ورودی امروز', tone: 'teal', mode: 'items' },
+  { key: 'todayDocumentCount', permission: 'GoodsReceiptsTodayDocumentCountRead', title: 'تعداد اسناد ورودی امروز', tone: 'violet', mode: 'receipts' },
+] as const
+type MetricCard = (typeof metricCards)[number]
+const visibleMetricCards = metricCards.filter(card => has(card.permission))
+const metrics = ref<GoodsReceiptMetrics | null>(null)
+const metricsLoading = ref(false)
+const metricsChannel = useRequestChannel()
+
 // ── state صفحه ─────────────────────────────────────────────────────
 const tableMode = ref<TableMode>('items')
+const selectedMetric = ref<MetricCard | null>(null)
 const tableContainer = ref<HTMLElement | null>(null)
 const formModal = ref<InstanceType<typeof GoodsReceiptFormModal> | null>(null)
 const editLoading = ref(false)
@@ -73,6 +88,25 @@ const importFile = ref<File | null>(null)
 const importSummary = ref<GoodsReceiptImportSummary | null>(null)
 
 const { handleUnauthorized } = useUnauthorizedRedirect('/dashboard/inventory/goods-receipts')
+async function loadMetrics(): Promise<void> {
+  if (!visibleMetricCards.length) return
+  const controller = metricsChannel.begin()
+  metricsLoading.value = true
+  try {
+    const result = await getGoodsReceiptMetrics(controller.signal)
+    if (metricsChannel.isCurrent(controller)) metrics.value = result
+  } catch (error) {
+    if (isAbortError(error)) return
+    if (await handleUnauthorized(error)) return
+    toast.error(error instanceof Error ? error.message : 'دریافت آمار ورود کالا انجام نشد.')
+  } finally {
+    if (metricsChannel.isCurrent(controller)) {
+      metricsChannel.end(controller)
+      metricsLoading.value = false
+    }
+  }
+}
+void loadMetrics()
 const options = useGoodsReceiptOptions(handleUnauthorized)
 const { people, warehouses, units, loading: optionsLoading } = options
 void options.load()
@@ -80,6 +114,44 @@ void options.load()
 // ── فیلترها و لیست ─────────────────────────────────────────────────
 const filters = useFilterState(() => list.reload(true))
 const { search: quickSearch, applied: appliedFilters } = filters
+
+function toggleMetric(card: MetricCard): void {
+  selectedMetric.value = selectedMetric.value?.key === card.key ? null : card
+  quickSearch.value = ''
+  appliedFilters.value = selectedMetric.value?.key === 'itemsWithoutInvoiceCount'
+    ? { invoiceStatus: 'NotEntered' }
+    : {}
+  if (selectedMetric.value) {
+    const mode = card.mode as TableMode
+    if (tableMode.value !== mode) {
+      tableMode.value = mode
+      return
+    }
+  }
+  list.reload(true)
+}
+
+function changeTableMode(mode: TableMode): void {
+  if (selectedMetric.value?.key === 'itemsWithoutInvoiceCount') {
+    const next = { ...appliedFilters.value }
+    delete next.invoiceStatus
+    appliedFilters.value = next
+  }
+  selectedMetric.value = null
+  if (tableMode.value === mode) list.reload(true)
+  else tableMode.value = mode
+}
+
+function clearAllFilters(): void {
+  selectedMetric.value = null
+  filters.onClear()
+}
+
+watch(appliedFilters, value => {
+  if (selectedMetric.value?.key === 'itemsWithoutInvoiceCount' && value.invoiceStatus !== 'NotEntered') {
+    selectedMetric.value = null
+  }
+}, { deep: true })
 
 const filterDefinitions = computed<DataTableFilterDefinition[]>(() => [
   { key: 'enteredAt', label: 'تاریخ ورود', type: 'date-comparison' },
@@ -125,6 +197,9 @@ function currentFilterParameters(): GoodsReceiptListParameters {
     delivererId: filters.id('delivererId'),
     supplierId: filters.id('supplierId'),
     invoiceStatus: filters.id('invoiceStatus') as InvoiceStatusFilter | undefined,
+    receiptNumberIsEmpty: selectedMetric.value?.key === 'itemsWithoutReceiptCount' || undefined,
+    quickFilter: selectedMetric.value?.key === 'todayItemCount' || selectedMetric.value?.key === 'todayDocumentCount'
+      ? 'Today' : undefined,
   }
 }
 
@@ -164,6 +239,18 @@ const actions = (data: string): ColumnsConfig => ({
   data, name: 'actions', title: 'عملیات', className: 'min-tablet-p text-center', orderable: false, searchable: false,
 })
 
+function receiptItemLabel(item: GoodsReceipt['items'][number]): string {
+  return `${item.productTitle} (${formatPersianNumber(item.quantity)} ${item.unitOfMeasureTitle})`
+}
+
+function receiptItemsText(items: GoodsReceipt['items']): string {
+  return items.map(item => item.productTitle).join('، ')
+}
+
+function receiptItemsTooltip(items: GoodsReceipt['items']): string {
+  return items.map((item, index) => `${formatPersianNumber(index + 1)}. ${receiptItemLabel(item)}`).join('\n')
+}
+
 const columns: Record<TableMode, ColumnsConfig[]> = {
   receipts: [
     rowNumber,
@@ -171,6 +258,7 @@ const columns: Record<TableMode, ColumnsConfig[]> = {
     { data: 'pageNumber', name: 'pageNumber', title: 'شماره صفحه', className: 'min-tablet-l' },
     { data: 'delivererFullName', name: 'delivererFullName', title: 'تحویل‌دهنده', className: 'min-tablet-l' },
     { data: 'items', name: 'itemCount', title: 'تعداد کالا', className: 'min-tablet-l text-bold', orderable: false },
+    { data: 'items', name: 'itemTitles', title: 'اقلام', className: 'all inventory-receipt-items-column', orderable: false, searchable: false },
     { data: 'description', name: 'description', title: 'توضیحات ورودی', className: 'min-tablet-p', orderable: false },
     ...(canEdit ? [actions('id')] : []),
   ],
@@ -188,12 +276,28 @@ const columns: Record<TableMode, ColumnsConfig[]> = {
     { data: 'invoiceNumber', name: 'invoiceNumber', title: 'شماره فاکتور', className: 'min-tablet-p text-nowrap', orderable: false },
     { data: 'counterparty', name: 'counterparty', title: 'طرف حساب', className: 'min-tablet-p text-nowrap', orderable: false },
     { data: 'receiptNumber', name: 'receiptNumber', title: 'شماره رسید', className: 'min-tablet-p text-nowrap', orderable: false },
+    { data: 'issueNumber', name: 'issueNumber', title: 'شماره خروج', className: 'min-tablet-p text-nowrap', orderable: false },
     { data: 'warehouseTitle', name: 'warehouseTitle', title: 'انبار', className: 'min-desktop' },
     ...(canEdit || canReadItemHistory ? [actions('goodsReceiptId')] : []),
   ],
 }
 
 const compact = useCompactScrollbar(tableContainer)
+function onTableWheel(event: WheelEvent): void {
+  if (event.ctrlKey) { compact.onWheel(event); return }
+  if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return
+
+  const scrollBody = tableContainer.value?.querySelector<HTMLElement>('.dt-layout-table > div')
+  if (!scrollBody || scrollBody.scrollHeight <= scrollBody.clientHeight) return
+
+  event.preventDefault()
+  const delta = event.deltaMode === WheelEvent.DOM_DELTA_LINE
+    ? event.deltaY * 16
+    : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+      ? event.deltaY * scrollBody.clientHeight
+      : event.deltaY
+  scrollBody.scrollTop += delta
+}
 const visibility = useColumnVisibility<TableMode>({
   storageKey: 'warehouse.goods-receipts.hidden-columns.v3',
   mode: tableMode,
@@ -220,7 +324,7 @@ function tableOptions(mode: TableMode): Config {
   return createInventoryTableOptions({
     ajax: list.ajax,
     columns: visibility.resolvedColumns[mode],
-    order: { name: 'enteredAtUtc', dir: 'desc' },   
+    order: { name: 'pageNumber', dir: 'asc' },
     emptyText: mode === 'items' ? 'هنوز کالایی وارد انبار نشده است.' : 'هنوز ورودی کالایی ثبت نشده است.',
     loadingText: 'در حال دریافت تاریخچه ورود کالا...',
     zeroText: 'ورودی کالایی پیدا نشد.',
@@ -257,6 +361,7 @@ async function openEdit(row: GoodsReceipt | GoodsReceiptItemRow): Promise<void> 
 
 function onSaved(reason: 'saved' | 'deleted'): void {
   void options.reload()
+  void loadMetrics()
   list.reload(reason === 'saved')
 }
 
@@ -280,6 +385,7 @@ function onImported(summary: GoodsReceiptImportSummary): void {
   importSummary.value = summary
   if (summary.importedReceiptCount > 0) {
     void options.reload()
+    void loadMetrics()
     list.reload(true)
     toast.success(`${summary.importedReceiptCount} سند ورود و ${summary.importedItemCount} قلم کالا ثبت شد.`)
   }
@@ -338,6 +444,7 @@ function closeItemHistory(): void {
 
 onBeforeUnmount(() => {
   if (highlightFrame !== null) cancelAnimationFrame(highlightFrame)
+  metricsChannel.abort()
 })
 </script>
 
@@ -367,12 +474,26 @@ onBeforeUnmount(() => {
                               :create-disabled="optionsLoading" :exporting="exporting"
                               :columns="toggleable[tableMode]" :is-column-visible="isColumnVisible"
                               :column-menu-open="menuOpen"
-                              @update:mode="tableMode = $event as TableMode"
+                              @update:mode="changeTableMode($event as TableMode)"
                               @create="openCreate" @export="exportItems" @import="onImportFile"
                               @toggle-column="toggleColumn" @toggle-column-menu="toggleMenu" />
       </div>
 
       <div class="card-body">
+        <div v-if="visibleMetricCards.length" class="row receipt-metrics" aria-label="آمار ورود کالا">
+          <div v-for="card in visibleMetricCards" :key="card.key" class="receipt-metrics__item">
+            <button type="button" class="receipt-metric-card"
+                    :class="[`receipt-metric-card--${card.tone}`, { 'receipt-metric-card--active': selectedMetric?.key === card.key }]"
+                    :aria-pressed="selectedMetric?.key === card.key" :title="card.title" @click="toggleMetric(card)">
+              <div class="receipt-metric-card__content">
+                <span class="receipt-metric-card__title">{{ card.title }}</span>
+                <strong class="receipt-metric-card__value" :aria-busy="metricsLoading">
+                  {{ metrics?.[card.key] == null ? '—' : formatPersianNumber(metrics[card.key]!) }}
+                </strong>
+              </div>
+            </button>
+          </div>
+        </div>
         <div v-if="importSummary" class="alert" :class="importSummary.invalidRows.length ? 'alert-danger' : 'alert-success'"
              role="status">
           <template v-if="importSummary.invalidRows.length">
@@ -387,10 +508,11 @@ onBeforeUnmount(() => {
           </template>
         </div>
 
-        <DataTableFilters v-model="appliedFilters" :definitions="filterDefinitions" :search="quickSearch"
+        <DataTableFilters :key="selectedMetric?.key ?? 'all'" v-model="appliedFilters"
+                          :definitions="filterDefinitions" :search="quickSearch"
                           :loading="listLoading"
                           search-placeholder="جستجو در عنوان و کد کالا، شماره صفحه، فاکتور و رسید..."
-                          @update:search="filters.onSearch" @apply="filters.onApply" @clear="filters.onClear"
+                          @update:search="filters.onSearch" @apply="filters.onApply" @clear="clearAllFilters"
                           @remove="filters.onRemove">
           <template #filter-productTitle="{ setValue, error }">
             <ProductSelect :model-value="filters.selection('productTitle').id"
@@ -417,7 +539,7 @@ onBeforeUnmount(() => {
         </DataTableFilters>
 
         <div ref="tableContainer" class="users-table-container inventory-table-container"
-             :class="`inventory-table-container--${tableMode}`" @wheel="compact.onWheel">
+             :class="`inventory-table-container--${tableMode}`" @wheel="onTableWheel">
           <!-- thead لازم نیست: DataTables سرستون‌ها را از title ستون‌ها می‌سازد -->
           <DataTable :key="tableMode" ref="table" :options="tableOptionsByMode[tableMode]"
                      class="display responsive nowrap table-striped table table-sm users-table inventory-data-table">
@@ -427,6 +549,12 @@ onBeforeUnmount(() => {
             <template #column-pageNumber="{ cellData }"><span dir="ltr">{{ cellData }}</span></template>
             <template #column-itemCount="{ cellData }">
               <span class="badge light badge-info">{{ (cellData as GoodsReceipt['items']).length }} کالا</span>
+            </template>
+            <template #column-itemTitles="{ cellData }">
+              <span class="receipt-item-titles" tabindex="0"
+                    :title="receiptItemsTooltip(cellData as GoodsReceipt['items'])">
+                {{ receiptItemsText(cellData as GoodsReceipt['items']) || '—' }}
+              </span>
             </template>
             <template #column-productTitle="{ cellData }"><strong class="text-black">{{ cellData }}</strong></template>
             <template #column-productCode="{ cellData }"><span dir="ltr">{{ cellData }}</span></template>
@@ -443,7 +571,9 @@ onBeforeUnmount(() => {
             <template #column-counterparty="{ cellData }">{{ cellData || '' }}</template>
             <template #column-receiptNumber="{ cellData }"><span dir="ltr">{{ cellData}}</span></template>
             <template #column-invoiceStatus="{ cellData }">
-              <span class="badge light" :class="cellData === 'HasInvoice' ? 'badge-success' : 'badge-secondary'">
+              <span v-if="cellData === 'HasInvoice' || cellData === 'DoesNotHave'"
+                    class="badge light goods-receipts-invoice-status"
+                    :class="cellData === 'HasInvoice' ? 'badge-success' : 'badge-secondary'">
                 {{ cellData === 'HasInvoice' ? 'دارد' : cellData === 'DoesNotHave' ? 'ندارد' : '' }}
               </span>
             </template>
@@ -468,5 +598,71 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.goods-receipts-page :deep(.inventory-receipt-items-column) { max-width: 30rem; min-width: 10rem; width: 28%; }
+.receipt-item-titles {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.receipt-metrics { margin: 0 -.25rem .25rem; }
+.receipt-metrics__item { display: flex; flex: 0 0 50%; max-width: 50%; padding: 0 .25rem .5rem; }
+@media (min-width: 992px) {
+  .receipt-metrics__item { flex-basis: 25%; max-width: 25%; }
+}
+@media (min-width: 1200px) {
+  .receipt-metrics__item { flex-basis: 12.5%; max-width: 12.5%; }
+}
+.receipt-metric-card {
+  align-items: center;
+  background: var(--metric-bg);
+  border: 1px solid var(--metric-border);
+  border-radius: .5rem;
+  color: var(--metric-ink);
+  display: flex;
+  flex: 1;
+  font-family: "iransans-medium", sans-serif;
+  gap: .35rem;
+  min-height: calc(3.25rem + 10px);
+  padding: .25rem .45rem;
+  text-align: right;
+  width: 100%;
+  cursor: pointer;
+  transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+}
+.receipt-metric-card:hover, .receipt-metric-card--active { border-color: var(--metric-ink); }
+.receipt-metric-card:hover { box-shadow: 0 4px 12px rgba(20, 30, 50, .13); transform: translateY(-2px); }
+.receipt-metric-card--active { box-shadow: inset 0 0 0 1px var(--metric-ink); }
+.receipt-metric-card--active:hover { box-shadow: inset 0 0 0 1px var(--metric-ink), 0 4px 12px rgba(20, 30, 50, .13); }
+.receipt-metric-card:focus-visible { outline: 2px solid var(--metric-ink); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .receipt-metric-card { transition: none; }
+  .receipt-metric-card:hover { transform: none; }
+}
+.receipt-metric-card__content {
+  align-items: center;
+  display: flex;
+  gap: .35rem;
+  justify-content: space-between;
+  width: 100%;
+}
+.receipt-metric-card__title { flex: 1; font-family: "iransans-bold", sans-serif; font-size: .68rem; line-height: 1.5; }
+.receipt-metric-card__value { flex: 0 0 auto; font-family: "iransans-bold", sans-serif; font-size: 1.05rem; line-height: 1.5; }
+.receipt-metric-card--blue { --metric-bg: #e8efff; --metric-border: #c8d8ff; --metric-ink: #1d4ed8; }
+.receipt-metric-card--amber { --metric-bg: #fff3df; --metric-border: #f7dcad; --metric-ink: #9a5805; }
+.receipt-metric-card--teal { --metric-bg: #e4f6f4; --metric-border: #b9e5df; --metric-ink: #0f766e; }
+.receipt-metric-card--violet { --metric-bg: #f0eaff; --metric-border: #d9c9ff; --metric-ink: #6d28d9; }
+:global(body[data-app-theme='dark'] .receipt-metric-card--blue) { --metric-bg: #172c50; --metric-border: #29518a; --metric-ink: #93b4ff; }
+:global(body[data-app-theme='dark'] .receipt-metric-card--amber) { --metric-bg: #3b2b1c; --metric-border: #735029; --metric-ink: #f6c778; }
+:global(body[data-app-theme='dark'] .receipt-metric-card--teal) { --metric-bg: #173b3d; --metric-border: #286a67; --metric-ink: #80d9ca; }
+:global(body[data-app-theme='dark'] .receipt-metric-card--violet) { --metric-bg: #33234f; --metric-border: #5d3a85; --metric-ink: #c5a8ff; }
+.goods-receipts-page :deep(.dt-layout-table > div) {
+  max-height: 50vh;
+  overflow: auto !important;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
 .import-errors { max-height: 20rem; overflow-y: auto; }
+.goods-receipts-invoice-status { font-size: 0.75rem; font-weight: 700; padding: 0.2em 0.45em; }
 </style>

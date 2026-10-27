@@ -1,4 +1,5 @@
 using Warehouse.Domain.Common;
+using Warehouse.Domain.Enums;
 
 namespace Warehouse.Domain.Entities;
 
@@ -18,11 +19,34 @@ public sealed class Invoice : Entity<Guid>
 
     public string InvoiceNumber { get; private set; } = string.Empty;
 
+    public string? Description { get; private set; }
+
+    public DateOnly? InvoiceDate { get; private set; }
+
+    public InvoiceProcessingStatus ProcessingStatus { get; private set; } = InvoiceProcessingStatus.UnderReview;
+
     public Guid? SupplierId { get; private set; }
 
     public Supplier? Supplier { get; private set; }
 
     public ICollection<GoodsReceiptItem> GoodsReceiptItems { get; private set; } = [];
+
+    public void UpdateDetails(string? description, DateOnly? invoiceDate, InvoiceProcessingStatus processingStatus)
+    {
+        if (!Enum.IsDefined(processingStatus))
+            throw new ArgumentOutOfRangeException(nameof(processingStatus));
+
+        Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
+        InvoiceDate = invoiceDate;
+        ProcessingStatus = processingStatus;
+    }
+
+    public void UpdateHeader(string invoiceNumber, Guid? supplierId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(invoiceNumber);
+        InvoiceNumber = NormalizeNumber(invoiceNumber);
+        SupplierId = supplierId;
+    }
 
     public static string NormalizeNumber(string value) => value.Trim();
 }

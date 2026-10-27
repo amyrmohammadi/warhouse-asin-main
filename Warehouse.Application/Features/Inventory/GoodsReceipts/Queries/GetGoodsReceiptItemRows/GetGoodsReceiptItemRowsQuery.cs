@@ -15,8 +15,10 @@ public sealed record GetGoodsReceiptItemRowsQuery
     public NumericFilter<decimal>? Quantity { get; init; }
     public TextFilter? InvoiceNumber { get; init; }
     public TextFilter? ReceiptNumber { get; init; }
+    public bool ReceiptNumberIsEmpty { get; init; }
     public Guid? WarehouseId { get; init; }
     public Guid? DelivererId { get; init; }
     public Guid? SupplierId { get; init; }
     public InvoiceStatusFilter? InvoiceStatus { get; init; }
+    public GoodsReceiptQuickFilter? QuickFilter { get; init; }
 }

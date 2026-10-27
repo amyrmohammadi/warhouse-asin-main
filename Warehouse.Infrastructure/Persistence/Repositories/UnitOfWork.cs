@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using System.Data;
 using Warehouse.Application.Common.Interfaces.Repositories;
 using Warehouse.Domain.Common;
 
@@ -62,6 +63,14 @@ internal sealed class UnitOfWork<TId>(ApplicationDbContext dbContext)
         }
 
         _transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+    }
+
+    public async Task BeginSerializableTransaction(CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (dbContext.Database.CurrentTransaction is not null) return;
+        _transaction = await dbContext.Database.BeginTransactionAsync(
+            IsolationLevel.Serializable, cancellationToken);
     }
 
     public async Task CommitTransaction(CancellationToken cancellationToken = default)

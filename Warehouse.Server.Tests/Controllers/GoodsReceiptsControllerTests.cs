@@ -15,6 +15,7 @@ using Warehouse.Application.Features.Auditing.Queries.GetGoodsReceiptItemHistory
 using Warehouse.Application.Features.Inventory.GoodsReceipts.Commands.CreateGoodsReceipt;
 using Warehouse.Application.Features.Inventory.GoodsReceipts.Commands.UpdateGoodsReceipt;
 using Warehouse.Application.Features.Inventory.GoodsReceipts.Queries.GetGoodsReceiptItemRows;
+using Warehouse.Application.Features.Inventory.GoodsReceipts.Queries.GetGoodsReceiptMetrics;
 using Warehouse.Domain.Enums;
 using Warehouse.Server.Contracts.Inventory;
 using Warehouse.Server.Controllers;
@@ -23,10 +24,36 @@ namespace Warehouse.Server.Tests.Controllers;
 
 public sealed class GoodsReceiptsControllerTests
 {
+    [Fact]
+    public async Task GetMetrics_OnlyRequestsCountsAllowedByIndividualPolicies()
+    {
+        var sender = Substitute.For<ISender>();
+        var auth = Substitute.For<IAuthorizationService>();
+        auth.AuthorizeAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<object?>(), Arg.Any<string>())
+            .Returns(call => call.ArgAt<string>(2) switch
+            {
+                PermissionPolicyNames.Inventory.GoodsReceiptsMissingReceiptCountRead => AuthorizationResult.Success(),
+                PermissionPolicyNames.Inventory.GoodsReceiptsTodayDocumentCountRead => AuthorizationResult.Success(),
+                _ => AuthorizationResult.Failed()
+            });
+        sender.Send(Arg.Any<GetGoodsReceiptMetricsQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result<GoodsReceiptMetrics>.Success(new(4, null, null, 2)));
+        var controller = new GoodsReceiptsController(sender, auth)
+        { ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() } };
+
+        var response = await controller.GetMetrics(default);
+
+        Assert.IsType<OkObjectResult>(response.Result);
+        await sender.Received(1).Send(Arg.Is<GetGoodsReceiptMetricsQuery>(query =>
+            query.IncludeMissingReceipt && !query.IncludeMissingInvoice &&
+            !query.IncludeTodayItems && query.IncludeTodayDocuments), Arg.Any<CancellationToken>());
+    }
+
     [Theory]
     [InlineData(nameof(GoodsReceiptsController.Import), PermissionPolicyNames.Inventory.GoodsReceiptsImport)]
     [InlineData(nameof(GoodsReceiptsController.ExportItems), PermissionPolicyNames.Inventory.GoodsReceiptsExport)]
     [InlineData(nameof(GoodsReceiptsController.GetItemHistory), PermissionPolicyNames.Inventory.GoodsReceiptHistoryRead)]
+    [InlineData(nameof(GoodsReceiptsController.GetMetrics), PermissionPolicyNames.Inventory.GoodsReceiptsRead)]
     public void ImportAndExport_UseTheirDedicatedPolicies(string actionName, string expectedPolicy)
     {
         var action = typeof(GoodsReceiptsController).GetMethod(actionName)!;

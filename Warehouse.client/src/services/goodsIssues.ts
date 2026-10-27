@@ -10,11 +10,11 @@ export interface GoodsIssueItem {
   productCode: string
   quantity: number
   assetNumber: string | null
-  destinationId: string
-  destinationTitle: string
-  exitReason: string
+  destinationId: string | null
+  destinationTitle: string | null
+  exitReason: string | null
   description: string | null
-  deliveringUnit: string
+  deliveringUnit: string | null
   returnAtUtc: string | null
 }
 
@@ -47,6 +47,20 @@ export interface GoodsIssueList<T> {
 
 export interface GoodsIssueOptions {
   people: Array<{ id: string; fullName: string; phoneNumber: string }>
+}
+
+export interface GoodsIssueImportSummary {
+  processedRowCount: number
+  importedIssueCount: number
+  importedItemCount: number
+  createdIssuerCount: number
+  invalidRows: Array<{ sheet: string; rowNumber: number; message: string }>
+}
+
+export function importGoodsIssues(file: File, signal?: AbortSignal): Promise<GoodsIssueImportSummary> {
+  const body = new FormData()
+  body.append('File', file)
+  return request('/endpoint/inventory/goods-issues/import', { method: 'POST', body, signal }, 'ایمپورت خروج کالا انجام نشد.')
 }
 
 export interface SaveGoodsIssueItem {

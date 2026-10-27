@@ -60,9 +60,9 @@ internal sealed class GetGoodsIssueItemsQueryHandler(IUnitOfWork<Guid> unitOfWor
                 item.GoodsIssue.Issuer.FullName.Contains(search) ||
                 item.ProductCode.Contains(search) ||
                 (item.AssetNumber != null && item.AssetNumber.Contains(search)) ||
-                item.Destination.Title.Contains(search) ||
-                item.ExitReason.Contains(search) ||
-                item.DeliveringUnit.Contains(search));
+                (item.Destination != null && item.Destination.Title.Contains(search)) ||
+                (item.ExitReason != null && item.ExitReason.Contains(search)) ||
+                (item.DeliveringUnit != null && item.DeliveringUnit.Contains(search)));
         }
         query = query
             .ApplyDateFilter(request.IssuedAt, item => item.GoodsIssue.IssuedAtUtc)
@@ -83,6 +83,7 @@ internal sealed class GetGoodsIssueItemsQueryHandler(IUnitOfWork<Guid> unitOfWor
         var data = await repository.ToListAsync(query.Select(item => new GoodsIssueItemRowSummary
         {
             Id = item.Id,
+            GoodsReceiptItemIds = item.GoodsReceiptItems.Select(receiptItem => receiptItem.Id).ToArray(),
             GoodsIssueId = item.GoodsIssueId,
             IssueNumber = item.GoodsIssue.IssueNumber,
             IssuedAtUtc = item.GoodsIssue.IssuedAtUtc,
@@ -95,7 +96,7 @@ internal sealed class GetGoodsIssueItemsQueryHandler(IUnitOfWork<Guid> unitOfWor
             Quantity = item.Quantity,
             AssetNumber = item.AssetNumber,
             DestinationId = item.DestinationId,
-            DestinationTitle = item.Destination.Title,
+            DestinationTitle = item.Destination == null ? null : item.Destination.Title,
             ExitReason = item.ExitReason,
             Description = item.Description,
             DeliveringUnit = item.DeliveringUnit,
@@ -111,15 +112,20 @@ internal sealed class GetGoodsIssueItemsQueryHandler(IUnitOfWork<Guid> unitOfWor
         bool descending) =>
         (sortBy?.Trim().ToLowerInvariant(), descending) switch
         {
-            ("issuenumber", false) => query.OrderBy(item => item.GoodsIssue.IssueNumber).ThenBy(item => item.Id),
-            ("issuenumber", true) => query.OrderByDescending(item => item.GoodsIssue.IssueNumber).ThenByDescending(item => item.Id),
+            ("issuenumber", false) => query.OrderBy(item => item.GoodsIssue.IssueNumber)
+                .ThenBy(item => item.GoodsIssueId).ThenBy(item => item.SortOrder).ThenBy(item => item.Id),
+            ("issuenumber", true) => query.OrderByDescending(item => item.GoodsIssue.IssueNumber)
+                .ThenBy(item => item.GoodsIssueId).ThenBy(item => item.SortOrder).ThenBy(item => item.Id),
             ("productcode", false) => query.OrderBy(item => item.ProductCode).ThenBy(item => item.Id),
             ("productcode", true) => query.OrderByDescending(item => item.ProductCode).ThenByDescending(item => item.Id),
             ("quantity", false) => query.OrderBy(item => item.Quantity).ThenBy(item => item.Id),
             ("quantity", true) => query.OrderByDescending(item => item.Quantity).ThenByDescending(item => item.Id),
-            ("destinationtitle", false) => query.OrderBy(item => item.Destination.Title).ThenBy(item => item.Id),
-            ("destinationtitle", true) => query.OrderByDescending(item => item.Destination.Title).ThenByDescending(item => item.Id),
+            ("destinationtitle", false) => query.OrderBy(item => item.Destination == null ? null : item.Destination.Title).ThenBy(item => item.Id),
+            ("destinationtitle", true) => query.OrderByDescending(item => item.Destination == null ? null : item.Destination.Title).ThenByDescending(item => item.Id),
             ("issuedatutc", false) => query.OrderBy(item => item.GoodsIssue.IssuedAtUtc).ThenBy(item => item.Id),
-            _ => query.OrderByDescending(item => item.GoodsIssue.IssuedAtUtc).ThenByDescending(item => item.Id)
+            ("issuedatutc", true) => query.OrderByDescending(item => item.GoodsIssue.IssuedAtUtc)
+                .ThenBy(item => item.GoodsIssueId).ThenBy(item => item.SortOrder).ThenBy(item => item.Id),
+            _ => query.OrderBy(item => item.GoodsIssue.IssueNumber)
+                .ThenBy(item => item.GoodsIssueId).ThenBy(item => item.SortOrder).ThenBy(item => item.Id)
         };
 }

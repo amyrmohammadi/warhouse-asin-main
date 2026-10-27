@@ -9,6 +9,7 @@ export type InvoiceStatusFilter = InvoiceStatus | 'NotEntered'
 
 export interface GoodsReceiptItem {
   id: string
+  issueNumber: string | null
   productId: string
   productTitle: string
   productCode: string
@@ -47,6 +48,7 @@ export interface GoodsReceiptListResponse {
 
 export interface GoodsReceiptItemRow {
   id: string
+  issueNumber: string | null
   goodsReceiptId: string
   productId: string
   productTitle: string
@@ -73,6 +75,13 @@ export interface GoodsReceiptItemRowListResponse {
   filteredCount: number
   pageNumber: number
   pageSize: number
+}
+
+export interface GoodsReceiptMetrics {
+  itemsWithoutReceiptCount: number | null
+  itemsWithoutInvoiceCount: number | null
+  todayItemCount: number | null
+  todayDocumentCount: number | null
 }
 
 export interface EntityHistoryChange {
@@ -115,16 +124,19 @@ export interface GoodsReceiptListParameters {
   quantity?: NumericFilterValue
   invoiceNumber?: TextFilterValue
   receiptNumber?: TextFilterValue
+  receiptNumberIsEmpty?: boolean
   warehouseId?: string
   delivererId?: string
   supplierId?: string
   invoiceStatus?: InvoiceStatusFilter
+  quickFilter?: 'MissingReceipt' | 'MissingInvoice' | 'Today'
   sortBy?: string
   sortDescending?: boolean
   signal?: AbortSignal
 }
 
 export interface CreateGoodsReceiptItemRequest {
+  issueNumber: string | null
   productId: string | null
   productTitle: string | null
   productCode: string | null
@@ -207,6 +219,10 @@ export function getGoodsReceiptItems(
   }, 'دریافت ردیف‌های کالای ورودی انجام نشد.')
 }
 
+export function getGoodsReceiptMetrics(signal?: AbortSignal): Promise<GoodsReceiptMetrics> {
+  return request<GoodsReceiptMetrics>(`${basePath}/metrics`, { signal }, 'دریافت آمار ورود کالا انجام نشد.')
+}
+
 export function getGoodsReceiptItemHistory(
   itemId: string,
   signal?: AbortSignal,
@@ -271,6 +287,8 @@ function appendListParameters(
     ['delivererId', parameters.delivererId],
     ['supplierId', parameters.supplierId],
     ['invoiceStatus', parameters.invoiceStatus],
+    ['receiptNumberIsEmpty', parameters.receiptNumberIsEmpty ? 'true' : undefined],
+    ['quickFilter', parameters.quickFilter],
     ['sortBy', parameters.sortBy],
   ]
   values.forEach(([key, value]) => {

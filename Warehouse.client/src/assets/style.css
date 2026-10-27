@@ -41,11 +41,14 @@
   color: var(--text-primary);
   font-size: .7325rem;
   line-height: 1.35;
-  padding: .4rem .55rem !important;
   position: relative;
   text-align: center;
   vertical-align: middle;
   white-space: nowrap;
+     
+}
+.inventory-data-page .inventory-table-container .inventory-data-table > tbody > tr > td{
+   padding: .1rem .05rem !important
 }
 
 .inventory-data-page .inventory-table-container .inventory-data-table > thead > tr > th {
@@ -53,6 +56,7 @@
   border-bottom: 1px solid var(--border-color) !important;
   font-family: "iransans-medium", sans-serif;
   font-weight: normal;
+  padding: .4rem .15rem !important
 }
 
 .inventory-data-page .inventory-table-container .inventory-data-table > thead > tr > th + th,
@@ -118,7 +122,6 @@
     flex: 1 1 auto;
   }
 }
-
 
 .vpd-input-group {
   align-items: stretch;

@@ -8,6 +8,7 @@ using Warehouse.Application.Common.Concurrency;
 using Warehouse.Application.Common.Models;
 using Warehouse.Application.Common.Models.Inventory;
 using Warehouse.Application.Features.Inventory.GoodsIssues.Commands.DeleteGoodsIssue;
+using Warehouse.Application.Features.Inventory.GoodsIssues.Commands.ImportGoodsIssues;
 using Warehouse.Application.Features.Inventory.GoodsIssues.Commands.SaveGoodsIssue;
 using Warehouse.Application.Features.Inventory.GoodsIssues.Queries.GetGoodsIssueById;
 using Warehouse.Application.Features.Inventory.GoodsIssues.Queries.GetGoodsIssueItems;
@@ -24,6 +25,23 @@ public sealed class GoodsIssuesController(
     IAuthorizationService authorizationService) : ControllerBase
 {
     private const int ExportBatchSize = 100;
+
+    [Authorize(Policy = PermissionPolicyNames.Inventory.GoodsIssuesImport)]
+    [HttpPost("import")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(51 * 1024 * 1024)]
+    public async Task<ActionResult<Result<GoodsIssueImportSummary>>> Import(
+        [FromForm] ImportGoodsIssuesRequest request, CancellationToken cancellationToken)
+    {
+        if (request.File is null || request.File.Length == 0)
+            return BadRequest(Result<GoodsIssueImportSummary>.Error("فایل Excel را انتخاب کنید."));
+        if (request.File.Length > ImportGoodsIssuesCommand.MaxFileSizeBytes)
+            return BadRequest(Result<GoodsIssueImportSummary>.Error("حجم فایل نباید بیشتر از ۵۰ مگابایت باشد."));
+        await using var stream = new MemoryStream();
+        await request.File.CopyToAsync(stream, cancellationToken);
+        var result = await sender.Send(new ImportGoodsIssuesCommand(request.File.FileName, stream.ToArray()), cancellationToken);
+        return result.IsSuccess ? Ok(result) : BadRequest(result);
+    }
 
     [Authorize(Policy = PermissionPolicyNames.Inventory.GoodsIssuesRead)]
     [HttpGet]

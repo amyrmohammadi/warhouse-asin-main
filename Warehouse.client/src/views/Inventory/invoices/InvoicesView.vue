@@ -17,16 +17,16 @@ import { useUnauthorizedRedirect } from '@/composables/useUnauthorizedRedirect'
 import {
   getInvoice,
   getInvoices,
-  updateInvoiceItem,
+  updateInvoice,
   type InvoiceDetails,
-  type InvoiceItem,
   type InvoiceListParameters,
   type InvoiceSummary,
+  type UpdateInvoiceRequest,
 } from '@/services/invoices'
 import { toast } from '@/services/toast'
 import type { DataTableFilterDefinition } from '@/types/dataTableFilters'
 import { createRowNumberColumn } from '@/utils/dataTable'
-import { formatPersianNumber } from '@/utils/dateTime'
+import { formatPersianDate, formatPersianNumber } from '@/utils/dateTime'
 import { createInventoryTableOptions } from '@/utils/inventoryTable'
 import '@/styles/inventory-list.css'
 
@@ -40,16 +40,20 @@ const VIEW_MODES = [{ value: 'invoices', label: 'فاکتورها' }]
 const tableMode = ref<TableMode>('invoices')
 const tableContainer = ref<HTMLElement | null>(null)
 const detailsOpen = ref(false)
-const selectedInvoice = ref<InvoiceSummary | null>(null)
 const invoiceDetails = ref<InvoiceDetails | null>(null)
 const detailsLoading = ref(false)
 const detailsError = ref<string | null>(null)
-const editingItem = ref<InvoiceItem | null>(null)
+const editMode = ref(false)
 const editSaving = ref(false)
-const editError = ref<string | null>(null)
 
 const { has } = usePermissions()
+const canViewMissingReceiptCount = has('InvoicesMissingReceiptCountRead')
 const canEditItems = has('GoodsReceiptsReceiptInvoiceOperations')
+const statusLabel = {
+  UnderReview: 'در حال رسیدگی',
+  SentToFinance: 'ارسال به واحد مالی',
+  FinanceApproved: 'تأیید واحد مالی',
+}
 
 const { handleUnauthorized } = useUnauthorizedRedirect('/dashboard/inventory/invoices')
 const filters = useFilterState(() => list.reload(true))
@@ -86,17 +90,22 @@ const columns: Record<TableMode, ColumnsConfig[]> = {
   invoices: [
     { ...createRowNumberColumn(), className: 'min-tablet-p text-center data-table-row-number' },
     { data: 'invoiceNumber', name: 'invoiceNumber', title: 'شماره فاکتور', className: 'all text-center' },
+    { data: 'invoiceDate', name: 'invoiceDate', title: 'تاریخ فاکتور', className: 'min-tablet-l text-center' },
     { data: 'counterparty', name: 'counterparty', title: 'طرف حساب', className: 'all' },
+    { data: 'processingStatus', name: 'processingStatus', title: 'وضعیت', className: 'min-tablet-l text-center' },
+    { data: 'description', name: 'description', title: 'توضیحات', className: 'min-desktop', orderable: false },
     {
       data: 'receiptNumbers', name: 'receiptNumbers', title: 'شماره رسیدها',
       className: 'min-tablet-p text-center invoice-receipts-column', orderable: false, searchable: false,
     },
+    ...(canViewMissingReceiptCount
+      ? [{
+          data: 'itemsWithoutReceiptCount', name: 'itemsWithoutReceiptCount', title: 'اقلام بدون رسید',
+          className: 'min-tablet-p text-center text-bold', orderable: false, searchable: false,
+        }]
+      : []),
     {
-      data: 'itemsWithoutReceiptCount', name: 'itemsWithoutReceiptCount', title: 'اقلام بدون رسید',
-      className: 'min-tablet-p text-center text-bold', orderable: false, searchable: false,
-    },
-    {
-      data: 'id', name: 'actions', title: 'کالاها', className: 'all text-center actions-cell',
+      data: 'id', name: 'actions', title: 'عملیات', className: 'all text-center actions-cell',
       orderable: false, searchable: false,
     },
   ],
@@ -142,9 +151,9 @@ const tableOptions: Config = createInventoryTableOptions({
 const detailsChannel = useRequestChannel()
 async function openItems(invoice: InvoiceSummary): Promise<void> {
   const controller = detailsChannel.begin()
-  selectedInvoice.value = invoice
   invoiceDetails.value = null
   detailsError.value = null
+  editMode.value = false
   detailsLoading.value = true
   detailsOpen.value = true
   try {
@@ -166,71 +175,45 @@ function closeDetails(value: boolean): void {
   if (!value) {
     detailsChannel.abort()
     detailsLoading.value = false
-    editingItem.value = null
+    editMode.value = false
   }
 }
 
-function openItemEdit(item: InvoiceItem): void {
-  editingItem.value = item
-  editError.value = null
-}
-
-const editChannel = useRequestChannel()
-async function saveItem(receiptNumber: string | null): Promise<void> {
-  const invoice = selectedInvoice.value
-  const item = editingItem.value
-  if (!invoice || !item || editSaving.value) return
-
-  const controller = editChannel.begin()
+async function saveInvoice(values: UpdateInvoiceRequest): Promise<void> {
+  const details = invoiceDetails.value
+  if (!details || editSaving.value) return
+  const controller = detailsChannel.begin()
   editSaving.value = true
-  editError.value = null
+  detailsError.value = null
   try {
-    const result = await updateInvoiceItem(invoice.id, item.id, {
-      receiptNumber,
-      concurrencyStamp: item.goodsReceiptConcurrencyStamp,
-    }, controller.signal)
-
-    for (const current of invoiceDetails.value?.items ?? []) {
-      if (current.goodsReceiptId === item.goodsReceiptId)
-        current.goodsReceiptConcurrencyStamp = result.concurrencyStamp
-      if (current.id === result.id) current.receiptNumber = result.receiptNumber
-    }
-    editingItem.value = null
+    invoiceDetails.value = await updateInvoice(details.id, values, controller.signal)
+    editMode.value = false
     list.reload(false)
-    toast.success(receiptNumber ? 'شماره رسید با موفقیت ذخیره شد.' : 'شماره رسید حذف شد.')
+    toast.success('فاکتور با موفقیت ویرایش شد.')
   } catch (error) {
     if (isAbortError(error)) return
     if (await handleUnauthorized(error)) return
-    editError.value = error instanceof Error ? error.message : 'ذخیره شماره رسید انجام نشد.'
+    detailsError.value = error instanceof Error ? error.message : 'ویرایش فاکتور انجام نشد.'
   } finally {
-    if (editChannel.isCurrent(controller)) {
-      editChannel.end(controller)
+    if (detailsChannel.isCurrent(controller)) {
+      detailsChannel.end(controller)
       editSaving.value = false
     }
-  }
-}
-
-function cancelItemEdit(): void {
-  if (!editSaving.value) {
-    editChannel.abort()
-    editingItem.value = null
-    editError.value = null
   }
 }
 
 onBeforeUnmount(() => {
   if (highlightFrame !== null) cancelAnimationFrame(highlightFrame)
   detailsChannel.abort()
-  editChannel.abort()
 })
 </script>
 
 <template>
-  <InvoiceItemsModal :model-value="detailsOpen" :invoice="selectedInvoice" :details="invoiceDetails"
+  <InvoiceItemsModal :model-value="detailsOpen" :details="invoiceDetails"
                      :loading="detailsLoading" :error="detailsError" :can-edit="canEditItems"
-                     :editing-item-id="editingItem?.id ?? null" :saving="editSaving"
-                     :edit-error="editError" @edit="openItemEdit" @save="saveItem"
-                     @cancel-edit="cancelItemEdit" @update:model-value="closeDetails" />
+                     :edit-mode="editMode" :saving="editSaving"
+                     @update:edit-mode="editMode = $event; detailsError = null"
+                     @save="saveInvoice" @update:model-value="closeDetails" />
 
   <div class="container-fluid users-page invoices-page inventory-data-page">
     <div class="page-titles">
@@ -267,6 +250,9 @@ onBeforeUnmount(() => {
               <strong class="invoice-number" dir="ltr">{{ cellData }}</strong>
             </template>
             <template #column-counterparty="{ cellData }">{{ cellData || '—' }}</template>
+            <template #column-invoiceDate="{ cellData }">{{ formatPersianDate(cellData) }}</template>
+            <template #column-processingStatus="{ cellData }">{{ statusLabel[cellData as keyof typeof statusLabel] ?? '—' }}</template>
+            <template #column-description="{ cellData }">{{ cellData || '—' }}</template>
             <template #column-receiptNumbers="{ cellData }">
               <div v-if="(cellData as string[]).length" class="invoice-receipt-numbers">
                 <span v-for="receiptNumber in (cellData as string[])" :key="receiptNumber"
@@ -280,8 +266,8 @@ onBeforeUnmount(() => {
               </span>
             </template>
             <template #column-actions="{ rowData }">
-              <button class="btn users-table__role-action" type="button" title="مشاهده کالاهای فاکتور"
-                      aria-label="مشاهده کالاهای فاکتور" @click="openItems(rowData)">
+              <button class="btn users-table__role-action" type="button" title="مشاهده فاکتور"
+                      aria-label="مشاهده فاکتور" @click="openItems(rowData)">
                 <i class="las la-boxes" aria-hidden="true"></i>
               </button>
             </template>

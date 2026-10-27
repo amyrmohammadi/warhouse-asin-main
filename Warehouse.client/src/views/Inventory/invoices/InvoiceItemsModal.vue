@@ -1,157 +1,228 @@
 <script setup lang="ts">
-import { nextTick, ref } from 'vue'
+import { reactive, ref, watch } from 'vue'
+import DatePicker from 'vue3-persian-datetime-picker'
 
 import BaseModal from '@/components/BaseModal.vue'
-import type { InvoiceDetails, InvoiceItem, InvoiceSummary } from '@/services/invoices'
+import SupplierSelect from '@/components/selectors/SupplierSelect.vue'
+import type { InvoiceDetails, InvoiceProcessingStatus, UpdateInvoiceRequest } from '@/services/invoices'
 import { formatPersianDate, formatPersianNumber } from '@/utils/dateTime'
 
-defineProps<{
+const props = defineProps<{
   modelValue: boolean
-  invoice: InvoiceSummary | null
   details: InvoiceDetails | null
   loading: boolean
   error: string | null
   canEdit: boolean
-  editingItemId: string | null
+  editMode: boolean
   saving: boolean
-  editError: string | null
 }>()
 
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
-  edit: [item: InvoiceItem]
-  'cancel-edit': []
-  save: [receiptNumber: string | null]
+  'update:editMode': [value: boolean]
+  save: [values: UpdateInvoiceRequest]
 }>()
 
-const receiptNumber = ref('')
-const receiptInputs = ref<HTMLInputElement[]>([])
-
-async function startEdit(item: InvoiceItem): Promise<void> {
-  receiptNumber.value = item.receiptNumber ?? ''
-  emit('edit', item)
-  await nextTick()
-  receiptInputs.value[0]?.focus()
-  receiptInputs.value[0]?.select()
+const statusLabel: Record<InvoiceProcessingStatus, string> = {
+  UnderReview: 'در حال رسیدگی',
+  SentToFinance: 'ارسال به واحد مالی',
+  FinanceApproved: 'تأیید واحد مالی',
 }
 
-function save(): void {
-  const value = receiptNumber.value.trim()
-  emit('save', value || null)
-}
+const form = reactive({
+  invoiceNumber: '',
+  supplierId: null as string | null,
+  supplierText: '',
+  description: '',
+  invoiceDate: '',
+  processingStatus: 'UnderReview' as InvoiceProcessingStatus,
+  items: [] as Array<{ id: string; receiptNumber: string; goodsReceiptConcurrencyStamp: string }>,
+})
+const formError = ref('')
 
-function cancelEdit(): void {
-  receiptNumber.value = ''
-  emit('cancel-edit')
+watch([() => props.editMode, () => props.details], ([editing, details]) => {
+  if (!editing || !details) return
+  formError.value = ''
+  form.invoiceNumber = details.invoiceNumber
+  form.supplierId = details.supplierId
+  form.supplierText = details.counterparty ?? ''
+  form.description = details.description ?? ''
+  form.invoiceDate = details.invoiceDate ?? ''
+  form.processingStatus = details.processingStatus
+  form.items = details.items.map(item => ({
+    id: item.id,
+    receiptNumber: item.receiptNumber ?? '',
+    goodsReceiptConcurrencyStamp: item.goodsReceiptConcurrencyStamp,
+  }))
+})
+
+function submit(): void {
+  if (!props.details || !props.editMode || props.saving) return
+  formError.value = ''
+  if (!form.invoiceNumber.trim()) {
+    formError.value = 'شماره فاکتور الزامی است.'
+    return
+  }
+  if (!form.supplierId && form.supplierText.trim()) {
+    formError.value = 'طرف حساب را از فهرست انتخاب کنید یا کادر را خالی بگذارید.'
+    return
+  }
+  emit('save', {
+    invoiceNumber: form.invoiceNumber.trim(),
+    supplierId: form.supplierId,
+    description: form.description.trim() || null,
+    invoiceDate: form.invoiceDate || null,
+    processingStatus: form.processingStatus,
+    items: form.items.map(item => ({
+      id: item.id,
+      receiptNumber: item.receiptNumber.trim() || null,
+      goodsReceiptConcurrencyStamp: item.goodsReceiptConcurrencyStamp,
+    })),
+  })
 }
 </script>
 
 <template>
   <BaseModal :model-value="modelValue" size="xl" modal-class="invoice-items-modal" :busy="saving"
-             :title="`کالاهای فاکتور ${invoice?.invoiceNumber ?? ''}`"
+             :title="`${editMode ? 'ویرایش' : 'مشاهده'} فاکتور ${details?.invoiceNumber ?? ''}`"
              @update:model-value="$emit('update:modelValue', $event)">
-    <div v-if="invoice" class="invoice-items-modal__summary">
-      <div><span>شماره فاکتور</span><strong dir="ltr">{{ invoice.invoiceNumber }}</strong></div>
-      <div><span>طرف حساب</span><strong>{{ invoice.counterparty || '—' }}</strong></div>
-    </div>
-
     <div v-if="loading" class="invoice-items-modal__state">
       <span class="spinner-border text-primary" aria-hidden="true"></span>
-      <span>در حال دریافت کالاهای فاکتور...</span>
+      <span>در حال دریافت فاکتور...</span>
     </div>
-    <div v-else-if="error" class="alert alert-danger mb-0" role="alert">{{ error }}</div>
-    <div v-else-if="details && details.items.length">
-      <div v-if="editError" class="alert alert-danger py-2" role="alert">{{ editError }}</div>
-      <div class="table-responsive">
-      <table class="table table-sm table-striped invoice-items-table mb-0">
-        <thead>
-          <tr>
-            <th class="text-center">ردیف</th>
-            <th>عنوان کالا</th>
-            <th>کد کالا</th>
-            <th>تعداد</th>
-            <th>واحد</th>
-            <th>انبار</th>
-            <th>تاریخ ورود</th>
-            <th>شماره صفحه</th>
-            <th>شماره رسید</th>
-            <th v-if="canEdit" class="text-center">عملیات</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="(item, index) in details.items" :key="item.id">
-            <td class="text-center">{{ formatPersianNumber(index + 1) }}</td>
-            <td><strong>{{ item.productTitle }}</strong></td>
-            <td><span dir="ltr">{{ item.productCode }}</span></td>
-            <td>{{ formatPersianNumber(item.quantity) }}</td>
-            <td>{{ item.unitOfMeasureTitle }}</td>
-            <td>{{ item.warehouseTitle }}</td>
-            <td>{{ formatPersianDate(item.enteredAtUtc) }}</td>
-            <td><span dir="ltr">{{ item.pageNumber }}</span></td>
-            <td>
-              <input v-if="editingItemId === item.id" ref="receiptInputs" v-model="receiptNumber"
-                     class="form-control form-control-sm invoice-items-table__receipt-input"
-                     type="text" maxlength="100" autocomplete="off" dir="ltr"
-                     aria-label="شماره رسید" :disabled="saving"
-                     @keydown.enter.prevent="save" @keydown.esc.prevent="cancelEdit">
-              <template v-else>
-                <span v-if="item.receiptNumber" dir="ltr">{{ item.receiptNumber }}</span>
-                <span v-else class="badge badge-light text-muted">ثبت نشده</span>
-              </template>
-            </td>
-            <td v-if="canEdit" class="text-center">
-              <div v-if="editingItemId === item.id" class="invoice-items-table__inline-actions">
-                <button class="btn btn-sm btn-success" type="button" title="ذخیره شماره رسید"
-                        aria-label="ذخیره شماره رسید" :disabled="saving" @click="save">
-                  <span v-if="saving" class="spinner-border spinner-border-sm" aria-hidden="true"></span>
-                  <i v-else class="las la-check" aria-hidden="true"></i>
-                </button>
-                <button class="btn btn-sm btn-light" type="button" title="انصراف" aria-label="انصراف"
-                        :disabled="saving" @click="cancelEdit">
-                  <i class="las la-times" aria-hidden="true"></i>
-                </button>
-              </div>
-              <button v-else class="btn invoice-items-table__edit" type="button"
-                      :title="item.receiptNumber ? 'ویرایش شماره رسید' : 'ثبت شماره رسید'"
-                      :aria-label="item.receiptNumber ? 'ویرایش شماره رسید' : 'ثبت شماره رسید'"
-                      :disabled="saving" @click="startEdit(item)">
-                <i class="las la-edit" aria-hidden="true"></i>
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+    <div v-else-if="!details" class="alert alert-danger mb-0" role="alert">{{ error || 'فاکتور پیدا نشد.' }}</div>
+    <form v-else id="invoice-details-form" @submit.prevent="submit">
+      <div v-if="error" class="alert alert-danger py-2" role="alert">{{ error }}</div>
+      <div v-if="formError" class="alert alert-danger py-2" role="alert">{{ formError }}</div>
+
+      <div v-if="editMode" class="row">
+        <div class="col-md-3 form-group">
+          <label for="invoice-number">شماره فاکتور</label>
+          <input id="invoice-number" v-model="form.invoiceNumber" class="form-control" type="text"
+                 maxlength="100" required dir="ltr" :disabled="saving" />
+        </div>
+        <div class="col-md-3 form-group">
+          <SupplierSelect class="invoice-items-modal__supplier" :model-value="form.supplierId"
+                          :text="form.supplierText" label="طرف حساب"
+                          placeholder="انتخاب طرف حساب" :disabled="saving"
+                          @update:model-value="form.supplierId = $event"
+                          @update:text="form.supplierText = $event" />
+        </div>
+        <div class="col-md-3 form-group">
+          <label>تاریخ فاکتور</label>
+          <DatePicker v-model="form.invoiceDate" type="date" format="YYYY-MM-DD"
+                      display-format="jYYYY/jMM/jDD" placeholder="تاریخ فاکتور را انتخاب کنید"
+                      color="#2563eb" :editable="true" :clearable="true" :disabled="saving" />
+        </div>
+        <div class="col-md-3 form-group">
+          <label for="invoice-processing-status">وضعیت فاکتور</label>
+          <select id="invoice-processing-status" v-model="form.processingStatus" class="form-control" :disabled="saving">
+            <option value="UnderReview">در حال رسیدگی</option>
+            <option value="SentToFinance">ارسال به واحد مالی</option>
+            <option value="FinanceApproved">تأیید واحد مالی</option>
+          </select>
+        </div>
+        <div class="col-12 form-group">
+          <label for="invoice-description">توضیحات</label>
+          <textarea id="invoice-description" v-model="form.description" class="form-control"
+                    rows="2" maxlength="1000" :disabled="saving"></textarea>
+        </div>
       </div>
-    </div>
-    <div v-else class="invoice-items-modal__state text-muted">کالایی برای این فاکتور ثبت نشده است.</div>
+      <div v-else class="invoice-items-modal__summary">
+        <div><span>شماره فاکتور</span><strong dir="ltr">{{ details.invoiceNumber }}</strong></div>
+        <div><span>طرف حساب</span><strong>{{ details.counterparty || '—' }}</strong></div>
+        <div><span>تاریخ فاکتور</span><strong>{{ formatPersianDate(details.invoiceDate) }}</strong></div>
+        <div><span>وضعیت فاکتور</span><strong>{{ statusLabel[details.processingStatus] ?? '—' }}</strong></div>
+        <div class="invoice-items-modal__description"><span>توضیحات</span><strong>{{ details.description || '—' }}</strong></div>
+      </div>
+
+      <h6 class="mb-2">اقلام و رسیدهای فاکتور</h6>
+      <div v-if="!details.items.length" class="invoice-items-modal__state text-muted">کالایی برای این فاکتور ثبت نشده است.</div>
+      <div v-else class="table-responsive">
+        <table class="table table-sm table-striped invoice-items-table mb-0">
+          <thead>
+            <tr>
+              <th class="text-center">ردیف</th><th>عنوان کالا</th><th>کد کالا</th><th>تعداد</th>
+              <th>واحد</th><th>انبار</th><th>تاریخ ورود</th><th>شماره صفحه</th><th>شماره رسید</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(item, index) in details.items" :key="item.id">
+              <td class="text-center">{{ formatPersianNumber(index + 1) }}</td>
+              <td><strong>{{ item.productTitle }}</strong></td>
+              <td dir="ltr">{{ item.productCode }}</td>
+              <td>{{ formatPersianNumber(item.quantity) }}</td>
+              <td>{{ item.unitOfMeasureTitle }}</td>
+              <td>{{ item.warehouseTitle }}</td>
+              <td>{{ formatPersianDate(item.enteredAtUtc) }}</td>
+              <td dir="ltr">{{ item.pageNumber }}</td>
+              <td>
+                <input v-if="editMode" v-model="form.items[index].receiptNumber"
+                       class="form-control form-control-sm invoice-items-table__receipt-input"
+                       type="text" maxlength="100" dir="ltr" :disabled="saving"
+                       :aria-label="`شماره رسید ردیف ${index + 1}`" />
+                <span v-else-if="item.receiptNumber" dir="ltr">{{ item.receiptNumber }}</span>
+                <span v-else class="badge badge-light text-muted">ثبت نشده</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </form>
+    <template #footer="{ close }">
+      <button v-if="editMode" class="btn btn-light" type="button" :disabled="saving"
+              @click="$emit('update:editMode', false)">انصراف از ویرایش</button>
+      <button v-else class="btn btn-light" type="button" @click="close">بستن</button>
+      <button v-if="editMode" class="btn btn-primary" type="submit" form="invoice-details-form" :disabled="saving">
+        <span v-if="saving" class="spinner-border spinner-border-sm mr-1" aria-hidden="true"></span>
+        ذخیره فاکتور
+      </button>
+      <button v-else-if="canEdit && details" class="btn btn-primary" type="button"
+              @click="$emit('update:editMode', true)">ویرایش فاکتور</button>
+    </template>
   </BaseModal>
 </template>
 
 <style scoped>
 .invoice-items-modal__summary {
-  background: var(--body-bg); border: 1px solid var(--border-color); border-radius: .65rem;
-  display: grid; gap: .75rem 1.5rem; grid-template-columns: repeat(2, minmax(0, 1fr));
+  background: #f2f3ff; border: 1px solid var(--border-color); border-radius: .65rem;
+  display: grid; gap: .75rem 1.5rem; grid-template-columns: repeat(4, minmax(0, 1fr));
   margin-bottom: 1rem; padding: .85rem 1rem;
 }
+:global(body[data-app-theme='dark'] .invoice-items-modal__summary) { background: var(--body-bg, transparent); }
 .invoice-items-modal__summary > div { display: flex; flex-direction: column; gap: .25rem; }
 .invoice-items-modal__summary span { color: var(--text-secondary); font-size: .75rem; }
 .invoice-items-modal__summary strong { color: var(--text-primary); }
+.invoice-items-modal__description { grid-column: 1 / -1; white-space: pre-wrap; }
 .invoice-items-modal__state { align-items: center; display: flex; gap: .7rem; justify-content: center; min-height: 9rem; }
 .invoice-items-table th { white-space: nowrap; }
 .invoice-items-table td { vertical-align: middle; }
-.invoice-items-table__edit {
-  align-items: center; background: rgba(var(--primary-rgb, 89, 59, 219), .1);
-  border: 0; border-radius: .4rem; color: var(--primary); display: inline-flex;
-  font-size: 1.15rem; height: 2rem; justify-content: center; padding: 0; width: 2rem;
-}
-.invoice-items-table__edit:hover { background: var(--primary); color: #fff; }
 .invoice-items-table__receipt-input { min-width: 8rem; text-align: center; }
-.invoice-items-table__inline-actions { display: inline-flex; gap: .3rem; }
-.invoice-items-table__inline-actions .btn {
-  align-items: center; display: inline-flex; font-size: 1.05rem; height: 2rem;
-  justify-content: center; padding: 0; width: 2rem;
+.invoice-items-modal__supplier :deep(.supplier-select__label) {
+  color: inherit;
+  font-size: inherit;
+  font-weight: 400;
+  line-height: inherit;
+  margin-bottom: .5rem;
+  padding: 0;
+}
+.invoice-items-modal__supplier :deep(.supplier-select__control .form-control) {
+  font-family: inherit;
+  font-size: .875rem;
+  font-weight: 400;
+  height: calc(1.5em + .75rem + 2px);
+  line-height: 1.5;
+  padding: .375rem .75rem;
+}
+.invoice-items-modal__supplier :deep(.supplier-select__arrow) { display: none; }
+.invoice-items-modal__supplier :deep(.supplier-select__option) {
+  font-size: .875rem;
+  padding: .375rem .75rem;
 }
 @media (max-width: 575px) {
   .invoice-items-modal__summary { grid-template-columns: 1fr; }
+}
+@media (min-width: 576px) and (max-width: 991px) {
+  .invoice-items-modal__summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 </style>

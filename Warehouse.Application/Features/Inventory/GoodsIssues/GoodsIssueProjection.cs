@@ -21,6 +21,7 @@ internal static class GoodsIssueProjection
                 .Select(item => new GoodsIssueItemSummary
                 {
                     Id = item.Id,
+                    GoodsReceiptItemIds = item.GoodsReceiptItems.Select(receiptItem => receiptItem.Id).ToArray(),
                     ProductId = item.ProductId,
                     ProductTitle = item.Product == null ? null : item.Product.Title,
                     ProductUnitOfMeasureTitle = item.Product == null ? null : item.Product.UnitOfMeasure.Title,
@@ -28,7 +29,7 @@ internal static class GoodsIssueProjection
                     Quantity = item.Quantity,
                     AssetNumber = item.AssetNumber,
                     DestinationId = item.DestinationId,
-                    DestinationTitle = item.Destination.Title,
+                    DestinationTitle = item.Destination == null ? null : item.Destination.Title,
                     ExitReason = item.ExitReason,
                     Description = item.Description,
                     DeliveringUnit = item.DeliveringUnit,

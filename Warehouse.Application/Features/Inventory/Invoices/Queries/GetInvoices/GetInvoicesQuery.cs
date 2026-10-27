@@ -68,6 +68,9 @@ internal sealed class GetInvoicesQueryHandler(IUnitOfWork<Guid> unitOfWork)
         {
             Id = summary.Id,
             InvoiceNumber = summary.InvoiceNumber,
+            Description = summary.Description,
+            InvoiceDate = summary.InvoiceDate,
+            ProcessingStatus = summary.ProcessingStatus,
             Counterparty = summary.Counterparty,
             ReceiptNumbers = summary.ReceiptNumbers
                 .Distinct(StringComparer.Ordinal)
@@ -94,6 +97,14 @@ internal sealed class GetInvoicesQueryHandler(IUnitOfWork<Guid> unitOfWork)
             ("counterparty", false) => query.OrderBy(invoice => invoice.Supplier == null ? null : invoice.Supplier.Title)
                 .ThenBy(invoice => invoice.InvoiceNumber),
             ("counterparty", true) => query.OrderByDescending(invoice => invoice.Supplier == null ? null : invoice.Supplier.Title)
+                .ThenByDescending(invoice => invoice.InvoiceNumber),
+            ("invoicedate", false) => query.OrderBy(invoice => invoice.InvoiceDate)
+                .ThenBy(invoice => invoice.InvoiceNumber),
+            ("invoicedate", true) => query.OrderByDescending(invoice => invoice.InvoiceDate)
+                .ThenByDescending(invoice => invoice.InvoiceNumber),
+            ("processingstatus", false) => query.OrderBy(invoice => invoice.ProcessingStatus)
+                .ThenBy(invoice => invoice.InvoiceNumber),
+            ("processingstatus", true) => query.OrderByDescending(invoice => invoice.ProcessingStatus)
                 .ThenByDescending(invoice => invoice.InvoiceNumber),
             _ => query.OrderByDescending(invoice => invoice.InvoiceNumber).ThenByDescending(invoice => invoice.Id)
         };

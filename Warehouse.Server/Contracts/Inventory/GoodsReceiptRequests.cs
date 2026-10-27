@@ -24,7 +24,8 @@ public sealed record CreateGoodsReceiptItemRequest(
     string? ReceiptNumber,
     decimal Quantity,
     string? RequestNumber,
-    string? Description);
+    string? Description,
+    string? IssueNumber = null);
 
 
 public sealed class ImportGoodsReceiptsRequest

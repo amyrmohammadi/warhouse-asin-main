@@ -32,10 +32,10 @@ public sealed class GoodsIssue : ConcurrencyEntity<Guid>
         string productCode,
         decimal quantity,
         string? assetNumber,
-        Guid destinationId,
-        string exitReason,
+        Guid? destinationId,
+        string? exitReason,
         string? description,
-        string deliveringUnit,
+        string? deliveringUnit,
         DateTimeOffset? returnAtUtc,
         int sortOrder)
     {

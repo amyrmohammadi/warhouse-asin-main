@@ -1,5 +1,10 @@
 namespace Warehouse.Server.Contracts.Inventory;
 
+public sealed class ImportGoodsIssuesRequest
+{
+    public IFormFile? File { get; init; }
+}
+
 public sealed record SaveGoodsIssueRequest(
     string IssueNumber,
     DateTimeOffset IssuedAtUtc,

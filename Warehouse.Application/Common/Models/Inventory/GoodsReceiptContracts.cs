@@ -26,6 +26,10 @@ public sealed class GoodsReceiptItemSummary
 {
     public Guid Id { get; init; }
 
+    public Guid? GoodsIssueItemId { get; init; }
+
+    public string? IssueNumber { get; init; }
+
     public Guid ProductId { get; init; }
 
     public string ProductTitle { get; init; } = string.Empty;
@@ -67,6 +71,10 @@ public sealed record GoodsReceiptListResult(
 public sealed class GoodsReceiptItemRowSummary
 {
     public Guid Id { get; init; }
+
+    public Guid? GoodsIssueItemId { get; init; }
+
+    public string? IssueNumber { get; init; }
 
     public Guid GoodsReceiptId { get; init; }
 

@@ -14,6 +14,9 @@ public interface IUnitOfWork<TId> : IDisposable, IAsyncDisposable
 
     Task BeginTransaction(CancellationToken cancellationToken = default);
 
+    Task BeginSerializableTransaction(CancellationToken cancellationToken = default) =>
+        BeginTransaction(cancellationToken);
+
     Task CommitTransaction(CancellationToken cancellationToken = default);
 
     Task RollBackTransaction(CancellationToken cancellationToken = default);

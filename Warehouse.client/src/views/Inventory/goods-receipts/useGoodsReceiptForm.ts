@@ -34,6 +34,7 @@ export interface FormItem {
   supplierId: string
   supplierText: string
   receiptNumber: string
+  issueNumber: string
   quantity: number | null
   requestNumber: string
   description: string
@@ -54,7 +55,7 @@ interface Dependencies {
 }
 
 type ItemField = 'product' | 'code' | 'unit' | 'warehouse' | 'invoiceStatus' | 'invoiceNumber'
-  | 'supplier' | 'receiptNumber' | 'quantity' | 'requestNumber' | 'description'
+  | 'supplier' | 'receiptNumber' | 'issueNumber' | 'quantity' | 'requestNumber' | 'description'
 
 /** فیلدهایی که ردیف جدید از ردیف قبلی ارث می‌برد (سرعت ورود اطلاعات). */
 const INHERITED_FIELDS = ['warehouseId', 'invoiceStatus', 'invoiceNumber', 'supplierId', 'supplierText', 'receiptNumber'] as const
@@ -63,7 +64,7 @@ const INHERITED_FIELDS = ['warehouseId', 'invoiceStatus', 'invoiceNumber', 'supp
 const ITEM_FIELD_MAP: [string, ItemField][] = [
   ['producttitle', 'product'], ['productid', 'product'], ['productcode', 'code'], ['unitofmeasure', 'unit'],
   ['warehouse', 'warehouse'], ['invoicenumber', 'invoiceNumber'], ['invoicestatus', 'invoiceStatus'],
-  ['supplier', 'supplier'], ['receiptnumber', 'receiptNumber'], ['quantity', 'quantity'],
+  ['supplier', 'supplier'], ['receiptnumber', 'receiptNumber'], ['issuenumber', 'issueNumber'], ['quantity', 'quantity'],
   ['requestnumber', 'requestNumber'], ['description', 'description'],
 ]
 const FORM_FIELD_MAP: [string, string][] = [
@@ -79,14 +80,14 @@ function newItem(key: number): FormItem {
   return {
     key, productText: '', productId: null, productCode: '', unitOfMeasureId: null, unitOfMeasureTitle: '',
     warehouseId: '', invoiceStatus: null, invoiceNumber: '', supplierId: '', supplierText: '',
-    receiptNumber: '', quantity: null, requestNumber: '', description: '',
+    receiptNumber: '', issueNumber: '', quantity: null, requestNumber: '', description: '',
   }
 }
 
 function itemHasContent(item: FormItem): boolean {
   return Boolean(
     item.productId || item.productText.trim() || item.productCode.trim() || item.unitOfMeasureId ||
-    item.unitOfMeasureTitle.trim() || item.quantity !== null || item.requestNumber.trim() || item.description.trim(),
+    item.unitOfMeasureTitle.trim() || item.quantity !== null || item.issueNumber.trim() || item.requestNumber.trim() || item.description.trim(),
   )
 }
 
@@ -161,6 +162,7 @@ export function useGoodsReceiptForm(deps: Dependencies) {
       unitOfMeasureId: item.unitOfMeasureId, unitOfMeasureTitle: item.unitOfMeasureTitle,
       warehouseId: item.warehouseId, invoiceStatus: item.invoiceStatus, invoiceNumber: item.invoiceNumber ?? '',
       supplierId: item.supplierId ?? '', supplierText: item.counterparty ?? '', receiptNumber: item.receiptNumber ?? '',
+      issueNumber: item.issueNumber ?? '',
       quantity: item.quantity, requestNumber: item.requestNumber ?? '', description: item.description ?? '',
     })))
     open.value = true
@@ -337,6 +339,7 @@ export function useGoodsReceiptForm(deps: Dependencies) {
         supplierId: canManageReceiptInvoice ? (item.supplierId || null) : null,
         supplierTitle: canManageReceiptInvoice && !item.supplierId ? (item.supplierText.trim() || null) : null,
         receiptNumber: canManageReceiptInvoice ? (item.receiptNumber.trim() || null) : null,
+        issueNumber: item.issueNumber.trim() || null,
         quantity: Number(item.quantity),
         requestNumber: item.requestNumber.trim() || null,
         description: item.description.trim() || null,

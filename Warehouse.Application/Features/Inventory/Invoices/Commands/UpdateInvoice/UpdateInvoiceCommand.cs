@@ -1,0 +1,132 @@
+using FluentValidation;
+using MediatR;
+using Warehouse.Application.Common.Concurrency;
+using Warehouse.Application.Common.Interfaces.Repositories;
+using Warehouse.Application.Common.Models;
+using Warehouse.Application.Common.Models.Inventory;
+using Warehouse.Domain.Entities;
+using Warehouse.Domain.Enums;
+
+namespace Warehouse.Application.Features.Inventory.Invoices.Commands.UpdateInvoice;
+
+public sealed record UpdateInvoiceReceiptItem(
+    Guid Id,
+    string? ReceiptNumber,
+    Guid GoodsReceiptConcurrencyStamp);
+
+public sealed record UpdateInvoiceCommand(
+    Guid InvoiceId,
+    string InvoiceNumber,
+    Guid? SupplierId,
+    string? Description,
+    DateOnly? InvoiceDate,
+    InvoiceProcessingStatus ProcessingStatus,
+    IReadOnlyCollection<UpdateInvoiceReceiptItem> Items) : IRequest<Result<InvoiceDetails>>;
+
+internal sealed class UpdateInvoiceCommandValidator : AbstractValidator<UpdateInvoiceCommand>
+{
+    public UpdateInvoiceCommandValidator()
+    {
+        RuleFor(command => command.InvoiceId).NotEmpty();
+        RuleFor(command => command.InvoiceNumber).NotEmpty().WithMessage("شماره فاکتور الزامی است.")
+            .MaximumLength(100).WithMessage("شماره فاکتور نباید بیشتر از ۱۰۰ نویسه باشد.");
+        RuleFor(command => command.Description).MaximumLength(1000);
+        RuleFor(command => command.ProcessingStatus).IsInEnum();
+        RuleFor(command => command.Items).NotNull();
+        RuleForEach(command => command.Items).ChildRules(item =>
+        {
+            item.RuleFor(value => value.Id).NotEmpty();
+            item.RuleFor(value => value.ReceiptNumber).MaximumLength(100);
+            item.RuleFor(value => value.GoodsReceiptConcurrencyStamp).NotEmpty();
+        });
+        RuleFor(command => command.Items)
+            .Must(items => items is not null && items.Select(item => item.Id).Distinct().Count() == items.Count)
+            .WithMessage("ردیف تکراری در فاکتور وجود دارد.");
+    }
+}
+
+internal sealed class UpdateInvoiceCommandHandler(IUnitOfWork<Guid> unitOfWork)
+    : IRequestHandler<UpdateInvoiceCommand, Result<InvoiceDetails>>
+{
+    public async Task<Result<InvoiceDetails>> Handle(
+        UpdateInvoiceCommand request, CancellationToken cancellationToken)
+    {
+        await unitOfWork.BeginSerializableTransaction(cancellationToken);
+        try
+        {
+            var invoiceRepository = unitOfWork.Repository<Invoice>();
+            var invoice = await invoiceRepository.GetByIdAsync(request.InvoiceId, cancellationToken);
+            if (invoice is null)
+            {
+                await unitOfWork.RollBackTransaction(cancellationToken);
+                return Result<InvoiceDetails>.Error("فاکتور پیدا نشد.");
+            }
+
+            var normalizedNumber = Invoice.NormalizeNumber(request.InvoiceNumber);
+            if (await invoiceRepository.CountAsync(invoiceRepository.Entities.Where(value =>
+                    value.Id != request.InvoiceId && value.InvoiceNumber == normalizedNumber), cancellationToken) > 0)
+            {
+                await unitOfWork.RollBackTransaction(cancellationToken);
+                return Result<InvoiceDetails>.Error("این شماره فاکتور قبلاً ثبت شده است.");
+            }
+            if (request.SupplierId.HasValue &&
+                await unitOfWork.Repository<Supplier>().GetByIdAsync(request.SupplierId.Value, cancellationToken) is null)
+            {
+                await unitOfWork.RollBackTransaction(cancellationToken);
+                return Result<InvoiceDetails>.Error("طرف حساب انتخاب‌شده پیدا نشد.");
+            }
+
+            var itemRepository = unitOfWork.Repository<GoodsReceiptItem>();
+            var storedItems = await itemRepository.ToListAsync(itemRepository.Entities
+                .Where(item => item.InvoiceId == request.InvoiceId && item.InvoiceStatus == InvoiceStatus.HasInvoice),
+                cancellationToken);
+            if (storedItems.Count != request.Items.Count ||
+                storedItems.Any(item => !request.Items.Any(value => value.Id == item.Id)))
+            {
+                await unitOfWork.RollBackTransaction(cancellationToken);
+                return Result<InvoiceDetails>.Error("ردیف‌های فاکتور تغییر کرده‌اند؛ صفحه را دوباره باز کنید.");
+            }
+
+            var receiptRepository = unitOfWork.Repository<GoodsReceipt>();
+            var receipts = new Dictionary<Guid, GoodsReceipt>();
+            foreach (var item in storedItems)
+            {
+                if (receipts.ContainsKey(item.GoodsReceiptId)) continue;
+                var receipt = await receiptRepository.GetByIdAsync(item.GoodsReceiptId, cancellationToken);
+                if (receipt is null)
+                {
+                    await unitOfWork.RollBackTransaction(cancellationToken);
+                    return Result<InvoiceDetails>.Error("سند ورود مرتبط با فاکتور پیدا نشد.");
+                }
+                var stamps = request.Items.Where(value =>
+                        storedItems.Any(stored => stored.Id == value.Id && stored.GoodsReceiptId == receipt.Id))
+                    .Select(value => value.GoodsReceiptConcurrencyStamp).Distinct().ToArray();
+                if (stamps.Length != 1 || !receipt.TryAdvanceConcurrencyStamp(stamps[0]))
+                {
+                    await unitOfWork.RollBackTransaction(cancellationToken);
+                    return Result<InvoiceDetails>.Error(ConcurrencyMessages.Conflict);
+                }
+                receipts.Add(receipt.Id, receipt);
+            }
+
+            invoice.UpdateHeader(normalizedNumber, request.SupplierId);
+            invoice.UpdateDetails(request.Description, request.InvoiceDate, request.ProcessingStatus);
+            foreach (var value in request.Items)
+            {
+                var item = await itemRepository.GetByIdAsync(value.Id, cancellationToken);
+                item!.UpdateReceiptNumber(value.ReceiptNumber);
+            }
+            await unitOfWork.SaveAsync(cancellationToken);
+            await unitOfWork.CommitTransaction(cancellationToken);
+
+            var details = (await invoiceRepository.ToListAsync(invoiceRepository.Entities
+                .Where(item => item.Id == request.InvoiceId).ToDetails(), cancellationToken)).Single();
+            return Result<InvoiceDetails>.Success(details);
+        }
+        catch
+        {
+            await unitOfWork.RollBackTransaction(cancellationToken);
+            throw;
+        }
+    }
+}

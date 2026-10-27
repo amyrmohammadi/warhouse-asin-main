@@ -12,10 +12,10 @@ public sealed class GoodsIssueItem : Entity<Guid>
         string productCode,
         decimal quantity,
         string? assetNumber,
-        Guid destinationId,
-        string exitReason,
+        Guid? destinationId,
+        string? exitReason,
         string? description,
-        string deliveringUnit,
+        string? deliveringUnit,
         DateTimeOffset? returnAtUtc,
         int sortOrder)
     {
@@ -26,9 +26,9 @@ public sealed class GoodsIssueItem : Entity<Guid>
         Quantity = quantity;
         AssetNumber = Normalize(assetNumber);
         DestinationId = destinationId;
-        ExitReason = exitReason.Trim();
+        ExitReason = Normalize(exitReason);
         Description = Normalize(description);
-        DeliveringUnit = deliveringUnit.Trim();
+        DeliveringUnit = Normalize(deliveringUnit);
         ReturnAtUtc = returnAtUtc?.ToUniversalTime();
         SortOrder = sortOrder;
     }
@@ -40,13 +40,17 @@ public sealed class GoodsIssueItem : Entity<Guid>
     public string ProductCode { get; private set; } = string.Empty;
     public decimal Quantity { get; private set; }
     public string? AssetNumber { get; private set; }
-    public Guid DestinationId { get; private set; }
-    public GoodsIssueDestination Destination { get; private set; } = null!;
-    public string ExitReason { get; private set; } = string.Empty;
+    public Guid? DestinationId { get; private set; }
+    public GoodsIssueDestination? Destination { get; private set; }
+    public string? ExitReason { get; private set; }
     public string? Description { get; private set; }
-    public string DeliveringUnit { get; private set; } = string.Empty;
+    public string? DeliveringUnit { get; private set; }
     public DateTimeOffset? ReturnAtUtc { get; private set; }
     public int SortOrder { get; private set; }
+    public ICollection<GoodsReceiptItem> GoodsReceiptItems { get; private set; } = [];
+
+    public void SetReturnAtUtc(DateTimeOffset? returnAtUtc) =>
+        ReturnAtUtc = returnAtUtc?.ToUniversalTime();
 
     private static string? Normalize(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();

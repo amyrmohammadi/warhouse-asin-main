@@ -21,7 +21,7 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
         CreateGoodsReceiptCommand request, CancellationToken cancellationToken,
         GoodsReceipt? existing = null, bool updateInitial = true, bool updateInvoice = true)
     {
-        await unitOfWork.BeginTransaction(cancellationToken);
+        await unitOfWork.BeginSerializableTransaction(cancellationToken);
         try
         {
             var (deliverer, delivererError) = await ResolveDelivererAsync(
@@ -110,6 +110,68 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                 .ToDictionary(group => group.Key, group => new Queue<GoodsReceiptItem>(group));
             var matchedOldItemIds = new HashSet<Guid>();
 
+            var issueNumbers = request.Items
+                .Select(item => item.IssueNumber?.Trim())
+                .Where(number => !string.IsNullOrEmpty(number))
+                .Distinct()
+                .ToArray();
+            var issueRepository = unitOfWork.Repository<GoodsIssueItem>();
+            var issueCandidates = await issueRepository.ToListAsync(
+                issueRepository.Entities.Where(item => issueNumbers.Contains(item.GoodsIssue.IssueNumber)),
+                cancellationToken);
+            var issueHeaders = await unitOfWork.Repository<GoodsIssue>().ToListAsync(
+                unitOfWork.Repository<GoodsIssue>().Entities.Where(issue => issueNumbers.Contains(issue.IssueNumber)),
+                cancellationToken);
+            var issueNumberById = issueHeaders.ToDictionary(issue => issue.Id, issue => issue.IssueNumber);
+            var linkedIssues = new List<GoodsIssueItem?>();
+            foreach (var pair in preparedItems.Zip(request.Items))
+            {
+                var number = pair.Second.IssueNumber?.Trim();
+                if (string.IsNullOrEmpty(number))
+                {
+                    linkedIssues.Add(null);
+                    continue;
+                }
+
+                var matches = issueCandidates.Where(item =>
+                    issueNumberById[item.GoodsIssueId] == number &&
+                    (item.ProductId == pair.First.Product.ProductId ||
+                     (item.ProductId == null && item.ProductCode == pair.First.Product.ProductCode))).ToArray();
+                if (matches.Length != 1)
+                {
+                    await unitOfWork.RollBackTransaction(cancellationToken);
+                    return Result<GoodsReceiptSummary>.Error(matches.Length == 0
+                        ? $"برای شماره سند خروجی «{number}» ردیف کالای «{pair.First.Product.ProductTitle}» پیدا نشد."
+                        : $"برای شماره سند خروجی «{number}» چند ردیف از کالای «{pair.First.Product.ProductTitle}» وجود دارد؛ تطبیق یکتا نیست.");
+                }
+                linkedIssues.Add(await issueRepository.GetByIdAsync(matches[0].Id, cancellationToken));
+            }
+
+            var affectedIssueIds = linkedIssues.Where(item => item is not null)
+                .Select(item => item!.Id)
+                .Concat(oldItems.Where(item => item.GoodsIssueItemId.HasValue)
+                    .Select(item => item.GoodsIssueItemId!.Value))
+                .Distinct().ToArray();
+            var otherReturns = await itemRepository.ToListAsync(itemRepository.Entities
+                .Where(item => item.GoodsIssueItemId.HasValue &&
+                    affectedIssueIds.Contains(item.GoodsIssueItemId.Value) &&
+                    item.GoodsReceiptId != receipt.Id)
+                .Select(item => new { item.GoodsIssueItemId, item.Quantity, item.GoodsReceipt.EnteredAtUtc }),
+                cancellationToken);
+            foreach (var issue in linkedIssues.Where(item => item is not null).Select(item => item!).DistinctBy(item => item.Id))
+            {
+                var total = otherReturns.Where(item => item.GoodsIssueItemId == issue.Id).Sum(item => item.Quantity) +
+                    linkedIssues.Select((item, index) => (item, index))
+                        .Where(pair => pair.item?.Id == issue.Id)
+                        .Sum(pair => preparedItems[pair.index].Product.Quantity);
+                if (total > issue.Quantity)
+                {
+                    await unitOfWork.RollBackTransaction(cancellationToken);
+                    return Result<GoodsReceiptSummary>.Error(
+                        $"عدم تطبیق تعداد/مقدار کالای ورودی و خروجی: مجموع عودت‌های کالای «{issue.ProductCode}» ({total}) از مقدار خروج ({issue.Quantity}) بیشتر است.");
+                }
+            }
+
             for (var sortOrder = 0; sortOrder < preparedItems.Count; sortOrder++)
             {
                 var item = preparedItems[sortOrder];
@@ -128,6 +190,7 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                         item.Invoice, item.ReceiptNumber,
                         item.Product.Quantity, item.Product.RequestNumber, item.Product.Description,
                         sortOrder);
+                    receipt.Items.Last().SetGoodsIssueItem(linkedIssues[sortOrder]);
                     if (existing is not null)
                         await itemRepository.AddAsync(receipt.Items.Last(), cancellationToken);
                     continue;
@@ -144,6 +207,8 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                     updateInitial ? item.Product.RequestNumber : old.RequestNumber,
                     updateInitial ? item.Product.Description : old.Description,
                     updateInitial ? sortOrder : old.SortOrder);
+                if (updateInitial)
+                    tracked.SetGoodsIssueItem(linkedIssues[sortOrder]);
             }
 
             if (existing is not null && updateInitial)
@@ -152,6 +217,19 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                 {
                     var tracked = await itemRepository.GetByIdAsync(old.Id, cancellationToken);
                     await itemRepository.DeleteAsync(tracked!, cancellationToken);
+                }
+            }
+
+            if (updateInitial)
+            {
+                foreach (var issueId in affectedIssueIds)
+                {
+                    var issue = await issueRepository.GetByIdAsync(issueId, cancellationToken);
+                    var dates = otherReturns.Where(item => item.GoodsIssueItemId == issueId)
+                        .Select(item => item.EnteredAtUtc)
+                        .Concat(linkedIssues.Any(item => item?.Id == issueId)
+                            ? [request.EnteredAtUtc] : []);
+                    issue!.SetReturnAtUtc(dates.Any() ? dates.Max() : null);
                 }
             }
 

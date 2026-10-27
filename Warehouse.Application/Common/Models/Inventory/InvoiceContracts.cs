@@ -1,3 +1,6 @@
+using System.Text.Json.Serialization;
+using Warehouse.Domain.Enums;
+
 namespace Warehouse.Application.Common.Models.Inventory;
 
 public sealed class InvoiceSummary
@@ -6,11 +9,18 @@ public sealed class InvoiceSummary
 
     public string InvoiceNumber { get; init; } = string.Empty;
 
+    public string? Description { get; init; }
+
+    public DateOnly? InvoiceDate { get; init; }
+
+    public InvoiceProcessingStatus ProcessingStatus { get; init; }
+
     public string? Counterparty { get; init; }
 
     public IReadOnlyCollection<string> ReceiptNumbers { get; init; } = [];
 
-    public int ItemsWithoutReceiptCount { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? ItemsWithoutReceiptCount { get; init; }
 }
 
 public sealed class InvoiceItemSummary
@@ -18,6 +28,8 @@ public sealed class InvoiceItemSummary
     public Guid Id { get; init; }
 
     public Guid GoodsReceiptId { get; init; }
+
+    public Guid? GoodsIssueItemId { get; init; }
 
     public Guid GoodsReceiptConcurrencyStamp { get; init; }
 
@@ -46,7 +58,15 @@ public sealed class InvoiceDetails
 
     public string InvoiceNumber { get; init; } = string.Empty;
 
+    public string? Description { get; init; }
+
+    public DateOnly? InvoiceDate { get; init; }
+
+    public InvoiceProcessingStatus ProcessingStatus { get; init; }
+
     public string? Counterparty { get; init; }
+
+    public Guid? SupplierId { get; init; }
 
     public IReadOnlyCollection<InvoiceItemSummary> Items { get; init; } = [];
 }

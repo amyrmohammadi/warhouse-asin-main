@@ -6,6 +6,9 @@ using MediatR;
 using NSubstitute;
 using Warehouse.Application.Common.Authorization;
 using Warehouse.Application.Common.Models;
+using Warehouse.Application.Common.Models.Filtering;
+using Warehouse.Application.Common.Models.Inventory;
+using Warehouse.Application.Features.Inventory.GoodsReceipts.Queries.GetGoodsReceiptItemRows;
 using Warehouse.Application.Features.Identity.Commands.AddPoliciesToRole;
 using Warehouse.Application.Features.Identity.Commands.AddRolesToUser;
 using Warehouse.Application.Features.Identity.Commands.Login;
@@ -18,6 +21,25 @@ namespace Warehouse.Server.Tests.Integration;
 
 public sealed class ServerPipelineTests
 {
+    [Fact]
+    public async Task GoodsReceiptItemFilters_BindFromQueryString()
+    {
+        await using var factory = new TestWebApplicationFactory();
+        factory.Sender.Send(Arg.Any<GetGoodsReceiptItemRowsQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Result<GoodsReceiptItemRowListResult>.Success(new([], 0, 0, 1, 20)));
+        using var client = factory.CreateClient();
+        using var request = CreateRequest("GET",
+            "/endpoint/inventory/goods-receipts/items?pageNumber=1&pageSize=20&receiptNumberIsEmpty=true&invoiceStatus=NotEntered");
+        AddIdentity(request, PermissionPolicyNames.Inventory.GoodsReceiptsRead);
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await factory.Sender.Received(1).Send(Arg.Is<GetGoodsReceiptItemRowsQuery>(query =>
+            query.ReceiptNumberIsEmpty &&
+            query.InvoiceStatus == InvoiceStatusFilter.NotEntered), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task AuthEndpoint_WhenUnhandledExceptionOccurs_ReturnsTraceableProblemDetails()
     {

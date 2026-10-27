@@ -436,16 +436,14 @@ input {
 }
 
 @media (min-width: 992px) {
-  .data-table-scroll-container .dt-layout-table > div,
-  .goods-receipts-page .dt-layout-table > div {
+  .data-table-scroll-container .dt-layout-table > div {
     display: block !important;
     overflow-x: auto;
     overflow-y: hidden;
     scrollbar-width: none;
   }
 
-  .data-table-scroll-container .dt-layout-table > div::-webkit-scrollbar,
-  .goods-receipts-page .dt-layout-table > div::-webkit-scrollbar {
+  .data-table-scroll-container .dt-layout-table > div::-webkit-scrollbar {
     height: 0;
   }
 

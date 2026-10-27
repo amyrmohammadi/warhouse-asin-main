@@ -18,10 +18,16 @@ public enum AppPermission
     GoodsReceiptsReceiptInvoiceOperations,
     GoodsReceiptsImport,
     GoodsReceiptsExport,
+    GoodsReceiptsMissingReceiptCountRead,
+    GoodsReceiptsMissingInvoiceCountRead,
+    GoodsReceiptsTodayItemCountRead,
+    GoodsReceiptsTodayDocumentCountRead,
     GoodsIssuesRead,
     GoodsIssuesCreate,
     GoodsIssuesUpdate,
     GoodsIssuesDelete,
+    GoodsIssuesImport,
     GoodsIssuesExport,
-    InvoicesRead
+    InvoicesRead,
+    InvoicesMissingReceiptCountRead
 }

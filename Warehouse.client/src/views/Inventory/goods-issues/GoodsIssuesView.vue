@@ -21,6 +21,7 @@ import type { GoodsIssueDestinationOption } from '@/services/goodsIssueDestinati
 import {
   exportGoodsIssueItems,
   getGoodsIssues,
+  type GoodsIssueImportSummary,
   type GoodsIssue,
   type GoodsIssueItemRow,
   type GoodsIssueListParameters,
@@ -35,6 +36,7 @@ import { createInventoryTableOptions } from '@/utils/inventoryTable'
 import '@/styles/inventory-list.css'
 
 import GoodsIssueFormModal from './GoodsIssueFormModal.vue'
+import GoodsIssueImportModal from './GoodsIssueImportModal.vue'
 import { useGoodsIssueOptions } from './useGoodsIssueOptions'
 
 defineOptions({ name: 'GoodsIssuesView' })
@@ -52,6 +54,7 @@ const canUpdate = has('GoodsIssuesUpdate')
 const canDelete = has('GoodsIssuesDelete')
 const canChange = canUpdate || canDelete
 const canExport = has('GoodsIssuesExport')
+const canImport = has('GoodsIssuesImport')
 
 const tableMode = ref<TableMode>('items')
 const tableContainer = ref<HTMLElement | null>(null)
@@ -59,6 +62,9 @@ const formModal = ref<InstanceType<typeof GoodsIssueFormModal> | null>(null)
 const editLoading = ref(false)
 const deletingId = ref<string | null>(null)
 const exporting = ref(false)
+const importOpen = ref(false)
+const importFile = ref<File | null>(null)
+const importSummary = ref<GoodsIssueImportSummary | null>(null)
 
 const { handleUnauthorized } = useUnauthorizedRedirect('/dashboard/inventory/goods-issues')
 const options = useGoodsIssueOptions(handleUnauthorized)
@@ -208,7 +214,7 @@ function tableOptions(mode: TableMode): Config {
   return createInventoryTableOptions({
     ajax: list.ajax,
     columns: visibility.resolvedColumns[mode],
-    order: { name: 'issuedAtUtc', dir: 'desc' },
+    order: { name: 'issueNumber', dir: 'asc' },
     emptyText: mode === 'items' ? 'هنوز کالایی از انبار خارج نشده است.' : 'هنوز خروج کالایی ثبت نشده است.',
     loadingText: 'در حال دریافت تاریخچه خروج کالا...',
     zeroText: 'خروج کالایی پیدا نشد.',
@@ -261,6 +267,30 @@ function onSaved(reason: 'saved' | 'deleted'): void {
 }
 
 const exportChannel = useRequestChannel()
+function onImportFile(file: File): void {
+  if (!canImport) return
+  if (!/\.(xlsx|xlsm)$/i.test(file.name) || file.size === 0 || file.size > 50 * 1024 * 1024) {
+    toast.error('فایل xlsx یا xlsm غیرخالی با حجم حداکثر ۵۰ مگابایت انتخاب کنید.')
+    return
+  }
+  importFile.value = file
+  importOpen.value = true
+}
+
+function onImportOpenChange(open: boolean): void {
+  importOpen.value = open
+  if (!open) importFile.value = null
+}
+
+function onImported(summary: GoodsIssueImportSummary): void {
+  importSummary.value = summary
+  if (summary.importedIssueCount > 0) {
+    void options.reload()
+    list.reload(true)
+    toast.success(`${summary.importedIssueCount} سند خروج و ${summary.importedItemCount} قلم کالا ثبت شد.`)
+  }
+}
+
 async function exportItems(): Promise<void> {
   const controller = exportChannel.begin()
   exporting.value = true
@@ -286,6 +316,8 @@ onBeforeUnmount(() => {
 
 <template>
   <GoodsIssueFormModal ref="formModal" :people="people" @saved="onSaved" />
+  <GoodsIssueImportModal :model-value="importOpen" :file="importFile" @update:model-value="onImportOpenChange"
+                         @imported="onImported" />
 
   <div class="container-fluid users-page goods-issues-page inventory-data-page">
     <div class="page-titles">
@@ -302,15 +334,29 @@ onBeforeUnmount(() => {
           <p class="page-description mb-0 mt-1 text-muted">ثبت و پیگیری اسناد و ردیف‌های مستقل خروج کالا</p>
         </div>
         <InventoryListToolbar :mode="tableMode" :modes="VIEW_MODES" entity-label="خروجی کالا"
-                              create-label="ثبت خروج کالا" :can-create="canCreate" :can-export="canExport"
+                              create-label="ثبت خروج کالا" :can-create="canCreate" :can-import="canImport" :can-export="canExport"
                               :create-disabled="optionsLoading" :exporting="exporting"
                               :columns="toggleable[tableMode]" :is-column-visible="isColumnVisible"
                               :column-menu-open="menuOpen"
-                              @update:mode="tableMode = $event as TableMode" @create="openCreate" @export="exportItems"
+                              @update:mode="tableMode = $event as TableMode" @create="openCreate" @import="onImportFile" @export="exportItems"
                               @toggle-column="toggleColumn" @toggle-column-menu="toggleMenu" />
       </div>
 
       <div class="card-body">
+        <div v-if="importSummary" class="alert" :class="importSummary.invalidRows.length ? 'alert-danger' : 'alert-success'" role="status">
+          <template v-if="importSummary.invalidRows.length">
+            <p>هیچ سند یا خارج‌کننده‌ای ثبت نشد. خطاها را اصلاح و فایل را دوباره ارسال کنید.</p>
+            <ul class="mb-0 import-errors">
+              <li v-for="row in importSummary.invalidRows" :key="`${row.sheet}-${row.rowNumber}`">
+                شیت {{ row.sheet }}، ردیف {{ row.rowNumber }}: {{ row.message }}
+              </li>
+            </ul>
+          </template>
+          <template v-else>
+            {{ importSummary.importedIssueCount }} سند خروج، {{ importSummary.importedItemCount }} قلم کالا و
+            {{ importSummary.createdIssuerCount }} خارج‌کنندهٔ جدید ثبت شد.
+          </template>
+        </div>
         <DataTableFilters v-model="appliedFilters" :definitions="filterDefinitions" :search="quickSearch"
                           :loading="listLoading"
                           search-placeholder="جستجو در کد خروج، کالا، مقصد و خارج‌کننده..."
@@ -374,3 +420,7 @@ onBeforeUnmount(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.import-errors { max-height: 20rem; overflow-y: auto; }
+</style>

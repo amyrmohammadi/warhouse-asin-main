@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Warehouse.Application.Common.Interfaces;
 using Warehouse.Domain.Entities;
+using Warehouse.Domain.Enums;
 using Warehouse.Infrastructure.Identity;
 using Warehouse.Infrastructure.Persistence.Auditing;
 
@@ -176,6 +177,13 @@ public sealed class ApplicationDbContext
             entity.ToTable("Invoices", "Business");
             entity.HasKey(invoice => invoice.Id);
             entity.Property(invoice => invoice.InvoiceNumber).HasMaxLength(100).IsRequired();
+            entity.Property(invoice => invoice.Description).HasMaxLength(1000);
+            entity.Property(invoice => invoice.InvoiceDate).HasColumnType("date");
+            entity.Property(invoice => invoice.ProcessingStatus)
+                .HasConversion<string>()
+                .HasMaxLength(32)
+                .HasDefaultValue(InvoiceProcessingStatus.UnderReview)
+                .IsRequired();
             entity.HasIndex(invoice => invoice.InvoiceNumber).IsUnique();
             entity.HasIndex(invoice => invoice.SupplierId);
             entity.HasOne(invoice => invoice.Supplier)
@@ -269,6 +277,7 @@ public sealed class ApplicationDbContext
             entity.HasIndex(item => item.ProductId);
             entity.HasIndex(item => item.WarehouseId);
             entity.HasIndex(item => item.InvoiceId);
+            entity.HasIndex(item => item.GoodsIssueItemId);
             entity.HasIndex(item => new { item.GoodsReceiptId, item.ProductId });
             entity.HasOne(item => item.GoodsReceipt)
                 .WithMany(receipt => receipt.Items)
@@ -285,6 +294,10 @@ public sealed class ApplicationDbContext
             entity.HasOne(item => item.Invoice)
                 .WithMany(invoice => invoice.GoodsReceiptItems)
                 .HasForeignKey(item => item.InvoiceId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.GoodsIssueItem)
+                .WithMany(issueItem => issueItem.GoodsReceiptItems)
+                .HasForeignKey(item => item.GoodsIssueItemId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
@@ -325,9 +338,9 @@ public sealed class ApplicationDbContext
             entity.Property(item => item.ProductCode).HasMaxLength(100).IsRequired();
             entity.Property(item => item.Quantity).HasPrecision(18, 3).IsRequired();
             entity.Property(item => item.AssetNumber).HasMaxLength(100);
-            entity.Property(item => item.ExitReason).HasMaxLength(1000).IsRequired();
+            entity.Property(item => item.ExitReason).HasMaxLength(1000);
             entity.Property(item => item.Description).HasMaxLength(1000);
-            entity.Property(item => item.DeliveringUnit).HasMaxLength(200).IsRequired();
+            entity.Property(item => item.DeliveringUnit).HasMaxLength(200);
             entity.Property(item => item.SortOrder).IsRequired();
             entity.HasIndex(item => item.GoodsIssueId);
             entity.HasIndex(item => item.ProductId);

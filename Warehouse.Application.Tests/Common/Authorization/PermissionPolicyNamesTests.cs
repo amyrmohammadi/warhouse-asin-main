@@ -42,8 +42,11 @@ public sealed class PermissionPolicyNamesTests
     {
         var invoiceGroup = PermissionPolicyNames.Groups.Single(group => group.Key == "invoices");
 
-        var policy = Assert.Single(invoiceGroup.Policies);
+        var policies = invoiceGroup.Policies.Select(policy => policy.Name).ToArray();
         Assert.Equal("فاکتورها", invoiceGroup.DisplayName);
-        Assert.Equal(PermissionPolicyNames.Inventory.InvoicesRead, policy.Name);
+        Assert.Equal(
+            [PermissionPolicyNames.Inventory.InvoicesRead,
+                PermissionPolicyNames.Inventory.InvoicesMissingReceiptCountRead],
+            policies);
     }
 }

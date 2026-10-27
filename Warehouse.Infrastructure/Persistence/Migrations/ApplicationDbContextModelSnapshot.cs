@@ -233,7 +233,6 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(100)");
 
                     b.Property<string>("DeliveringUnit")
-                        .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
@@ -241,11 +240,10 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
-                    b.Property<Guid>("DestinationId")
+                    b.Property<Guid?>("DestinationId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("ExitReason")
-                        .IsRequired()
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
@@ -329,6 +327,9 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
+                    b.Property<Guid?>("GoodsIssueItemId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<Guid>("GoodsReceiptId")
                         .HasColumnType("uniqueidentifier");
 
@@ -362,6 +363,8 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("GoodsIssueItemId");
+
                     b.HasIndex("InvoiceId");
 
                     b.HasIndex("ProductId");
@@ -379,10 +382,24 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateOnly?>("InvoiceDate")
+                        .HasColumnType("date");
+
                     b.Property<string>("InvoiceNumber")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("ProcessingStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)")
+                        .HasDefaultValue("UnderReview");
 
                     b.Property<Guid?>("SupplierId")
                         .HasColumnType("uniqueidentifier");
@@ -822,8 +839,7 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                     b.HasOne("Warehouse.Domain.Entities.GoodsIssueDestination", "Destination")
                         .WithMany("GoodsIssueItems")
                         .HasForeignKey("DestinationId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Warehouse.Domain.Entities.GoodsIssue", "GoodsIssue")
                         .WithMany("Items")
@@ -856,6 +872,11 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Warehouse.Domain.Entities.GoodsReceiptItem", b =>
                 {
+                    b.HasOne("Warehouse.Domain.Entities.GoodsIssueItem", "GoodsIssueItem")
+                        .WithMany("GoodsReceiptItems")
+                        .HasForeignKey("GoodsIssueItemId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Warehouse.Domain.Entities.GoodsReceipt", "GoodsReceipt")
                         .WithMany("Items")
                         .HasForeignKey("GoodsReceiptId")
@@ -878,6 +899,8 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                         .HasForeignKey("WarehouseId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("GoodsIssueItem");
 
                     b.Navigation("GoodsReceipt");
 
@@ -928,6 +951,11 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Warehouse.Domain.Entities.GoodsIssueDestination", b =>
                 {
                     b.Navigation("GoodsIssueItems");
+                });
+
+            modelBuilder.Entity("Warehouse.Domain.Entities.GoodsIssueItem", b =>
+                {
+                    b.Navigation("GoodsReceiptItems");
                 });
 
             modelBuilder.Entity("Warehouse.Domain.Entities.GoodsReceipt", b =>

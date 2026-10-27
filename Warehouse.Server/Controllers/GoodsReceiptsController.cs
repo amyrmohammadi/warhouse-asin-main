@@ -13,6 +13,7 @@ using Warehouse.Application.Features.Inventory.GoodsReceipts.Commands.CreateGood
 using Warehouse.Application.Features.Inventory.GoodsReceipts.Commands.DeleteGoodsReceipt;
 using Warehouse.Application.Features.Inventory.GoodsReceipts.Queries.GetGoodsReceiptById;
 using Warehouse.Application.Features.Inventory.GoodsReceipts.Queries.GetGoodsReceiptItemRows;
+using Warehouse.Application.Features.Inventory.GoodsReceipts.Queries.GetGoodsReceiptMetrics;
 using Warehouse.Application.Features.Inventory.GoodsReceipts.Queries.GetGoodsReceiptOptions;
 using Warehouse.Application.Features.Inventory.GoodsReceipts.Queries.GetGoodsReceipts;
 using Warehouse.Application.Features.Auditing.Queries.GetGoodsReceiptItemHistory;
@@ -76,6 +77,24 @@ public sealed class GoodsReceiptsController(
         [FromQuery] GetGoodsReceiptItemRowsQuery query,
         CancellationToken cancellationToken) =>
         Ok(await sender.Send(query, cancellationToken));
+
+    [Authorize(Policy = PermissionPolicyNames.Inventory.GoodsReceiptsRead)]
+    [HttpGet("metrics")]
+    [ProducesResponseType(typeof(Result<GoodsReceiptMetrics>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<Result<GoodsReceiptMetrics>>> GetMetrics(
+        CancellationToken cancellationToken)
+    {
+        async Task<bool> CanRead(string policy) =>
+            (await authorizationService.AuthorizeAsync(User, policy)).Succeeded;
+
+        var query = new GetGoodsReceiptMetricsQuery(
+            await CanRead(PermissionPolicyNames.Inventory.GoodsReceiptsMissingReceiptCountRead),
+            await CanRead(PermissionPolicyNames.Inventory.GoodsReceiptsMissingInvoiceCountRead),
+            await CanRead(PermissionPolicyNames.Inventory.GoodsReceiptsTodayItemCountRead),
+            await CanRead(PermissionPolicyNames.Inventory.GoodsReceiptsTodayDocumentCountRead),
+            DateTimeOffset.UtcNow);
+        return Ok(await sender.Send(query, cancellationToken));
+    }
 
     [Authorize(Policy = PermissionPolicyNames.Inventory.GoodsReceiptHistoryRead)]
     [HttpGet("items/{itemId:guid}/history")]
@@ -312,7 +331,8 @@ public sealed class GoodsReceiptsController(
                 canManageReceiptInvoice ? item.ReceiptNumber : null,
                 item.Quantity,
                 item.RequestNumber,
-                item.Description)).ToArray());
+                item.Description,
+                item.IssueNumber)).ToArray());
         var result = await sender.Send(command, cancellationToken);
         return result.IsSuccess
             ? CreatedAtAction(nameof(GetById), new { id = result.Data!.Id }, result)
@@ -375,7 +395,8 @@ public sealed class GoodsReceiptsController(
                 canManageReceiptInvoice ? item.ReceiptNumber : null,
                 item.Quantity,
                 item.RequestNumber,
-                item.Description)).ToArray());
+                item.Description,
+                canInitialEntry ? item.IssueNumber : null)).ToArray());
         var result = await sender.Send(new UpdateGoodsReceiptCommand(
             id, command, canInitialEntry, canManageReceiptInvoice,
             request.ConcurrencyStamp ?? Guid.Empty), cancellationToken);

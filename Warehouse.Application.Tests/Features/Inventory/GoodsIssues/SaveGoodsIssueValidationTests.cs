@@ -84,6 +84,34 @@ public sealed class SaveGoodsIssueValidationTests
     }
 
     [Fact]
+    public async Task Send_UpdateWithLinkedReceiptItems_IsRejectedWithoutReplacingIssueItems()
+    {
+        await using var context = new ApplicationTestContext();
+        var issue = new GoodsIssue("OUT-100", DateTimeOffset.UtcNow, null, Guid.NewGuid());
+        var issueRepository = Substitute.For<IRepositoryAsync<GoodsIssue, Guid>>();
+        issueRepository.GetByIdAsync(issue.Id, Arg.Any<CancellationToken>()).Returns(issue);
+        context.UnitOfWork.Repository<GoodsIssue>().Returns(issueRepository);
+        var itemRepository = Substitute.For<IRepositoryAsync<GoodsIssueItem, Guid>>();
+        itemRepository.Entities.Returns(Array.Empty<GoodsIssueItem>().AsQueryable());
+        itemRepository.CountAsync(Arg.Any<IQueryable<GoodsIssueItem>>(), Arg.Any<CancellationToken>())
+            .Returns(1);
+        context.UnitOfWork.Repository<GoodsIssueItem>().Returns(itemRepository);
+        var stamp = issue.ConcurrencyStamp;
+
+        var result = await context.Sender.Send(ValidCommand() with
+        {
+            Id = issue.Id,
+            ConcurrencyStamp = stamp
+        });
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("ابتدا ارتباط آیتم‌های ورود کالا با این سند خروج را حذف کنید.", result.Messages);
+        Assert.Equal(stamp, issue.ConcurrencyStamp);
+        await context.UnitOfWork.DidNotReceive().SaveAsync(Arg.Any<CancellationToken>());
+        await context.UnitOfWork.DidNotReceive().BeginTransaction(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public void TryAdvanceConcurrencyStamp_WithCurrentStamp_RotatesStampAndRejectsReuse()
     {
         var issue = new GoodsIssue("OUT-100", DateTimeOffset.UtcNow, null, Guid.NewGuid());

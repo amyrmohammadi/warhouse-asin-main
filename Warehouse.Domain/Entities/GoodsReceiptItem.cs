@@ -51,6 +51,10 @@ public sealed class GoodsReceiptItem : Entity<Guid>
 
     public Invoice? Invoice { get; private set; }
 
+    public Guid? GoodsIssueItemId { get; private set; }
+
+    public GoodsIssueItem? GoodsIssueItem { get; private set; }
+
     public string? ReceiptNumber { get; private set; }
 
     public decimal Quantity { get; private set; }
@@ -75,6 +79,15 @@ public sealed class GoodsReceiptItem : Entity<Guid>
 
     public void UpdateReceiptNumber(string? receiptNumber) =>
         ReceiptNumber = Normalize(receiptNumber);
+
+    public void SetGoodsIssueItem(GoodsIssueItem? goodsIssueItem)
+    {
+        GoodsIssueItem?.GoodsReceiptItems.Remove(this);
+        GoodsIssueItem = goodsIssueItem;
+        GoodsIssueItemId = goodsIssueItem?.Id;
+        if (goodsIssueItem is not null && !goodsIssueItem.GoodsReceiptItems.Contains(this))
+            goodsIssueItem.GoodsReceiptItems.Add(this);
+    }
 
     private void SetReceiptInvoice(InvoiceStatus? status, Guid? invoiceId, Invoice? invoice,
         string? receiptNumber)

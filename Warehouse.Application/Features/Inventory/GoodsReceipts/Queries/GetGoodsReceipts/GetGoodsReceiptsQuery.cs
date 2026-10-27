@@ -13,6 +13,7 @@ public sealed record GetGoodsReceiptsQuery
     public TextFilter? PageNumberFilter { get; init; }
 
     public InvoiceStatusFilter? InvoiceStatus { get; init; }
+    public GoodsReceiptQuickFilter? QuickFilter { get; init; }
 
     public TextFilter? ProductTitle { get; init; }
 
@@ -23,6 +24,7 @@ public sealed record GetGoodsReceiptsQuery
     public TextFilter? InvoiceNumber { get; init; }
 
     public TextFilter? ReceiptNumber { get; init; }
+    public bool ReceiptNumberIsEmpty { get; init; }
 
     public Guid? WarehouseId { get; init; }
 

@@ -61,9 +61,9 @@ internal sealed class GetGoodsIssuesQueryHandler(IUnitOfWork<Guid> unitOfWork)
                 issue.Items.Any(item =>
                     item.ProductCode.Contains(search) ||
                     (item.AssetNumber != null && item.AssetNumber.Contains(search)) ||
-                    item.Destination.Title.Contains(search) ||
-                    item.ExitReason.Contains(search) ||
-                    item.DeliveringUnit.Contains(search)));
+                    (item.Destination != null && item.Destination.Title.Contains(search)) ||
+                    (item.ExitReason != null && item.ExitReason.Contains(search)) ||
+                    (item.DeliveringUnit != null && item.DeliveringUnit.Contains(search))));
         }
         query = query
             .ApplyDateFilter(request.IssuedAt, issue => issue.IssuedAtUtc)
@@ -97,6 +97,7 @@ internal sealed class GetGoodsIssuesQueryHandler(IUnitOfWork<Guid> unitOfWork)
             ("issuerfullname", false) => query.OrderBy(issue => issue.Issuer.FullName).ThenBy(issue => issue.Id),
             ("issuerfullname", true) => query.OrderByDescending(issue => issue.Issuer.FullName).ThenByDescending(issue => issue.Id),
             ("issuedatutc", false) => query.OrderBy(issue => issue.IssuedAtUtc).ThenBy(issue => issue.Id),
-            _ => query.OrderByDescending(issue => issue.IssuedAtUtc).ThenByDescending(issue => issue.Id)
+            ("issuedatutc", true) => query.OrderByDescending(issue => issue.IssuedAtUtc).ThenByDescending(issue => issue.Id),
+            _ => query.OrderBy(issue => issue.IssueNumber).ThenBy(issue => issue.Id)
         };
 }

@@ -5,10 +5,15 @@ import type { TextFilterValue } from '@/types/dataTableFilters'
 export interface InvoiceSummary {
   id: string
   invoiceNumber: string
+  description: string | null
+  invoiceDate: string | null
+  processingStatus: InvoiceProcessingStatus
   counterparty: string | null
   receiptNumbers: string[]
-  itemsWithoutReceiptCount: number
+  itemsWithoutReceiptCount?: number | null
 }
+
+export type InvoiceProcessingStatus = 'UnderReview' | 'SentToFinance' | 'FinanceApproved'
 
 export interface InvoiceItem {
   id: string
@@ -26,12 +31,26 @@ export interface InvoiceItem {
 }
 
 export interface InvoiceDetails extends InvoiceSummary {
+  supplierId: string | null
   items: InvoiceItem[]
 }
 
 export interface UpdateInvoiceItemRequest {
   receiptNumber: string | null
   concurrencyStamp: string
+}
+
+export interface UpdateInvoiceRequest {
+  invoiceNumber: string
+  supplierId: string | null
+  description: string | null
+  invoiceDate: string | null
+  processingStatus: InvoiceProcessingStatus
+  items: Array<{
+    id: string
+    receiptNumber: string | null
+    goodsReceiptConcurrencyStamp: string
+  }>
 }
 
 export interface UpdateInvoiceItemResult {
@@ -108,6 +127,23 @@ export function updateInvoiceItem(
       signal,
     },
     'ذخیره شماره رسید انجام نشد.',
+  )
+}
+
+export function updateInvoice(
+  invoiceId: string,
+  payload: UpdateInvoiceRequest,
+  signal?: AbortSignal,
+): Promise<InvoiceDetails> {
+  return request(
+    `/endpoint/inventory/invoices/${encodeURIComponent(invoiceId)}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal,
+    },
+    'ویرایش فاکتور انجام نشد.',
   )
 }
 

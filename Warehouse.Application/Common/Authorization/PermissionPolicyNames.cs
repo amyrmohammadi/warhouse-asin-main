@@ -36,12 +36,18 @@ public static class PermissionPolicyNames
         public const string GoodsReceiptsReceiptInvoiceOperations = nameof(AppPermission.GoodsReceiptsReceiptInvoiceOperations);
         public const string GoodsReceiptsImport = nameof(AppPermission.GoodsReceiptsImport);
         public const string GoodsReceiptsExport = nameof(AppPermission.GoodsReceiptsExport);
+        public const string GoodsReceiptsMissingReceiptCountRead = nameof(AppPermission.GoodsReceiptsMissingReceiptCountRead);
+        public const string GoodsReceiptsMissingInvoiceCountRead = nameof(AppPermission.GoodsReceiptsMissingInvoiceCountRead);
+        public const string GoodsReceiptsTodayItemCountRead = nameof(AppPermission.GoodsReceiptsTodayItemCountRead);
+        public const string GoodsReceiptsTodayDocumentCountRead = nameof(AppPermission.GoodsReceiptsTodayDocumentCountRead);
         public const string GoodsIssuesRead = nameof(AppPermission.GoodsIssuesRead);
         public const string GoodsIssuesCreate = nameof(AppPermission.GoodsIssuesCreate);
         public const string GoodsIssuesUpdate = nameof(AppPermission.GoodsIssuesUpdate);
         public const string GoodsIssuesDelete = nameof(AppPermission.GoodsIssuesDelete);
+        public const string GoodsIssuesImport = nameof(AppPermission.GoodsIssuesImport);
         public const string GoodsIssuesExport = nameof(AppPermission.GoodsIssuesExport);
         public const string InvoicesRead = nameof(AppPermission.InvoicesRead);
+        public const string InvoicesMissingReceiptCountRead = nameof(AppPermission.InvoicesMissingReceiptCountRead);
     }
 
     public static IReadOnlyCollection<PermissionPolicyGroup> Groups { get; } =
@@ -77,7 +83,11 @@ public static class PermissionPolicyNames
                 new(Inventory.GoodsReceiptsInitialEntry, "ورود اولیه کالا"),
                 new(Inventory.GoodsReceiptsReceiptInvoiceOperations, "عملیات رسید و فاکتور"),
                 new(Inventory.GoodsReceiptsImport, "ایمپورت ورودی کالا"),
-                new(Inventory.GoodsReceiptsExport, "اکسپورت ورودی کالا")
+                new(Inventory.GoodsReceiptsExport, "اکسپورت ورودی کالا"),
+                new(Inventory.GoodsReceiptsMissingReceiptCountRead, "مشاهده تعداد کالاهای بدون رسید"),
+                new(Inventory.GoodsReceiptsMissingInvoiceCountRead, "مشاهده تعداد کالاهای بدون فاکتور"),
+                new(Inventory.GoodsReceiptsTodayItemCountRead, "مشاهده تعداد اقلام ورودی امروز"),
+                new(Inventory.GoodsReceiptsTodayDocumentCountRead, "مشاهده تعداد اسناد ورودی امروز")
             ]),
         new(
             "goods-issues",
@@ -87,13 +97,15 @@ public static class PermissionPolicyNames
                 new(Inventory.GoodsIssuesCreate, "ثبت خروج کالا"),
                 new(Inventory.GoodsIssuesUpdate, "ویرایش خروج کالا"),
                 new(Inventory.GoodsIssuesDelete, "حذف خروج کالا"),
+                new(Inventory.GoodsIssuesImport, "ایمپورت خروج کالا"),
                 new(Inventory.GoodsIssuesExport, "اکسپورت خروج کالا")
             ]),
         new(
             "invoices",
             "فاکتورها",
             [
-                new(Inventory.InvoicesRead, "مشاهده فاکتورها و کالاهای آن‌ها")
+                new(Inventory.InvoicesRead, "مشاهده فاکتورها و کالاهای آن‌ها"),
+                new(Inventory.InvoicesMissingReceiptCountRead, "مشاهده تعداد اقلام بدون رسید فاکتورها")
             ]),
         new(
             "master-data",

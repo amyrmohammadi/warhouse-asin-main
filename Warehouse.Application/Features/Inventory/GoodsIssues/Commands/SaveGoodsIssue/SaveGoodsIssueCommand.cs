@@ -89,7 +89,17 @@ internal sealed class SaveGoodsIssueCommandHandler(IUnitOfWork<Guid> unitOfWork)
             if (existingIssue is null)
                 return Result<GoodsIssueSummary>.Error("سند خروج کالا پیدا نشد.");
             if (!request.ConcurrencyStamp.HasValue ||
-                !existingIssue.TryAdvanceConcurrencyStamp(request.ConcurrencyStamp.Value))
+                request.ConcurrencyStamp.Value != existingIssue.ConcurrencyStamp)
+                return Result<GoodsIssueSummary>.Error(ConcurrencyMessages.Conflict);
+            var itemRepository = unitOfWork.Repository<GoodsIssueItem>();
+            var linkedItems = await itemRepository.CountAsync(
+                itemRepository.Entities.Where(item =>
+                    item.GoodsIssueId == existingIssue.Id && item.GoodsReceiptItems.Any()),
+                cancellationToken);
+            if (linkedItems > 0)
+                return Result<GoodsIssueSummary>.Error(
+                    "ابتدا ارتباط آیتم‌های ورود کالا با این سند خروج را حذف کنید.");
+            if (!existingIssue.TryAdvanceConcurrencyStamp(request.ConcurrencyStamp.Value))
                 return Result<GoodsIssueSummary>.Error(ConcurrencyMessages.Conflict);
         }
 

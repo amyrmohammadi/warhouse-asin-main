@@ -52,5 +52,8 @@ internal sealed class GetGoodsReceiptItemRowsQueryValidator
         RuleFor(query => query.InvoiceStatus)
             .IsInEnum()
             .When(query => query.InvoiceStatus.HasValue);
+        RuleFor(query => query.QuickFilter)
+            .IsInEnum()
+            .When(query => query.QuickFilter.HasValue);
     }
 }

@@ -258,6 +258,66 @@ public sealed class UpdateGoodsReceiptTests
         await context.UnitOfWork.DidNotReceive().SaveAsync(Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task Update_ReturnsError_WhenAllLinkedReceiptsExceedIssueQuantity()
+    {
+        await using var context = new ApplicationTestContext();
+        var warehouse = new StorageWarehouse("انبار", null);
+        var person = new Person("تحویل دهنده", "");
+        var unit = new UnitOfMeasure("عدد", null);
+        var product = new Product("کالا", "P-1", unit.Id, null);
+        typeof(Product).GetProperty(nameof(Product.UnitOfMeasure))!.SetValue(product, unit);
+        var issue = new GoodsIssue("OUT-1", DateTimeOffset.UtcNow.AddDays(-1), null, person.Id);
+        var issueItem = issue.AddItem(product.Id, product.Code, 5, null, Guid.NewGuid(),
+            "خروج", null, "واحد", null, 0);
+        typeof(GoodsIssueItem).GetProperty(nameof(GoodsIssueItem.GoodsIssue))!.SetValue(issueItem, issue);
+        var earlierReceipt = new GoodsReceipt(DateTimeOffset.UtcNow.AddHours(-1), null, person.Id, "1");
+        earlierReceipt.AddItem(product.Id, warehouse.Id, null, null, null, 4, null, null, 0);
+        earlierReceipt.Items.Single().SetGoodsIssueItem(issueItem);
+        typeof(GoodsReceiptItem).GetProperty(nameof(GoodsReceiptItem.GoodsReceipt))!
+            .SetValue(earlierReceipt.Items.Single(), earlierReceipt);
+        var currentReceipt = new GoodsReceipt(DateTimeOffset.UtcNow, null, person.Id, "2");
+        currentReceipt.AddItem(product.Id, warehouse.Id, null, null, null, 1, null, null, 0);
+        currentReceipt.Items.Single().SetGoodsIssueItem(issueItem);
+        typeof(GoodsReceipt).GetProperty(nameof(GoodsReceipt.Deliverer))!
+            .SetValue(currentReceipt, person);
+        typeof(GoodsReceiptItem).GetProperty(nameof(GoodsReceiptItem.Product))!
+            .SetValue(currentReceipt.Items.Single(), product);
+        typeof(GoodsReceiptItem).GetProperty(nameof(GoodsReceiptItem.Warehouse))!
+            .SetValue(currentReceipt.Items.Single(), warehouse);
+
+        Register(context, new MemoryRepository<StorageWarehouse>([warehouse]));
+        Register(context, new MemoryRepository<Person>([person]));
+        Register(context, new MemoryRepository<Product>([product]));
+        Register(context, new MemoryRepository<UnitOfMeasure>([unit]));
+        Register(context, new MemoryRepository<Supplier>([]));
+        Register(context, new MemoryRepository<Invoice>([]));
+        Register(context, new MemoryRepository<GoodsIssue>([issue]));
+        Register(context, new MemoryRepository<GoodsIssueItem>([issueItem]));
+        Register(context, new MemoryRepository<GoodsReceipt>([earlierReceipt, currentReceipt]));
+        Register(context, new MemoryRepository<GoodsReceiptItem>(
+            [earlierReceipt.Items.Single(), currentReceipt.Items.Single()]));
+
+        var values = new CreateGoodsReceiptCommand(currentReceipt.EnteredAtUtc, null,
+            person.Id, null, "2", [new CreateGoodsReceiptItem(product.Id, null, null, null,
+                warehouse.Id, null, null, null, null, null, 2, null, null, "OUT-1")]);
+        var result = await context.Sender.Send(new UpdateGoodsReceiptCommand(
+            currentReceipt.Id, values, true, true, currentReceipt.ConcurrencyStamp));
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains(result.Messages, message => message.Contains("عدم تطبیق تعداد/مقدار"));
+        Assert.Equal(1, currentReceipt.Items.Single().Quantity);
+        await context.UnitOfWork.DidNotReceive().SaveAsync(Arg.Any<CancellationToken>());
+
+        var valid = await context.Sender.Send(new UpdateGoodsReceiptCommand(
+            currentReceipt.Id, values with { Items = [values.Items.Single() with { Quantity = 1 }] },
+            true, true, currentReceipt.ConcurrencyStamp));
+        Assert.True(valid.IsSuccess);
+        Assert.Equal(issueItem.Id, valid.Data!.Items.Single().GoodsIssueItemId);
+        Assert.Equal("OUT-1", valid.Data.Items.Single().IssueNumber);
+        Assert.Equal(currentReceipt.EnteredAtUtc, issueItem.ReturnAtUtc);
+    }
+
     private static void Register<T>(
         ApplicationTestContext context, MemoryRepository<T> repository) where T : Entity<Guid> =>
         context.UnitOfWork.Repository<T>().Returns(repository);

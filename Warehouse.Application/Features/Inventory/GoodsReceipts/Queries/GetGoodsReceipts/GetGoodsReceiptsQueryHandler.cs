@@ -19,6 +19,23 @@ internal sealed class GetGoodsReceiptsQueryHandler(IUnitOfWork<Guid> unitOfWork)
         var repository = unitOfWork.Repository<GoodsReceipt>();
         var query = repository.Entities;
         var totalCount = await repository.CountAsync(query, cancellationToken);
+        if (request.QuickFilter.HasValue)
+        {
+            var (startUtc, endUtc) = GoodsReceiptTodayRange.For(DateTimeOffset.UtcNow);
+            query = request.QuickFilter.Value switch
+            {
+                GoodsReceiptQuickFilter.MissingReceipt => query.Where(receipt => receipt.Items.Any(item =>
+                    item.ReceiptNumber == null || item.ReceiptNumber == "")),
+                GoodsReceiptQuickFilter.MissingInvoice => query.Where(receipt => receipt.Items.Any(item =>
+                    item.InvoiceStatus == null)),
+                GoodsReceiptQuickFilter.Today => query.Where(receipt =>
+                    receipt.EnteredAtUtc >= startUtc && receipt.EnteredAtUtc < endUtc),
+                _ => query
+            };
+        }
+        if (request.ReceiptNumberIsEmpty)
+            query = query.Where(receipt => receipt.Items.Any(item =>
+                item.ReceiptNumber == null || item.ReceiptNumber == ""));
         var search = request.Search?.Trim();
 
         if (!string.IsNullOrWhiteSpace(search))
@@ -119,6 +136,7 @@ internal sealed class GetGoodsReceiptsQueryHandler(IUnitOfWork<Guid> unitOfWork)
             ("invoicestatus", false) => query.OrderBy(item => item.Items.Min(row => row.InvoiceStatus)).ThenBy(item => item.Id),
             ("invoicestatus", true) => query.OrderByDescending(item => item.Items.Max(row => row.InvoiceStatus)).ThenByDescending(item => item.Id),
             ("enteredatutc", false) => query.OrderBy(item => item.EnteredAtUtc).ThenBy(item => item.Id),
-            _ => query.OrderByDescending(item => item.EnteredAtUtc).ThenByDescending(item => item.Id)
+            ("enteredatutc", true) => query.OrderByDescending(item => item.EnteredAtUtc).ThenByDescending(item => item.Id),
+            _ => query.OrderBy(item => item.PageNumber).ThenBy(item => item.Id)
         };
 }

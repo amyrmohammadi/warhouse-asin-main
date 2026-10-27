@@ -52,7 +52,7 @@ internal sealed class CreateGoodsReceiptCommandValidator : AbstractValidator<Cre
             NormalizeRowText(item.InvoiceNumber),
             item.SupplierId?.ToString() ??
             $"new:{NormalizeRowText(item.SupplierTitle)}",
-            NormalizeRowText(item.ReceiptNumber),
+            NormalizeRowText(item.ReceiptNumber) + ":" + NormalizeRowText(item.IssueNumber),
             item.Quantity,
             NormalizeRowText(item.RequestNumber),
             NormalizeRowText(item.Description)));
@@ -123,6 +123,7 @@ internal sealed class CreateGoodsReceiptItemValidator : AbstractValidator<Create
             .Must(item => !item.SupplierId.HasValue || string.IsNullOrWhiteSpace(item.SupplierTitle))
             .WithMessage("برای طرف حساب فقط یکی از شناسه یا عنوان جدید را وارد کنید.");
         RuleFor(item => item.ReceiptNumber).MaximumLength(100);
+        RuleFor(item => item.IssueNumber).MaximumLength(100);
         RuleFor(item => item.InvoiceStatus).IsInEnum()
             .When(item => item.InvoiceStatus.HasValue);
         RuleFor(item => item.InvoiceNumber)

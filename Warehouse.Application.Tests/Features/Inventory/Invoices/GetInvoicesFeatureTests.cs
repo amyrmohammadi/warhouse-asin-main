@@ -4,6 +4,7 @@ using Warehouse.Application.Features.Inventory.Invoices.Queries.GetInvoiceById;
 using Warehouse.Application.Features.Inventory.Invoices.Queries.GetInvoices;
 using Warehouse.Application.Tests.TestSupport;
 using Warehouse.Domain.Entities;
+using Warehouse.Domain.Enums;
 
 namespace Warehouse.Application.Tests.Features.Inventory.Invoices;
 
@@ -39,6 +40,8 @@ public sealed class GetInvoicesFeatureTests
     {
         await using var context = new ApplicationTestContext();
         var invoice = new Invoice("INV-1", null);
+        invoice.UpdateDetails("  توضیحات فاکتور  ", new DateOnly(2026, 10, 20),
+            InvoiceProcessingStatus.SentToFinance);
         var repository = CreateRepository(invoice);
         context.UnitOfWork.Repository<Invoice>().Returns(repository);
 
@@ -48,6 +51,9 @@ public sealed class GetInvoicesFeatureTests
         Assert.NotNull(result.Data);
         Assert.Equal(invoice.Id, result.Data.Id);
         Assert.Equal("INV-1", result.Data.InvoiceNumber);
+        Assert.Equal("توضیحات فاکتور", result.Data.Description);
+        Assert.Equal(new DateOnly(2026, 10, 20), result.Data.InvoiceDate);
+        Assert.Equal(InvoiceProcessingStatus.SentToFinance, result.Data.ProcessingStatus);
         Assert.Empty(result.Data.Items);
     }
 
@@ -56,6 +62,9 @@ public sealed class GetInvoicesFeatureTests
     {
         await using var context = new ApplicationTestContext();
         var invoice = new Invoice("INV-1", null);
+        Assert.Equal(InvoiceProcessingStatus.UnderReview, invoice.ProcessingStatus);
+        invoice.UpdateDetails("شرح", new DateOnly(2026, 10, 20),
+            InvoiceProcessingStatus.FinanceApproved);
         var receipt = new GoodsReceipt(DateTimeOffset.UtcNow, null, Guid.NewGuid(), "1");
         AddInvoiceItem(receipt, invoice, "REC-2", 0);
         AddInvoiceItem(receipt, invoice, "REC-1", 1);
@@ -70,6 +79,9 @@ public sealed class GetInvoicesFeatureTests
         var summary = Assert.Single(result.Data!.Items);
         Assert.Equal(["REC-1", "REC-2"], summary.ReceiptNumbers);
         Assert.Equal(1, summary.ItemsWithoutReceiptCount);
+        Assert.Equal("شرح", summary.Description);
+        Assert.Equal(new DateOnly(2026, 10, 20), summary.InvoiceDate);
+        Assert.Equal(InvoiceProcessingStatus.FinanceApproved, summary.ProcessingStatus);
     }
 
     [Fact]

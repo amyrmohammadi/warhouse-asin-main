@@ -10,6 +10,9 @@ internal static class InvoiceProjection
         {
             Id = invoice.Id,
             InvoiceNumber = invoice.InvoiceNumber,
+            Description = invoice.Description,
+            InvoiceDate = invoice.InvoiceDate,
+            ProcessingStatus = invoice.ProcessingStatus,
             Counterparty = invoice.Supplier == null ? null : invoice.Supplier.Title,
             ReceiptNumbers = invoice.GoodsReceiptItems
                 .Where(item => item.ReceiptNumber != null)
@@ -24,7 +27,11 @@ internal static class InvoiceProjection
         {
             Id = invoice.Id,
             InvoiceNumber = invoice.InvoiceNumber,
+            Description = invoice.Description,
+            InvoiceDate = invoice.InvoiceDate,
+            ProcessingStatus = invoice.ProcessingStatus,
             Counterparty = invoice.Supplier == null ? null : invoice.Supplier.Title,
+            SupplierId = invoice.SupplierId,
             Items = invoice.GoodsReceiptItems
                 .OrderBy(item => item.GoodsReceipt.EnteredAtUtc)
                 .ThenBy(item => item.SortOrder)
@@ -33,6 +40,7 @@ internal static class InvoiceProjection
                 {
                     Id = item.Id,
                     GoodsReceiptId = item.GoodsReceiptId,
+                    GoodsIssueItemId = item.GoodsIssueItemId,
                     GoodsReceiptConcurrencyStamp = item.GoodsReceipt.ConcurrencyStamp,
                     ProductTitle = item.Product.Title,
                     ProductCode = item.Product.Code,
