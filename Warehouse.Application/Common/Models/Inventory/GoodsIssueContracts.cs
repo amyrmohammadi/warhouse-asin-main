@@ -1,4 +1,5 @@
 using Warehouse.Application.Common.Models.MasterData;
+using Warehouse.Domain.Enums;
 
 namespace Warehouse.Application.Common.Models.Inventory;
 
@@ -26,7 +27,11 @@ public class GoodsIssueItemSummary
     public string? AssetNumber { get; init; }
     public Guid? DestinationId { get; init; }
     public string? DestinationTitle { get; init; }
-    public string? ExitReason { get; init; }
+    public Guid? ShippingLocationId { get; init; }
+    public string? ShippingLocationTitle { get; init; }
+    public GoodsIssueExitReason ExitReason { get; init; }
+    public string? LegacyExitReason { get; init; }
+    public bool IsReturnable { get; init; }
     public string? Description { get; init; }
     public string? DeliveringUnit { get; init; }
     public DateTimeOffset? ReturnAtUtc { get; init; }
@@ -58,4 +63,6 @@ public sealed record GoodsIssueItemRowListResult(
 public sealed class GoodsIssueOptions
 {
     public IReadOnlyCollection<PersonSummary> People { get; init; } = [];
+
+    public IReadOnlyCollection<TitledMasterDataSummary> UnitsOfMeasure { get; init; } = [];
 }

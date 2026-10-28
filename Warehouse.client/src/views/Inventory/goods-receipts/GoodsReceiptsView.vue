@@ -58,15 +58,16 @@ const VIEW_MODES = [
 // ── دسترسی‌ها ──────────────────────────────────────────────────────
 const { has } = usePermissions()
 const canInitialEntry = has('GoodsReceiptsInitialEntry')
-const canManageReceiptInvoice = has('GoodsReceiptsReceiptInvoiceOperations')
+const canManageInvoice = has('GoodsReceiptsReceiptInvoiceOperations')
+const canManageReceipt = has('GoodsReceiptsReceiptRegistration')
 const canReadItemHistory = has('GoodsReceiptHistoryRead')
 const canImport = has('GoodsReceiptsImport')
 const canExport = has('GoodsReceiptsExport')
-const canEdit = canInitialEntry || canManageReceiptInvoice
+const canEdit = canInitialEntry || canManageInvoice || canManageReceipt
 
 const metricCards = [
   { key: 'itemsWithoutReceiptCount', permission: 'GoodsReceiptsMissingReceiptCountRead', title: 'کالاهای بدون رسید', tone: 'blue', mode: 'items' },
-  { key: 'itemsWithoutInvoiceCount', permission: 'GoodsReceiptsMissingInvoiceCountRead', title: 'کالای بدون فاکتور', tone: 'amber', mode: 'items' },
+  { key: 'itemsWithoutInvoiceCount', permission: 'GoodsReceiptsMissingInvoiceCountRead', title: 'فاکتور بلاتکلیف', tone: 'amber', mode: 'items' },
   { key: 'todayItemCount', permission: 'GoodsReceiptsTodayItemCountRead', title: 'تعداد اقلام ورودی امروز', tone: 'teal', mode: 'items' },
   { key: 'todayDocumentCount', permission: 'GoodsReceiptsTodayDocumentCountRead', title: 'تعداد اسناد ورودی امروز', tone: 'violet', mode: 'receipts' },
 ] as const
@@ -88,6 +89,7 @@ const importFile = ref<File | null>(null)
 const importSummary = ref<GoodsReceiptImportSummary | null>(null)
 
 const { handleUnauthorized } = useUnauthorizedRedirect('/dashboard/inventory/goods-receipts')
+
 async function loadMetrics(): Promise<void> {
   if (!visibleMetricCards.length) return
   const controller = metricsChannel.begin()
@@ -299,10 +301,11 @@ function onTableWheel(event: WheelEvent): void {
   scrollBody.scrollTop += delta
 }
 const visibility = useColumnVisibility<TableMode>({
-  storageKey: 'warehouse.goods-receipts.hidden-columns.v3',
+  storageKey: 'warehouse.goods-receipts.hidden-columns.v4',
   mode: tableMode,
   columns,
   getApi: () => table.value?.dt,
+  defaultHidden: { items: ['issueNumber'] },
 })
 const { menuOpen, toggleable, isVisible: isColumnVisible, toggle: toggleColumn, toggleMenu, closeMenu } = visibility
 
@@ -511,7 +514,7 @@ onBeforeUnmount(() => {
         <DataTableFilters :key="selectedMetric?.key ?? 'all'" v-model="appliedFilters"
                           :definitions="filterDefinitions" :search="quickSearch"
                           :loading="listLoading"
-                          search-placeholder="جستجو در عنوان و کد کالا، شماره صفحه، فاکتور و رسید..."
+                          search-placeholder="جستجو در کالا، توضیحات، طرف حساب، شماره صفحه، فاکتور و رسید..."
                           @update:search="filters.onSearch" @apply="filters.onApply" @clear="clearAllFilters"
                           @remove="filters.onRemove">
           <template #filter-productTitle="{ setValue, error }">
@@ -556,7 +559,9 @@ onBeforeUnmount(() => {
                 {{ receiptItemsText(cellData as GoodsReceipt['items']) || '—' }}
               </span>
             </template>
-            <template #column-productTitle="{ cellData }"><strong class="text-black">{{ cellData }}</strong></template>
+            <template #column-productTitle="{ cellData }">
+              <strong class="text-black" :title="String(cellData ?? '')">{{ cellData }}</strong>
+            </template>
             <template #column-productCode="{ cellData }"><span dir="ltr">{{ cellData }}</span></template>
             <template #column-quantity="{ cellData }">
               <span class="inventory-quantity-cell">{{ formatPersianNumber(cellData) }}</span>
@@ -624,7 +629,7 @@ onBeforeUnmount(() => {
   flex: 1;
   font-family: "iransans-medium", sans-serif;
   gap: .35rem;
-  min-height: calc(3.25rem + 10px);
+  min-height: calc(3.25rem - 10px);
   padding: .25rem .45rem;
   text-align: right;
   width: 100%;

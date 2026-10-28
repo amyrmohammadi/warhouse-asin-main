@@ -48,7 +48,9 @@ const editSaving = ref(false)
 
 const { has } = usePermissions()
 const canViewMissingReceiptCount = has('InvoicesMissingReceiptCountRead')
-const canEditItems = has('GoodsReceiptsReceiptInvoiceOperations')
+const canEditInvoice = has('GoodsReceiptsReceiptInvoiceOperations')
+const canEditReceipt = has('GoodsReceiptsReceiptRegistration')
+const canEdit = canEditInvoice || canEditReceipt
 const statusLabel = {
   UnderReview: 'در حال رسیدگی',
   SentToFinance: 'ارسال به واحد مالی',
@@ -189,7 +191,7 @@ async function saveInvoice(values: UpdateInvoiceRequest): Promise<void> {
     invoiceDetails.value = await updateInvoice(details.id, values, controller.signal)
     editMode.value = false
     list.reload(false)
-    toast.success('فاکتور با موفقیت ویرایش شد.')
+    toast.success('تغییرات با موفقیت ذخیره شد.')
   } catch (error) {
     if (isAbortError(error)) return
     if (await handleUnauthorized(error)) return
@@ -210,7 +212,8 @@ onBeforeUnmount(() => {
 
 <template>
   <InvoiceItemsModal :model-value="detailsOpen" :details="invoiceDetails"
-                     :loading="detailsLoading" :error="detailsError" :can-edit="canEditItems"
+                     :loading="detailsLoading" :error="detailsError" :can-edit="canEdit"
+                     :can-edit-invoice="canEditInvoice" :can-edit-receipt="canEditReceipt"
                      :edit-mode="editMode" :saving="editSaving"
                      @update:edit-mode="editMode = $event; detailsError = null"
                      @save="saveInvoice" @update:model-value="closeDetails" />

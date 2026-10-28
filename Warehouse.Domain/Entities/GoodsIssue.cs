@@ -1,4 +1,5 @@
 using Warehouse.Domain.Common;
+using Warehouse.Domain.Enums;
 
 namespace Warehouse.Domain.Entities;
 
@@ -39,9 +40,30 @@ public sealed class GoodsIssue : ConcurrencyEntity<Guid>
         DateTimeOffset? returnAtUtc,
         int sortOrder)
     {
+        return AddItem(productId, productCode, quantity, assetNumber, destinationId, null,
+            GoodsIssueExitReasonParser.FromLegacyText(exitReason), true, description,
+            deliveringUnit, returnAtUtc, sortOrder, exitReason);
+    }
+
+    public GoodsIssueItem AddItem(
+        Guid? productId,
+        string productCode,
+        decimal quantity,
+        string? assetNumber,
+        Guid? destinationId,
+        Guid? shippingLocationId,
+        GoodsIssueExitReason exitReason,
+        bool isReturnable,
+        string? description,
+        string? deliveringUnit,
+        DateTimeOffset? returnAtUtc,
+        int sortOrder,
+        string? legacyExitReason = null)
+    {
         var item = new GoodsIssueItem(
-            Id, productId, productCode, quantity, assetNumber, destinationId, exitReason,
-            description, deliveringUnit, returnAtUtc, sortOrder);
+            Id, productId, productCode, quantity, assetNumber, destinationId,
+            shippingLocationId, exitReason, isReturnable, legacyExitReason,
+            description, deliveringUnit, isReturnable ? returnAtUtc : null, sortOrder);
         Items.Add(item);
         return item;
     }

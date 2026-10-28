@@ -160,6 +160,7 @@ public sealed class ProductsController(
             PermissionPolicyNames.Inventory.GoodsReceiptsRead,
             PermissionPolicyNames.Inventory.GoodsReceiptsInitialEntry,
             PermissionPolicyNames.Inventory.GoodsReceiptsReceiptInvoiceOperations,
+            PermissionPolicyNames.Inventory.GoodsReceiptsReceiptRegistration,
             PermissionPolicyNames.Inventory.GoodsIssuesRead,
             PermissionPolicyNames.Inventory.GoodsIssuesCreate,
             PermissionPolicyNames.Inventory.GoodsIssuesUpdate

@@ -80,7 +80,7 @@ onBeforeUnmount(release)
 <template>
   <Teleport to="body">
     <template v-if="modelValue">
-      <div class="modal show d-block"
+      <div class="modal show d-block base-modal__surface"
            :class="modalClass"
            tabindex="-1"
            role="dialog"
@@ -107,7 +107,51 @@ onBeforeUnmount(release)
           </div>
         </div>
       </div>
-      <div class="modal-backdrop show"></div>
+      <div class="modal-backdrop show base-modal__backdrop"></div>
     </template>
   </Teleport>
 </template>
+
+<style scoped>
+.base-modal__surface {
+  animation: base-modal-surface-in 320ms ease-out both;
+}
+
+.base-modal__surface .modal-dialog {
+  animation: base-modal-dialog-in 440ms cubic-bezier(.22, 1, .36, 1) both;
+  transform-origin: center;
+}
+
+.base-modal__backdrop {
+  animation: base-modal-backdrop-in 360ms ease-out both;
+}
+
+@keyframes base-modal-surface-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes base-modal-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes base-modal-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: .5; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .base-modal__surface,
+  .base-modal__surface .modal-dialog,
+  .base-modal__backdrop {
+    animation: none;
+  }
+}
+</style>

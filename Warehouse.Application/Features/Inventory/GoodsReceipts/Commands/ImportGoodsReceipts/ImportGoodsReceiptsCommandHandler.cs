@@ -44,7 +44,8 @@ internal sealed class ImportGoodsReceiptsCommandHandler(
             await GoodsReceiptImportValidation.ValidateAsync(
                 rows,
                 unitOfWork,
-                request.CanManageReceiptInvoice,
+                request.CanManageInvoice,
+                request.CanManageReceipt,
                 token);
 
         // در صورت وجود خطا، هیچ اطلاعاتی ثبت نمی‌شود
@@ -90,20 +91,38 @@ internal sealed class ImportGoodsReceiptsCommandHandler(
             invoiceRepository.Entities.Where(invoice =>
                 requestedInvoiceNumbers.Contains(invoice.InvoiceNumber)),
             token);
-        var invoicesByNumber = new Dictionary<string, Invoice>(StringComparer.OrdinalIgnoreCase);
+        var invoicesByNumberAndSupplier = new Dictionary<string, Invoice>(StringComparer.Ordinal);
         foreach (var existingInvoice in existingInvoices)
         {
             var trackedInvoice = await invoiceRepository.GetByIdAsync(existingInvoice.Id, token);
             if (trackedInvoice is not null)
             {
-                invoicesByNumber.TryAdd(trackedInvoice.InvoiceNumber, trackedInvoice);
+                invoicesByNumberAndSupplier.TryAdd(
+                    CreateInvoiceKey(trackedInvoice.InvoiceNumber, trackedInvoice.SupplierId),
+                    trackedInvoice);
             }
         }
 
-        await unitOfWork.BeginTransaction(token);
+        await unitOfWork.BeginSerializableTransaction(token);
 
         try
         {
+            var requestedPageNumbers = validation.Rows
+                .Select(row => row.Source.PageNumber.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            var receiptRepository = unitOfWork.Repository<GoodsReceipt>();
+            if (await receiptRepository.CountAsync(
+                    receiptRepository.Entities.Where(receipt =>
+                        requestedPageNumbers.Contains(receipt.PageNumber)),
+                    token) > 0)
+            {
+                await unitOfWork.RollBackTransaction(token);
+                return Result<GoodsReceiptImportSummary>.Error(
+                    "یک یا چند شماره صفحه هم‌زمان توسط کاربر دیگری ثبت شده است. " +
+                    "شماره صفحه را در فهرست ورودی کالا پیدا کنید و کالا را به همان سند اضافه کنید.");
+            }
+
             // هر ردیف یک سند مستقل
             foreach (var row in validation.Rows)
             {
@@ -150,11 +169,12 @@ internal sealed class ImportGoodsReceiptsCommandHandler(
                 if (row.InvoiceStatus == Domain.Enums.InvoiceStatus.HasInvoice)
                 {
                     var invoiceNumber = Invoice.NormalizeNumber(row.Source.InvoiceNumber);
-                    if (!invoicesByNumber.TryGetValue(invoiceNumber, out invoice))
+                    var invoiceKey = CreateInvoiceKey(invoiceNumber, row.SupplierId);
+                    if (!invoicesByNumberAndSupplier.TryGetValue(invoiceKey, out invoice))
                     {
                         invoice = new Invoice(invoiceNumber, row.SupplierId);
                         await invoiceRepository.AddAsync(invoice, token);
-                        invoicesByNumber.Add(invoiceNumber, invoice);
+                        invoicesByNumberAndSupplier.Add(invoiceKey, invoice);
                     }
                 }
 
@@ -164,7 +184,7 @@ internal sealed class ImportGoodsReceiptsCommandHandler(
                     row.WarehouseId,
                     row.InvoiceStatus,
                     invoice,
-                    row.Source.ReceiptNumber,
+                    request.CanManageReceipt ? row.Source.ReceiptNumber : null,
                     row.Source.Quantity!.Value,
                     null,
                     row.Source.Description,
@@ -199,4 +219,7 @@ internal sealed class ImportGoodsReceiptsCommandHandler(
                 CreatedDelivererCount = newPeople
             });
     }
+
+    private static string CreateInvoiceKey(string invoiceNumber, Guid? supplierId) =>
+        $"{invoiceNumber.ToUpperInvariant()}\u001F{supplierId?.ToString("D") ?? "-"}";
 }

@@ -17,6 +17,7 @@ internal sealed class GetGoodsIssueOptionsQueryHandler(IUnitOfWork<Guid> unitOfW
         CancellationToken cancellationToken)
     {
         var peopleRepository = unitOfWork.Repository<Person>();
+        var unitRepository = unitOfWork.Repository<UnitOfMeasure>();
         var people = await peopleRepository.ToListAsync(
             peopleRepository.Entities.OrderBy(person => person.FullName).Select(person => new PersonSummary
             {
@@ -24,9 +25,20 @@ internal sealed class GetGoodsIssueOptionsQueryHandler(IUnitOfWork<Guid> unitOfW
                 FullName = person.FullName,
                 PhoneNumber = person.PhoneNumber
             }), cancellationToken);
+        var units = await unitRepository.ToListAsync(
+            unitRepository.Entities
+                .OrderBy(unit => unit.Title)
+                .Select(unit => new TitledMasterDataSummary
+                {
+                    Id = unit.Id,
+                    ConcurrencyStamp = unit.ConcurrencyStamp,
+                    Title = unit.Title,
+                    Description = unit.Description
+                }), cancellationToken);
         return Result<GoodsIssueOptions>.Success(new GoodsIssueOptions
         {
-            People = people
+            People = people,
+            UnitsOfMeasure = units
         });
     }
 }

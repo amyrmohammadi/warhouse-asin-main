@@ -81,18 +81,40 @@ public sealed class UpdateInvoiceTests
     }
 
     [Fact]
-    public async Task Update_WithDuplicateInvoiceNumber_DoesNotSave()
+    public async Task Update_WithDuplicateInvoiceNumberForSameSupplier_DoesNotSave()
     {
         await using var context = new ApplicationTestContext();
-        var invoice = new Invoice("INV-1", null);
-        Register(context, new MemoryRepository<Invoice>([invoice, new Invoice("INV-2", null)]));
+        var supplier = new Supplier("تأمین‌کننده", null);
+        var invoice = new Invoice("INV-1", supplier.Id);
+        Register(context, new MemoryRepository<Invoice>([invoice, new Invoice("INV-2", supplier.Id)]));
 
         var result = await context.Sender.Send(new UpdateInvoiceCommand(invoice.Id,
-            "INV-2", null, null, null, InvoiceProcessingStatus.UnderReview, []));
+            "INV-2", supplier.Id, null, null, InvoiceProcessingStatus.UnderReview, []));
 
         Assert.False(result.IsSuccess);
         Assert.Equal("INV-1", invoice.InvoiceNumber);
         await context.UnitOfWork.DidNotReceive().SaveAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Update_WithSameInvoiceNumberForDifferentSupplier_Saves()
+    {
+        await using var context = new ApplicationTestContext();
+        var firstSupplier = new Supplier("تأمین‌کننده اول", null);
+        var secondSupplier = new Supplier("تأمین‌کننده دوم", null);
+        var invoice = new Invoice("INV-1", firstSupplier.Id);
+        Register(context, new MemoryRepository<Invoice>(
+            [invoice, new Invoice("INV-2", secondSupplier.Id)]));
+        Register(context, new MemoryRepository<Supplier>([firstSupplier, secondSupplier]));
+
+        var result = await context.Sender.Send(new UpdateInvoiceCommand(invoice.Id,
+            "INV-2", firstSupplier.Id, null, null, InvoiceProcessingStatus.UnderReview,
+            [], CanEditInvoice: true, CanEditReceipt: false));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("INV-2", invoice.InvoiceNumber);
+        Assert.Equal(firstSupplier.Id, invoice.SupplierId);
+        await context.UnitOfWork.Received(1).SaveAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -110,6 +132,42 @@ public sealed class UpdateInvoiceTests
         Assert.Equal("INV-1", invoice.InvoiceNumber);
         Assert.Null(invoice.SupplierId);
         await context.UnitOfWork.DidNotReceive().SaveAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task Update_OnlyChangesTheAuthorizedInvoiceOrReceiptSection(
+        bool canEditInvoice, bool canEditReceipt)
+    {
+        await using var context = new ApplicationTestContext();
+        var invoice = new Invoice("INV-1", null);
+        var unit = new UnitOfMeasure("عدد", null);
+        var product = new Product("کالا", "P-1", unit.Id, null);
+        var warehouse = new StorageWarehouse("انبار", null);
+        var receipt = new GoodsReceipt(DateTimeOffset.UtcNow, null, Guid.NewGuid(), "1");
+        typeof(Product).GetProperty(nameof(Product.UnitOfMeasure))!.SetValue(product, unit);
+        receipt.AddItem(product.Id, warehouse.Id, InvoiceStatus.HasInvoice, invoice,
+            "R-OLD", 1, null, null, 0);
+        var item = receipt.Items.Single();
+        invoice.GoodsReceiptItems.Add(item);
+        typeof(GoodsReceiptItem).GetProperty(nameof(GoodsReceiptItem.GoodsReceipt))!.SetValue(item, receipt);
+        typeof(GoodsReceiptItem).GetProperty(nameof(GoodsReceiptItem.Product))!.SetValue(item, product);
+        typeof(GoodsReceiptItem).GetProperty(nameof(GoodsReceiptItem.Warehouse))!.SetValue(item, warehouse);
+
+        Register(context, new MemoryRepository<Invoice>([invoice]));
+        Register(context, new MemoryRepository<Supplier>([]));
+        Register(context, new MemoryRepository<GoodsReceipt>([receipt]));
+        Register(context, new MemoryRepository<GoodsReceiptItem>([item]));
+
+        var result = await context.Sender.Send(new UpdateInvoiceCommand(invoice.Id,
+            "INV-2", null, "شرح جدید", null, InvoiceProcessingStatus.FinanceApproved,
+            [new(item.Id, "R-NEW", receipt.ConcurrencyStamp)], canEditInvoice, canEditReceipt));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(canEditInvoice ? "INV-2" : "INV-1", invoice.InvoiceNumber);
+        Assert.Equal(canEditInvoice ? "شرح جدید" : null, invoice.Description);
+        Assert.Equal(canEditReceipt ? "R-NEW" : "R-OLD", item.ReceiptNumber);
     }
 
     private static void Register<T>(ApplicationTestContext context, MemoryRepository<T> repository)

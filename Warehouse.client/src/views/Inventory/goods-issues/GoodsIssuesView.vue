@@ -21,7 +21,9 @@ import type { GoodsIssueDestinationOption } from '@/services/goodsIssueDestinati
 import {
   exportGoodsIssueItems,
   getGoodsIssues,
+  GOODS_ISSUE_EXIT_REASON_OPTIONS,
   type GoodsIssueImportSummary,
+  type GoodsIssueExitReason,
   type GoodsIssue,
   type GoodsIssueItemRow,
   type GoodsIssueListParameters,
@@ -47,6 +49,13 @@ const VIEW_MODES = [
   { value: 'items', label: 'بر اساس کالا' },
   { value: 'issues', label: 'بر اساس خروج' },
 ]
+const exitReasonLabels = new Map<GoodsIssueExitReason, string>(
+  GOODS_ISSUE_EXIT_REASON_OPTIONS.map(option => [option.value, option.label]),
+)
+
+function exitReasonText(reason: GoodsIssueExitReason, legacyReason?: string | null): string {
+  return legacyReason?.trim() || exitReasonLabels.get(reason) || 'سایر'
+}
 
 const { has } = usePermissions()
 const canCreate = has('GoodsIssuesCreate')
@@ -68,7 +77,7 @@ const importSummary = ref<GoodsIssueImportSummary | null>(null)
 
 const { handleUnauthorized } = useUnauthorizedRedirect('/dashboard/inventory/goods-issues')
 const options = useGoodsIssueOptions(handleUnauthorized)
-const { people, loading: optionsLoading } = options
+const { people, units, loading: optionsLoading } = options
 void options.load()
 
 const filters = useFilterState(() => list.reload(true))
@@ -172,9 +181,11 @@ const columns: Record<TableMode, ColumnsConfig[]> = {
     { data: 'quantity', name: 'quantity', title: 'تعداد', className: 'min-tablet-l text-bold' },
     { data: 'assetNumber', name: 'assetNumber', title: 'شماره اموال', className: 'min-tablet-l' },
     { data: 'destinationTitle', name: 'destinationTitle', title: 'مقصد', className: 'min-tablet-l' },
+    { data: 'shippingLocationTitle', name: 'shippingLocationTitle', title: 'مکان ارسال', className: 'min-tablet-l' },
     { data: 'exitReason', name: 'exitReason', title: 'علت خروج', className: 'min-tablet-p inventory-wide-column', orderable: false },
     { data: 'description', name: 'description', title: 'توضیحات', className: 'min-tablet-p inventory-wide-column', orderable: false },
     { data: 'deliveringUnit', name: 'deliveringUnit', title: 'واحد تحویل‌دهنده', className: 'min-desktop' },
+    { data: 'isReturnable', name: 'isReturnable', title: 'برگشت داده می‌شود', className: 'min-desktop text-center' },
     { data: 'returnAtUtc', name: 'returnAtUtc', title: 'تاریخ عودت', className: 'min-desktop' },
     { data: 'issuerFullName', name: 'issuerFullName', title: 'خارج‌کننده', className: 'min-desktop' },
     ...(canChange ? [actions('goodsIssueId')] : []),
@@ -315,7 +326,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <GoodsIssueFormModal ref="formModal" :people="people" @saved="onSaved" />
+  <GoodsIssueFormModal ref="formModal" :people="people" :units="units" @saved="onSaved" />
   <GoodsIssueImportModal :model-value="importOpen" :file="importFile" @update:model-value="onImportOpenChange"
                          @imported="onImported" />
 
@@ -359,7 +370,7 @@ onBeforeUnmount(() => {
         </div>
         <DataTableFilters v-model="appliedFilters" :definitions="filterDefinitions" :search="quickSearch"
                           :loading="listLoading"
-                          search-placeholder="جستجو در کد خروج، کالا، مقصد و خارج‌کننده..."
+                          search-placeholder="جستجو در کد خروج، کالا، مقصد، مکان ارسال و خارج‌کننده..."
                           @update:search="filters.onSearch" @apply="filters.onApply" @clear="filters.onClear"
                           @remove="filters.onRemove">
           <template #filter-productTitle="{ setValue, error }">
@@ -395,13 +406,23 @@ onBeforeUnmount(() => {
             <template #column-issuedAtUtc="{ cellData }"><strong class="text-black">{{ formatPersianDate(cellData) }}</strong></template>
             <template #column-issueNumber="{ cellData }"><span dir="ltr">{{ cellData }}</span></template>
             <template #column-productCode="{ cellData }"><span dir="ltr">{{ cellData }}</span></template>
-            <template #column-productTitle="{ cellData }"><strong class="text-black">{{ cellData || '—' }}</strong></template>
+            <template #column-productTitle="{ cellData }">
+              <strong class="text-black" :title="String(cellData ?? '')">{{ cellData || '—' }}</strong>
+            </template>
             <template #column-quantity="{ cellData }"><span class="inventory-quantity-cell">{{ formatPersianNumber(cellData) }}</span></template>
             <template #column-assetNumber="{ cellData }"><span dir="ltr">{{ cellData || '—' }}</span></template>
-            <template #column-exitReason="{ cellData }"><span class="inventory-description-cell" :title="cellData || ''">{{ cellData || '—' }}</span></template>
+            <template #column-exitReason="{ cellData, rowData }">
+              <span class="inventory-description-cell"
+                    :title="exitReasonText(cellData as GoodsIssueExitReason, (rowData as GoodsIssueItemRow).legacyExitReason)">
+                {{ exitReasonText(cellData as GoodsIssueExitReason, (rowData as GoodsIssueItemRow).legacyExitReason) }}
+              </span>
+            </template>
             <template #column-description="{ cellData }"><span class="inventory-description-cell" :title="cellData || ''">{{ cellData || '—' }}</span></template>
             <template #column-issueDescription="{ cellData }"><span class="inventory-description-cell" :title="cellData || ''">{{ cellData || '—' }}</span></template>
             <template #column-returnAtUtc="{ cellData }">{{ formatPersianDate(cellData) }}</template>
+            <template #column-isReturnable="{ cellData }">
+              <span class="badge" :class="cellData ? 'light badge-success' : 'light badge-secondary'">{{ cellData ? 'بله' : 'خیر' }}</span>
+            </template>
             <template #column-itemCount="{ cellData }"><span class="badge light badge-info">{{ (cellData as GoodsIssue['items']).length }} کالا</span></template>
             <template v-if="canChange" #column-actions="{ rowData }">
               <div class="d-flex justify-content-center">
@@ -422,5 +443,11 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.goods-issues-page :deep(.dt-layout-table > div) {
+  max-height: 50vh;
+  overflow: auto !important;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
 .import-errors { max-height: 20rem; overflow-y: auto; }
 </style>

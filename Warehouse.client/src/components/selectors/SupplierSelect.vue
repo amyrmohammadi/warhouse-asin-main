@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue'
 
+import { useFloatingMenu } from './useFloatingMenu'
 import {
   getSupplierById,
   searchSuppliers,
@@ -63,6 +64,8 @@ const inputId = `supplier-select-${componentId}`
 const listboxId = `${inputId}-listbox`
 
 const rootElement = ref<HTMLElement | null>(null)
+const controlElement = ref<HTMLElement | null>(null)
+const menuElement = ref<HTMLElement | null>(null)
 const localText = ref(props.text ?? '')
 const options = ref<SupplierOption[]>([])
 const selectedOption = ref<SupplierOption | null>(null)
@@ -82,6 +85,38 @@ const canCreate = computed(() =>
   trimmedText.value.length >= props.minSearchLength &&
   !options.value.some(option => option.title.trim() === trimmedText.value),
 )
+
+/**
+ * منو مانند انتخابگر کالا به body منتقل می‌شود تا overflow مودال و جدول آن را نبُرد.
+ * متغیرهای ظاهری لازم را نیز روی منوی Teleportشده کپی می‌کنیم.
+ */
+const FORWARDED_MENU_VARS = [
+  '--supplier-select-menu-background',
+  '--supplier-select-menu-border-color',
+  '--supplier-select-menu-radius',
+  '--supplier-select-menu-shadow',
+  '--supplier-select-menu-color',
+  '--supplier-select-option-color',
+  '--supplier-select-option-hover-background',
+  '--supplier-select-option-hover-color',
+]
+
+const { style: floatingStyle } = useFloatingMenu(controlElement, menuOpen, {
+  menu: menuElement,
+  minWidth: 220,
+})
+
+const forwardedVars = ref<Record<string, string>>({})
+watch(menuOpen, open => {
+  if (!open || !controlElement.value) return
+  const computedStyle = window.getComputedStyle(controlElement.value)
+  const next: Record<string, string> = {}
+  for (const name of FORWARDED_MENU_VARS) {
+    const value = computedStyle.getPropertyValue(name).trim()
+    if (value) next[name] = value
+  }
+  forwardedVars.value = next
+}, { flush: 'pre' })
 
 /** عنوانی که در حال حاضر به شناسه انتخاب‌شده مربوط است. */
 const currentTitle = computed(() => {
@@ -136,6 +171,13 @@ function openMenu(): void {
 function closeMenu(): void {
   menuOpen.value = false
   activeIndex.value = -1
+}
+
+function handleEscape(event: KeyboardEvent): void {
+  if (!menuOpen.value) return
+  event.preventDefault()
+  event.stopPropagation()
+  closeMenu()
 }
 
 function scheduleSearch(term: string): void {
@@ -280,7 +322,9 @@ function handleBlur(): void {
 }
 
 function handleDocumentMouseDown(event: MouseEvent): void {
-  if (!rootElement.value?.contains(event.target as Node)) closeMenu()
+  const target = event.target as Node
+  if (rootElement.value?.contains(target) || menuElement.value?.contains(target)) return
+  closeMenu()
 }
 
 onMounted(() => {
@@ -301,7 +345,7 @@ onBeforeUnmount(() => {
       <span v-if="required" class="text-danger">*</span>
     </label>
 
-    <div class="supplier-select__control">
+    <div ref="controlElement" class="supplier-select__control">
       <input
         :id="inputId"
         class="form-control"
@@ -323,11 +367,17 @@ onBeforeUnmount(() => {
         @keydown.down.prevent="moveActive(1)"
         @keydown.up.prevent="moveActive(-1)"
         @keydown.enter.prevent="handleEnter"
-        @keydown.esc.prevent="closeMenu" />
+        @keydown.esc="handleEscape" />
 
       <i class="las la-angle-down supplier-select__arrow" aria-hidden="true"></i>
 
-      <div v-if="menuOpen" :id="listboxId" class="supplier-select__menu" role="listbox">
+      <Teleport to="body">
+        <div v-if="menuOpen"
+             :id="listboxId"
+             ref="menuElement"
+             class="supplier-select__menu"
+             :style="[floatingStyle, forwardedVars]"
+             role="listbox">
         <div v-if="loading" class="supplier-select__status">در حال جستجو...</div>
         <div v-else-if="loadFailed" class="supplier-select__status">
           دریافت فهرست تأمین‌کنندگان انجام نشد.
@@ -362,7 +412,8 @@ onBeforeUnmount(() => {
           <i class="las la-plus-circle" aria-hidden="true"></i>
           <span>افزودن «{{ trimmedText }}» به‌عنوان تأمین‌کننده جدید</span>
         </button>
-      </div>
+        </div>
+      </Teleport>
     </div>
 
     <small v-if="error" class="invalid-feedback d-block" :class="errorClass">{{ error }}</small>
@@ -383,12 +434,12 @@ onBeforeUnmount(() => {
    *   --supplier-select-menu-background
    *   --supplier-select-menu-border-color
    *   --supplier-select-menu-radius
-   *   --supplier-select-menu-min-width
    *   --supplier-select-menu-shadow
    *   --supplier-select-menu-color
    *   --supplier-select-option-color
    *   --supplier-select-option-hover-background
    *   --supplier-select-option-hover-color
+   * منو مانند انتخابگر کالا با Teleport و useFloatingMenu رندر و موقعیت‌دهی می‌شود.
    */
   .supplier-select {
     position: relative;
@@ -414,7 +465,7 @@ onBeforeUnmount(() => {
     border-style: solid;
     border-width: var(--supplier-select-input-border-width, 1px);
     color: var(--supplier-select-input-color, var(--text-primary));
-    padding-left: 2rem;
+    padding-left: .2rem;
   }
 
   .supplier-select__arrow {
@@ -432,15 +483,9 @@ onBeforeUnmount(() => {
     border-radius: var(--supplier-select-menu-radius, .65rem);
     box-shadow: var(--supplier-select-menu-shadow, 0 .75rem 1.75rem rgba(15, 23, 42, .18));
     color: var(--supplier-select-menu-color, var(--text-primary));
-    max-height: 15rem;
-    min-width: var(--supplier-select-menu-min-width, 120px);
     overflow-y: auto;
     padding: .3rem;
-    position: absolute;
-    right: 0;
-    top: calc(100% + .35rem);
-    width: 100%;
-    z-index: 100070;
+    z-index: 100071;
   }
 
   .supplier-select__option {
@@ -453,8 +498,8 @@ onBeforeUnmount(() => {
     display: flex;
     flex-direction: column;
     font-size: 11px;
-    gap: .25rem;
-    padding: .35rem .45rem;
+    gap: .4rem;
+    padding: .25rem;
     text-align: right;
     width: 100%;
   }
@@ -506,7 +551,7 @@ onBeforeUnmount(() => {
     align-items: center;
     color: var(--text-secondary);
     display: flex;
-    font-size: .7rem;
+    font-size: .8rem;
     gap: .4rem;
     padding: .7rem .55rem;
   }

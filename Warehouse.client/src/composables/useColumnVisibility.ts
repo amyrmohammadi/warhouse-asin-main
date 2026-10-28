@@ -10,6 +10,8 @@ interface Options<M extends string> {
   getApi: () => Api | undefined
   /** ستون‌هایی که کاربر نمی‌تواند پنهان کند (بر اساس `name`). */
   lockedNames?: string[]
+  /** ستون‌هایی که تا پیش از ذخیرهٔ انتخاب کاربر، مخفی هستند (بر اساس `name`). */
+  defaultHidden?: Partial<Record<M, string[]>>
 }
 
 /**
@@ -30,16 +32,19 @@ export function useColumnVisibility<M extends string>(options: Options<M>) {
   }
 
   function readHidden(): Record<M, string[]> {
-    const empty = Object.fromEntries(modes.map(m => [m, [] as string[]])) as Record<M, string[]>
+    const defaults = Object.fromEntries(modes.map(m => [
+      m,
+      [...(options.defaultHidden?.[m] ?? [])],
+    ])) as Record<M, string[]>
     try {
       const parsed = JSON.parse(window.localStorage.getItem(options.storageKey) ?? 'null') as Partial<Record<M, unknown>> | null
-      if (!parsed) return empty
+      if (!parsed) return defaults
       for (const mode of modes) {
         const saved = parsed[mode]
-        if (Array.isArray(saved)) empty[mode] = saved.filter((k): k is string => typeof k === 'string')
+        if (Array.isArray(saved)) defaults[mode] = saved.filter((k): k is string => typeof k === 'string')
       }
     } catch { /* storage در دسترس نیست؛ برای همین نشست پیش‌فرض‌ها کافی است */ }
-    return empty
+    return defaults
   }
 
   const hidden = reactive(readHidden()) as Record<M, string[]>

@@ -95,7 +95,8 @@ export function useGoodsReceiptForm(deps: Dependencies) {
   const { has } = usePermissions()
   const permissions = {
     canInitialEntry: has('GoodsReceiptsInitialEntry'),
-    canManageReceiptInvoice: has('GoodsReceiptsReceiptInvoiceOperations'),
+    canManageInvoice: has('GoodsReceiptsReceiptInvoiceOperations'),
+    canManageReceipt: has('GoodsReceiptsReceiptRegistration'),
     canManageMasterData: has('MasterDataManage'),
     canCreateProducts: has('ProductsCreate'),
   }
@@ -225,7 +226,7 @@ export function useGoodsReceiptForm(deps: Dependencies) {
   // ── اعتبارسنجی ──────────────────────────────────────────────────
   function validate(): boolean {
     errors.clearAll()
-    const { canManageReceiptInvoice, canManageMasterData, canCreateProducts } = permissions
+    const { canManageInvoice, canManageMasterData, canCreateProducts } = permissions
 
     if (!form.enteredAtLocal) errors.set('enteredAtLocal', 'تاریخ و ساعت ورود کالا را وارد کنید.')
     if (!form.delivererText.trim()) errors.set('deliverer', 'تحویل‌دهنده را وارد یا انتخاب کنید.')
@@ -239,9 +240,9 @@ export function useGoodsReceiptForm(deps: Dependencies) {
     for (const item of items) {
       const set = (field: ItemField, message: string) => errors.setRow(item.key, field, message)
       if (!item.warehouseId) set('warehouse', 'انبار را انتخاب کنید.')
-      if (canManageReceiptInvoice && hasInvoiceNumber(item) && !item.invoiceNumber.trim())
+      if (canManageInvoice && hasInvoiceNumber(item) && !item.invoiceNumber.trim())
         set('invoiceNumber', 'شماره فاکتور را وارد کنید.')
-      if (canManageReceiptInvoice && isNewSupplier(item) && !canManageMasterData)
+      if (canManageInvoice && isNewSupplier(item) && !canManageMasterData)
         set('supplier', 'مجوز افزودن تأمین‌کننده جدید را ندارید؛ از فهرست انتخاب کنید.')
       if (!item.productText.trim()) set('product', 'عنوان کالا را وارد کنید.')
       else if (!item.productId && !canCreateProducts)
@@ -320,7 +321,7 @@ export function useGoodsReceiptForm(deps: Dependencies) {
 
   // ── ذخیره و حذف ─────────────────────────────────────────────────
   function buildPayload(): CreateGoodsReceiptRequest {
-    const { canManageReceiptInvoice } = permissions
+    const { canManageInvoice, canManageReceipt } = permissions
     return {
       enteredAtUtc: localDateTimeToIso(form.enteredAtLocal),
       description: form.description.trim() || null,
@@ -334,11 +335,11 @@ export function useGoodsReceiptForm(deps: Dependencies) {
         productCode: item.productId ? null : item.productCode.trim(),
         unitOfMeasureId: item.productId ? null : item.unitOfMeasureId,
         warehouseId: item.warehouseId,
-        invoiceStatus: canManageReceiptInvoice ? item.invoiceStatus : null,
-        invoiceNumber: canManageReceiptInvoice && hasInvoiceNumber(item) ? item.invoiceNumber.trim() : null,
-        supplierId: canManageReceiptInvoice ? (item.supplierId || null) : null,
-        supplierTitle: canManageReceiptInvoice && !item.supplierId ? (item.supplierText.trim() || null) : null,
-        receiptNumber: canManageReceiptInvoice ? (item.receiptNumber.trim() || null) : null,
+        invoiceStatus: canManageInvoice ? item.invoiceStatus : null,
+        invoiceNumber: canManageInvoice && hasInvoiceNumber(item) ? item.invoiceNumber.trim() : null,
+        supplierId: canManageInvoice ? (item.supplierId || null) : null,
+        supplierTitle: canManageInvoice && !item.supplierId ? (item.supplierText.trim() || null) : null,
+        receiptNumber: canManageReceipt ? (item.receiptNumber.trim() || null) : null,
         issueNumber: item.issueNumber.trim() || null,
         quantity: Number(item.quantity),
         requestNumber: item.requestNumber.trim() || null,

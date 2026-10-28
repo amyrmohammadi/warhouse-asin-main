@@ -34,6 +34,7 @@ public static class PermissionPolicyNames
         public const string GoodsReceiptHistoryRead = nameof(AppPermission.GoodsReceiptHistoryRead);
         public const string GoodsReceiptsInitialEntry = nameof(AppPermission.GoodsReceiptsInitialEntry);
         public const string GoodsReceiptsReceiptInvoiceOperations = nameof(AppPermission.GoodsReceiptsReceiptInvoiceOperations);
+        public const string GoodsReceiptsReceiptRegistration = nameof(AppPermission.GoodsReceiptsReceiptRegistration);
         public const string GoodsReceiptsImport = nameof(AppPermission.GoodsReceiptsImport);
         public const string GoodsReceiptsExport = nameof(AppPermission.GoodsReceiptsExport);
         public const string GoodsReceiptsMissingReceiptCountRead = nameof(AppPermission.GoodsReceiptsMissingReceiptCountRead);
@@ -81,7 +82,8 @@ public static class PermissionPolicyNames
                 new(Inventory.GoodsReceiptsRead, "مشاهده تاریخچه ورود کالا"),
                 new(Inventory.GoodsReceiptHistoryRead, "مشاهده تاریخچه تغییرات هر کالای ورودی"),
                 new(Inventory.GoodsReceiptsInitialEntry, "ورود اولیه کالا"),
-                new(Inventory.GoodsReceiptsReceiptInvoiceOperations, "عملیات رسید و فاکتور"),
+                new(Inventory.GoodsReceiptsReceiptInvoiceOperations, "ثبت و ویرایش فاکتور"),
+                new(Inventory.GoodsReceiptsReceiptRegistration, "ثبت و ویرایش رسید"),
                 new(Inventory.GoodsReceiptsImport, "ایمپورت ورودی کالا"),
                 new(Inventory.GoodsReceiptsExport, "اکسپورت ورودی کالا"),
                 new(Inventory.GoodsReceiptsMissingReceiptCountRead, "مشاهده تعداد کالاهای بدون رسید"),

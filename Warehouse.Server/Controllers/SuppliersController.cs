@@ -159,7 +159,10 @@ public sealed class SuppliersController(
             PermissionPolicyNames.MasterData.Read,
             PermissionPolicyNames.Inventory.GoodsReceiptsRead,
             PermissionPolicyNames.Inventory.GoodsReceiptsInitialEntry,
-            PermissionPolicyNames.Inventory.GoodsReceiptsReceiptInvoiceOperations
+            PermissionPolicyNames.Inventory.GoodsReceiptsReceiptInvoiceOperations,
+            PermissionPolicyNames.Inventory.GoodsIssuesRead,
+            PermissionPolicyNames.Inventory.GoodsIssuesCreate,
+            PermissionPolicyNames.Inventory.GoodsIssuesUpdate
         };
 
         foreach (var policy in policies)

@@ -14,6 +14,7 @@ using Warehouse.Application.Features.Inventory.GoodsIssues.Queries.GetGoodsIssue
 using Warehouse.Application.Features.Inventory.GoodsIssues.Queries.GetGoodsIssueItems;
 using Warehouse.Application.Features.Inventory.GoodsIssues.Queries.GetGoodsIssueOptions;
 using Warehouse.Application.Features.Inventory.GoodsIssues.Queries.GetGoodsIssues;
+using Warehouse.Domain.Enums;
 using Warehouse.Server.Contracts.Inventory;
 
 namespace Warehouse.Server.Controllers;
@@ -80,6 +81,7 @@ public sealed class GoodsIssuesController(
         CancellationToken cancellationToken)
     {
         if (CreatesMasterData(request) && !await CanManageMasterDataAsync()) return Forbid();
+        if (ReferencesNewProduct(request) && !await CanCreateProductsAsync()) return Forbid();
         var result = await sender.Send(ToCommand(null, request), cancellationToken);
         return result.IsSuccess
             ? CreatedAtAction(nameof(GetById), new { id = result.Data!.Id }, result)
@@ -95,6 +97,7 @@ public sealed class GoodsIssuesController(
         CancellationToken cancellationToken)
     {
         if (CreatesMasterData(request) && !await CanManageMasterDataAsync()) return Forbid();
+        if (ReferencesNewProduct(request) && !await CanCreateProductsAsync()) return Forbid();
         var result = await sender.Send(ToCommand(id, request), cancellationToken);
         return result.IsSuccess
             ? Ok(result)
@@ -121,8 +124,8 @@ public sealed class GoodsIssuesController(
         var worksheet = workbook.Worksheets.Add("خروج کالا");
         worksheet.RightToLeft = true;
         string[] headers = ["ردیف", "کد خروج", "تاریخ خروج", "خارج‌کننده", "توضیحات کلی",
-            "کد کالا", "عنوان کالا", "تعداد", "شماره اموال", "مقصد", "علت خروج",
-            "توضیحات ردیف", "واحد تحویل‌دهنده", "تاریخ عودت"];
+            "کد کالا", "عنوان کالا", "تعداد", "شماره اموال", "مقصد", "مکان ارسال", "علت خروج",
+            "توضیحات ردیف", "واحد تحویل‌دهنده", "برگشت داده می‌شود", "تاریخ عودت"];
         for (var column = 1; column <= headers.Length; column++)
             worksheet.Cell(1, column).Value = headers[column - 1];
 
@@ -144,10 +147,14 @@ public sealed class GoodsIssuesController(
                 worksheet.Cell(row, 8).Value = item.Quantity;
                 worksheet.Cell(row, 9).Value = item.AssetNumber ?? string.Empty;
                 worksheet.Cell(row, 10).Value = item.DestinationTitle;
-                worksheet.Cell(row, 11).Value = item.ExitReason;
-                worksheet.Cell(row, 12).Value = item.Description ?? string.Empty;
-                worksheet.Cell(row, 13).Value = item.DeliveringUnit;
-                worksheet.Cell(row, 14).Value = item.ReturnAtUtc.HasValue ? FormatPersianDate(item.ReturnAtUtc.Value) : string.Empty;
+                worksheet.Cell(row, 11).Value = item.ShippingLocationTitle ?? string.Empty;
+                worksheet.Cell(row, 12).Value = string.IsNullOrWhiteSpace(item.LegacyExitReason)
+                    ? FormatExitReason(item.ExitReason)
+                    : item.LegacyExitReason;
+                worksheet.Cell(row, 13).Value = item.Description ?? string.Empty;
+                worksheet.Cell(row, 14).Value = item.DeliveringUnit;
+                worksheet.Cell(row, 15).Value = item.IsReturnable ? "بله" : "خیر";
+                worksheet.Cell(row, 16).Value = item.ReturnAtUtc.HasValue ? FormatPersianDate(item.ReturnAtUtc.Value) : string.Empty;
                 row++;
             }
             if (result.Data.Items.Count < ExportBatchSize || row - 2 >= result.Data.FilteredCount) break;
@@ -172,14 +179,21 @@ public sealed class GoodsIssuesController(
         request.Items.Select(item => new SaveGoodsIssueItem(
             item.ProductId, item.ProductCode, item.Quantity, item.AssetNumber, item.DestinationId,
             item.DestinationTitle, item.ExitReason, item.Description, item.DeliveringUnit,
-            item.ReturnAtUtc)).ToArray(), request.ConcurrencyStamp);
+            item.ReturnAtUtc, item.ProductTitle, item.UnitOfMeasureId,
+            item.ShippingLocationId, item.IsReturnable)).ToArray(), request.ConcurrencyStamp);
 
     private static bool CreatesMasterData(SaveGoodsIssueRequest request) =>
         (!request.IssuerId.HasValue && !string.IsNullOrWhiteSpace(request.IssuerFullName)) ||
         request.Items.Any(item => !item.DestinationId.HasValue && !string.IsNullOrWhiteSpace(item.DestinationTitle));
 
+    private static bool ReferencesNewProduct(SaveGoodsIssueRequest request) =>
+        request.Items.Any(item => !item.ProductId.HasValue);
+
     private async Task<bool> CanManageMasterDataAsync() =>
         (await authorizationService.AuthorizeAsync(User, PermissionPolicyNames.MasterData.Manage)).Succeeded;
+
+    private async Task<bool> CanCreateProductsAsync() =>
+        (await authorizationService.AuthorizeAsync(User, PermissionPolicyNames.MasterData.ProductsCreate)).Succeeded;
 
     private static string FormatPersianDate(DateTimeOffset value)
     {
@@ -187,4 +201,16 @@ public sealed class GoodsIssuesController(
         var calendar = new PersianCalendar();
         return $"{calendar.GetYear(local.DateTime):0000}/{calendar.GetMonth(local.DateTime):00}/{calendar.GetDayOfMonth(local.DateTime):00}";
     }
+
+    private static string FormatExitReason(GoodsIssueExitReason reason) => reason switch
+    {
+        GoodsIssueExitReason.Maintenance => "تعمیرات",
+        GoodsIssueExitReason.Sample => "نمونه",
+        GoodsIssueExitReason.Purchase => "خرید",
+        GoodsIssueExitReason.Sale => "فروش",
+        GoodsIssueExitReason.Services => "خدمات",
+        GoodsIssueExitReason.Consignment => "امانی",
+        GoodsIssueExitReason.Repair => "تعمیر",
+        _ => "سایر"
+    };
 }

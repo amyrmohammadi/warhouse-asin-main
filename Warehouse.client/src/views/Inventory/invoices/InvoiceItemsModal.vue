@@ -13,6 +13,8 @@ const props = defineProps<{
   loading: boolean
   error: string | null
   canEdit: boolean
+  canEditInvoice: boolean
+  canEditReceipt: boolean
   editMode: boolean
   saving: boolean
 }>()
@@ -59,23 +61,24 @@ watch([() => props.editMode, () => props.details], ([editing, details]) => {
 function submit(): void {
   if (!props.details || !props.editMode || props.saving) return
   formError.value = ''
-  if (!form.invoiceNumber.trim()) {
+  if (props.canEditInvoice && !form.invoiceNumber.trim()) {
     formError.value = 'شماره فاکتور الزامی است.'
     return
   }
-  if (!form.supplierId && form.supplierText.trim()) {
+  if (props.canEditInvoice && !form.supplierId && form.supplierText.trim()) {
     formError.value = 'طرف حساب را از فهرست انتخاب کنید یا کادر را خالی بگذارید.'
     return
   }
   emit('save', {
-    invoiceNumber: form.invoiceNumber.trim(),
-    supplierId: form.supplierId,
-    description: form.description.trim() || null,
-    invoiceDate: form.invoiceDate || null,
-    processingStatus: form.processingStatus,
+    invoiceNumber: props.canEditInvoice ? form.invoiceNumber.trim() : props.details.invoiceNumber,
+    supplierId: props.canEditInvoice ? form.supplierId : props.details.supplierId,
+    description: props.canEditInvoice ? (form.description.trim() || null) : props.details.description,
+    invoiceDate: props.canEditInvoice ? (form.invoiceDate || null) : props.details.invoiceDate,
+    processingStatus: props.canEditInvoice ? form.processingStatus : props.details.processingStatus,
     items: form.items.map(item => ({
       id: item.id,
-      receiptNumber: item.receiptNumber.trim() || null,
+      receiptNumber: props.canEditReceipt ? (item.receiptNumber.trim() || null) :
+        (props.details?.items.find(value => value.id === item.id)?.receiptNumber ?? null),
       goodsReceiptConcurrencyStamp: item.goodsReceiptConcurrencyStamp,
     })),
   })
@@ -99,12 +102,12 @@ function submit(): void {
         <div class="col-md-3 form-group">
           <label for="invoice-number">شماره فاکتور</label>
           <input id="invoice-number" v-model="form.invoiceNumber" class="form-control" type="text"
-                 maxlength="100" required dir="ltr" :disabled="saving" />
+                 maxlength="100" required dir="ltr" :disabled="saving" :readonly="!canEditInvoice" />
         </div>
         <div class="col-md-3 form-group">
           <SupplierSelect class="invoice-items-modal__supplier" :model-value="form.supplierId"
                           :text="form.supplierText" label="طرف حساب"
-                          placeholder="انتخاب طرف حساب" :disabled="saving"
+                          placeholder="انتخاب طرف حساب" :disabled="saving || !canEditInvoice"
                           @update:model-value="form.supplierId = $event"
                           @update:text="form.supplierText = $event" />
         </div>
@@ -112,11 +115,13 @@ function submit(): void {
           <label>تاریخ فاکتور</label>
           <DatePicker v-model="form.invoiceDate" type="date" format="YYYY-MM-DD"
                       display-format="jYYYY/jMM/jDD" placeholder="تاریخ فاکتور را انتخاب کنید"
-                      color="#2563eb" :editable="true" :clearable="true" :disabled="saving" />
+                      color="#2563eb" :editable="canEditInvoice" :clearable="canEditInvoice"
+                      :disabled="saving || !canEditInvoice" />
         </div>
         <div class="col-md-3 form-group">
           <label for="invoice-processing-status">وضعیت فاکتور</label>
-          <select id="invoice-processing-status" v-model="form.processingStatus" class="form-control" :disabled="saving">
+          <select id="invoice-processing-status" v-model="form.processingStatus" class="form-control"
+                  :disabled="saving || !canEditInvoice">
             <option value="UnderReview">در حال رسیدگی</option>
             <option value="SentToFinance">ارسال به واحد مالی</option>
             <option value="FinanceApproved">تأیید واحد مالی</option>
@@ -125,7 +130,7 @@ function submit(): void {
         <div class="col-12 form-group">
           <label for="invoice-description">توضیحات</label>
           <textarea id="invoice-description" v-model="form.description" class="form-control"
-                    rows="2" maxlength="1000" :disabled="saving"></textarea>
+                    rows="2" maxlength="1000" :disabled="saving" :readonly="!canEditInvoice"></textarea>
         </div>
       </div>
       <div v-else class="invoice-items-modal__summary">
@@ -159,7 +164,7 @@ function submit(): void {
               <td>
                 <input v-if="editMode" v-model="form.items[index].receiptNumber"
                        class="form-control form-control-sm invoice-items-table__receipt-input"
-                       type="text" maxlength="100" dir="ltr" :disabled="saving"
+                       type="text" maxlength="100" dir="ltr" :disabled="saving" :readonly="!canEditReceipt"
                        :aria-label="`شماره رسید ردیف ${index + 1}`" />
                 <span v-else-if="item.receiptNumber" dir="ltr">{{ item.receiptNumber }}</span>
                 <span v-else class="badge badge-light text-muted">ثبت نشده</span>
@@ -175,10 +180,10 @@ function submit(): void {
       <button v-else class="btn btn-light" type="button" @click="close">بستن</button>
       <button v-if="editMode" class="btn btn-primary" type="submit" form="invoice-details-form" :disabled="saving">
         <span v-if="saving" class="spinner-border spinner-border-sm mr-1" aria-hidden="true"></span>
-        ذخیره فاکتور
+        ذخیره تغییرات
       </button>
       <button v-else-if="canEdit && details" class="btn btn-primary" type="button"
-              @click="$emit('update:editMode', true)">ویرایش فاکتور</button>
+              @click="$emit('update:editMode', true)">ویرایش</button>
     </template>
   </BaseModal>
 </template>

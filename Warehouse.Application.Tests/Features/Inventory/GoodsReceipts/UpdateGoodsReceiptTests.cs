@@ -11,7 +11,38 @@ namespace Warehouse.Application.Tests.Features.Inventory.GoodsReceipts;
 public sealed class UpdateGoodsReceiptTests
 {
     [Fact]
-    public async Task UpdateInvoice_SelectsExistingInvoiceByNumber_WithoutChangingEitherInvoice()
+    public async Task Create_WithDuplicatePageNumber_IsRejectedWithMergeGuidance()
+    {
+        await using var context = new ApplicationTestContext();
+        var existing = new GoodsReceipt(
+            DateTimeOffset.UtcNow,
+            null,
+            Guid.NewGuid(),
+            "12");
+        Register(context, new MemoryRepository<GoodsReceipt>([existing]));
+        var command = new CreateGoodsReceiptCommand(
+            DateTimeOffset.UtcNow,
+            null,
+            Guid.NewGuid(),
+            null,
+            " 12 ",
+            [new CreateGoodsReceiptItem(
+                Guid.NewGuid(), null, null, null, Guid.NewGuid(),
+                InvoiceStatus.DoesNotHave, null, null, null, null,
+                1, null, null)]);
+
+        var result = await context.Sender.Send(command);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains(result.Messages, message =>
+            message.Contains("شماره صفحه «12» قبلاً ثبت شده است") &&
+            message.Contains("همان شماره صفحه را در فهرست ورودی کالا پیدا کنید"));
+        await context.UnitOfWork.DidNotReceive().SaveAsync(Arg.Any<CancellationToken>());
+        await context.UnitOfWork.Received(1).RollBackTransaction(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task UpdateInvoice_SameNumberForDifferentSupplier_CreatesSeparateInvoice()
     {
         await using var context = new ApplicationTestContext();
         var warehouse = new StorageWarehouse("انبار", null);
@@ -53,25 +84,27 @@ public sealed class UpdateGoodsReceiptTests
 
         var result = await context.Sender.Send(
             new UpdateGoodsReceiptCommand(
-                receipt.Id, values, true, true, receipt.ConcurrencyStamp));
+                receipt.Id, values, true, true, true, receipt.ConcurrencyStamp));
 
         Assert.True(result.IsSuccess);
-        Assert.Equal(selectedInvoice.Id, item.InvoiceId);
+        Assert.NotEqual(selectedInvoice.Id, item.InvoiceId);
         Assert.Equal("EXISTING-INVOICE", item.Invoice?.InvoiceNumber);
-        Assert.Equal(secondSupplier.Id, item.Invoice?.SupplierId);
+        Assert.Equal(firstSupplier.Id, item.Invoice?.SupplierId);
         Assert.Equal("OLD-INVOICE", oldInvoice.InvoiceNumber);
         Assert.Equal(firstSupplier.Id, oldInvoice.SupplierId);
-        Assert.Equal(2, invoices.Entities.Count());
+        Assert.Equal(secondSupplier.Id, selectedInvoice.SupplierId);
+        Assert.Equal(3, invoices.Entities.Count());
     }
 
     [Theory]
-    [InlineData(true, false, InvoiceStatus.HasInvoice)]
-    [InlineData(false, true, InvoiceStatus.HasInvoice)]
-    [InlineData(true, true, InvoiceStatus.HasInvoice)]
-    [InlineData(false, true, null)]
-    [InlineData(true, false, null)]
+    [InlineData(true, false, false, InvoiceStatus.HasInvoice)]
+    [InlineData(false, true, false, InvoiceStatus.HasInvoice)]
+    [InlineData(false, false, true, InvoiceStatus.HasInvoice)]
+    [InlineData(true, true, true, InvoiceStatus.HasInvoice)]
+    [InlineData(false, true, true, null)]
+    [InlineData(true, false, true, null)]
     public async Task Update_OnlyChangesAuthorizedSections_AndPreservesIds(
-        bool initial, bool invoice, InvoiceStatus? status)
+        bool initial, bool invoice, bool receiptPermission, InvoiceStatus? status)
     {
         await using var context = new ApplicationTestContext();
         var warehouse = new StorageWarehouse("انبار", null);
@@ -109,7 +142,7 @@ public sealed class UpdateGoodsReceiptTests
 
         var result = await context.Sender.Send(
             new UpdateGoodsReceiptCommand(
-                receipt.Id, values, initial, invoice, originalStamp));
+                receipt.Id, values, initial, invoice, receiptPermission, originalStamp));
 
         Assert.True(result.IsSuccess);
         Assert.NotEqual(originalStamp, receipt.ConcurrencyStamp);
@@ -122,7 +155,7 @@ public sealed class UpdateGoodsReceiptTests
         Assert.Equal(invoice ? status : InvoiceStatus.HasInvoice, item.InvoiceStatus);
         Assert.Equal(invoice ? (status.HasValue ? "NEW-INVOICE" : null) : "OLD-INVOICE",
             invoice ? item.Invoice?.InvoiceNumber : oldInvoice.InvoiceNumber);
-        Assert.Equal(invoice ? "NEW-RECEIPT" : "OLD-RECEIPT", item.ReceiptNumber);
+        Assert.Equal(receiptPermission ? "NEW-RECEIPT" : "OLD-RECEIPT", item.ReceiptNumber);
         Assert.Equal(item.InvoiceStatus, result.Data.Items.Single().InvoiceStatus);
         await context.UnitOfWork.Received(1).SaveAsync(Arg.Any<CancellationToken>());
         await context.UnitOfWork.Received(1).CommitTransaction(Arg.Any<CancellationToken>());
@@ -171,7 +204,7 @@ public sealed class UpdateGoodsReceiptTests
 
         var result = await context.Sender.Send(
             new UpdateGoodsReceiptCommand(
-                receipt.Id, values, true, true, receipt.ConcurrencyStamp));
+                receipt.Id, values, true, true, true, receipt.ConcurrencyStamp));
 
         Assert.True(result.IsSuccess);
         Assert.Equal(
@@ -222,7 +255,7 @@ public sealed class UpdateGoodsReceiptTests
 
         var result = await context.Sender.Send(
             new UpdateGoodsReceiptCommand(
-                receipt.Id, values, true, true, receipt.ConcurrencyStamp));
+                receipt.Id, values, true, true, true, receipt.ConcurrencyStamp));
 
         Assert.True(result.IsSuccess);
         Assert.Equal(2, result.Data!.Items.Count);
@@ -236,7 +269,7 @@ public sealed class UpdateGoodsReceiptTests
     {
         await using var context = new ApplicationTestContext();
         var result = await context.Sender.Send(
-            new UpdateGoodsReceiptCommand(Guid.NewGuid(), null!, false, false));
+            new UpdateGoodsReceiptCommand(Guid.NewGuid(), null!, false, false, false));
         Assert.False(result.IsSuccess);
         await context.UnitOfWork.DidNotReceive().SaveAsync(Arg.Any<CancellationToken>());
     }
@@ -251,7 +284,7 @@ public sealed class UpdateGoodsReceiptTests
         while (staleStamp == receipt.ConcurrencyStamp) staleStamp = Guid.NewGuid();
 
         var result = await context.Sender.Send(new UpdateGoodsReceiptCommand(
-            receipt.Id, null!, true, true, staleStamp));
+            receipt.Id, null!, true, true, true, staleStamp));
 
         Assert.False(result.IsSuccess);
         Assert.Contains(ConcurrencyMessages.Conflict, result.Messages);
@@ -302,7 +335,7 @@ public sealed class UpdateGoodsReceiptTests
             person.Id, null, "2", [new CreateGoodsReceiptItem(product.Id, null, null, null,
                 warehouse.Id, null, null, null, null, null, 2, null, null, "OUT-1")]);
         var result = await context.Sender.Send(new UpdateGoodsReceiptCommand(
-            currentReceipt.Id, values, true, true, currentReceipt.ConcurrencyStamp));
+            currentReceipt.Id, values, true, true, true, currentReceipt.ConcurrencyStamp));
 
         Assert.False(result.IsSuccess);
         Assert.Contains(result.Messages, message => message.Contains("عدم تطبیق تعداد/مقدار"));
@@ -311,7 +344,7 @@ public sealed class UpdateGoodsReceiptTests
 
         var valid = await context.Sender.Send(new UpdateGoodsReceiptCommand(
             currentReceipt.Id, values with { Items = [values.Items.Single() with { Quantity = 1 }] },
-            true, true, currentReceipt.ConcurrencyStamp));
+            true, true, true, currentReceipt.ConcurrencyStamp));
         Assert.True(valid.IsSuccess);
         Assert.Equal(issueItem.Id, valid.Data!.Items.Single().GoodsIssueItemId);
         Assert.Equal("OUT-1", valid.Data.Items.Single().IssueNumber);

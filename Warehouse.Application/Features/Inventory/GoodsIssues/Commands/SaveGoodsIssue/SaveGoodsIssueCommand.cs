@@ -6,6 +6,7 @@ using Warehouse.Application.Common.Models;
 using Warehouse.Application.Common.Models.Inventory;
 using Warehouse.Domain.Common;
 using Warehouse.Domain.Entities;
+using Warehouse.Domain.Enums;
 
 namespace Warehouse.Application.Features.Inventory.GoodsIssues.Commands.SaveGoodsIssue;
 
@@ -16,10 +17,14 @@ public sealed record SaveGoodsIssueItem(
     string? AssetNumber,
     Guid? DestinationId,
     string? DestinationTitle,
-    string ExitReason,
+    GoodsIssueExitReason ExitReason,
     string? Description,
-    string DeliveringUnit,
-    DateTimeOffset? ReturnAtUtc);
+    string? DeliveringUnit,
+    DateTimeOffset? ReturnAtUtc,
+    string? ProductTitle = null,
+    Guid? UnitOfMeasureId = null,
+    Guid? ShippingLocationId = null,
+    bool IsReturnable = true);
 
 public sealed record SaveGoodsIssueCommand(
     Guid? Id,
@@ -53,6 +58,13 @@ internal sealed class SaveGoodsIssueCommandValidator : AbstractValidator<SaveGoo
             item.RuleFor(value => value.ProductCode)
                 .NotEmpty().WithMessage("وارد کردن یا انتخاب کد کالا الزامی است.")
                 .MaximumLength(100).WithMessage("کد کالا نباید بیشتر از ۱۰۰ نویسه باشد.");
+            item.RuleFor(value => value.ProductTitle)
+                .NotEmpty().When(value => !value.ProductId.HasValue)
+                .WithMessage("وارد کردن عنوان کالای جدید الزامی است.")
+                .MaximumLength(256).WithMessage("عنوان کالا نباید بیشتر از ۲۵۶ نویسه باشد.");
+            item.RuleFor(value => value.UnitOfMeasureId)
+                .NotEmpty().When(value => !value.ProductId.HasValue)
+                .WithMessage("انتخاب واحد کالای جدید الزامی است.");
             item.RuleFor(value => value.Quantity)
                 .GreaterThan(0).WithMessage("تعداد کالا باید بزرگ‌تر از صفر باشد.");
             item.RuleFor(value => value.AssetNumber).MaximumLength(100);
@@ -61,11 +73,9 @@ internal sealed class SaveGoodsIssueCommandValidator : AbstractValidator<SaveGoo
                 .WithMessage("انتخاب یا وارد کردن مقصد الزامی است.");
             item.RuleFor(value => value.DestinationTitle).MaximumLength(200);
             item.RuleFor(value => value.ExitReason)
-                .NotEmpty().WithMessage("وارد کردن علت خروج الزامی است.")
-                .MaximumLength(1000);
+                .IsInEnum().WithMessage("علت خروج انتخاب‌شده معتبر نیست.");
             item.RuleFor(value => value.Description).MaximumLength(1000);
             item.RuleFor(value => value.DeliveringUnit)
-                .NotEmpty().WithMessage("وارد کردن واحد تحویل‌دهنده الزامی است.")
                 .MaximumLength(200);
         });
         RuleForEach(command => command.Items)
@@ -137,8 +147,8 @@ internal sealed class SaveGoodsIssueCommandHandler(IUnitOfWork<Guid> unitOfWork)
                 {
                     var item = preparedResult.Data[index];
                     var entity = issue.AddItem(item.ProductId, item.ProductCode, item.Quantity, item.AssetNumber,
-                        item.DestinationId, item.ExitReason, item.Description, item.DeliveringUnit,
-                        item.ReturnAtUtc, index);
+                        item.DestinationId, item.ShippingLocationId, item.ExitReason, item.IsReturnable,
+                        item.Description, item.DeliveringUnit, item.ReturnAtUtc, index);
                     await itemRepository.AddAsync(entity, cancellationToken);
                 }
                 await issueRepository.UpdateAsync(issue, cancellationToken);
@@ -151,8 +161,8 @@ internal sealed class SaveGoodsIssueCommandHandler(IUnitOfWork<Guid> unitOfWork)
                 {
                     var item = preparedResult.Data[index];
                     issue.AddItem(item.ProductId, item.ProductCode, item.Quantity, item.AssetNumber,
-                        item.DestinationId, item.ExitReason, item.Description, item.DeliveringUnit,
-                        item.ReturnAtUtc, index);
+                        item.DestinationId, item.ShippingLocationId, item.ExitReason, item.IsReturnable,
+                        item.Description, item.DeliveringUnit, item.ReturnAtUtc, index);
                 }
                 await issueRepository.AddAsync(issue, cancellationToken);
             }
@@ -213,6 +223,54 @@ internal sealed class SaveGoodsIssueCommandHandler(IUnitOfWork<Guid> unitOfWork)
             return Result<IReadOnlyList<PreparedItem>>.Error("یک یا چند کالای انتخاب‌شده پیدا نشد.");
         var productsById = products.ToDictionary(product => product.Id);
 
+        var newItems = items.Where(item => !item.ProductId.HasValue).ToArray();
+        if (newItems.Any(item => string.IsNullOrWhiteSpace(item.ProductTitle) || !item.UnitOfMeasureId.HasValue))
+            return Result<IReadOnlyList<PreparedItem>>.Error(
+                "برای ثبت کالای جدید، عنوان و واحد اندازه‌گیری را تکمیل کنید.");
+
+        var newTitleKeys = newItems
+            .Select(item => Product.CreateComparisonKey(item.ProductTitle!))
+            .ToArray();
+        var newCodeKeys = newItems
+            .Select(item => Product.CreateComparisonKey(item.ProductCode))
+            .ToArray();
+        if (newItems.Length > 0)
+        {
+            var duplicateProducts = await productRepository.ToListAsync(
+                productRepository.Entities
+                    .Where(product =>
+                        newTitleKeys.Contains(product.NormalizedTitle) ||
+                        newCodeKeys.Contains(product.NormalizedCode))
+                    .Select(product => new
+                    {
+                        product.Title,
+                        product.Code,
+                        product.NormalizedTitle,
+                        product.NormalizedCode
+                    }),
+                cancellationToken);
+            var duplicateTitle = duplicateProducts.FirstOrDefault(
+                product => newTitleKeys.Contains(product.NormalizedTitle));
+            if (duplicateTitle is not null)
+                return Result<IReadOnlyList<PreparedItem>>.Error(
+                    $"عنوان کالا «{duplicateTitle.Title}» قبلاً ثبت شده است؛ کالا را از فهرست انتخاب کنید.");
+
+            var duplicateCode = duplicateProducts.FirstOrDefault(
+                product => newCodeKeys.Contains(product.NormalizedCode));
+            if (duplicateCode is not null && !Product.IsPlaceholderCode(duplicateCode.Code))
+                return Result<IReadOnlyList<PreparedItem>>.Error(
+                    $"کد کالا «{duplicateCode.Code}» قبلاً ثبت شده است؛ کالا را از فهرست انتخاب کنید.");
+        }
+
+        var unitRepository = unitOfWork.Repository<UnitOfMeasure>();
+        var unitIds = newItems.Select(item => item.UnitOfMeasureId!.Value).Distinct().ToArray();
+        var units = await unitRepository.ToListAsync(
+            unitRepository.Entities.Where(unit => unitIds.Contains(unit.Id)), cancellationToken);
+        if (units.Count != unitIds.Length)
+            return Result<IReadOnlyList<PreparedItem>>.Error("واحد اندازه‌گیری انتخاب‌شده پیدا نشد.");
+        var unitsById = units.ToDictionary(unit => unit.Id);
+        var createdProducts = new Dictionary<string, Product>(StringComparer.Ordinal);
+
         var destinationRepository = unitOfWork.Repository<GoodsIssueDestination>();
         var destinationIds = items.Where(item => item.DestinationId.HasValue)
             .Select(item => item.DestinationId!.Value).Distinct().ToArray();
@@ -227,12 +285,40 @@ internal sealed class SaveGoodsIssueCommandHandler(IUnitOfWork<Guid> unitOfWork)
             .GroupBy(destination => destination.Title.Trim(), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
 
+        var shippingLocationIds = items
+            .Where(item => item.ShippingLocationId.HasValue)
+            .Select(item => item.ShippingLocationId!.Value)
+            .Distinct()
+            .ToArray();
+        var supplierRepository = unitOfWork.Repository<Supplier>();
+        var shippingLocations = await supplierRepository.ToListAsync(
+            supplierRepository.Entities.Where(supplier => shippingLocationIds.Contains(supplier.Id)),
+            cancellationToken);
+        if (shippingLocations.Count != shippingLocationIds.Length)
+            return Result<IReadOnlyList<PreparedItem>>.Error("یک یا چند مکان ارسال انتخاب‌شده پیدا نشد.");
+
         var result = new List<PreparedItem>(items.Count);
         foreach (var item in items)
         {
-            var productCode = item.ProductId.HasValue
-                ? productsById[item.ProductId.Value].Code
-                : item.ProductCode.Trim();
+            Product product;
+            if (item.ProductId.HasValue)
+            {
+                product = productsById[item.ProductId.Value];
+            }
+            else
+            {
+                var unit = unitsById[item.UnitOfMeasureId!.Value];
+                var codeKey = Product.CreateComparisonKey(item.ProductCode);
+                var productKey = Product.IsPlaceholderCode(item.ProductCode)
+                    ? $"{codeKey}:{Product.CreateComparisonKey(item.ProductTitle!)}:{unit.Id}"
+                    : codeKey;
+                if (!createdProducts.TryGetValue(productKey, out product!))
+                {
+                    product = new Product(item.ProductTitle!, item.ProductCode, unit.Id, null);
+                    await productRepository.AddAsync(product, cancellationToken);
+                    createdProducts[productKey] = product;
+                }
+            }
             GoodsIssueDestination destination;
             if (item.DestinationId.HasValue)
             {
@@ -248,9 +334,9 @@ internal sealed class SaveGoodsIssueCommandHandler(IUnitOfWork<Guid> unitOfWork)
                     destinationsByTitle[title] = destination;
                 }
             }
-            result.Add(new PreparedItem(item.ProductId, productCode, item.Quantity, item.AssetNumber,
-                destination.Id, item.ExitReason, item.Description, item.DeliveringUnit,
-                item.ReturnAtUtc));
+            result.Add(new PreparedItem(product.Id, product.Code, item.Quantity, item.AssetNumber,
+                destination.Id, item.ShippingLocationId, item.ExitReason, item.IsReturnable,
+                item.Description, item.DeliveringUnit, item.IsReturnable ? item.ReturnAtUtc : null));
         }
         return Result<IReadOnlyList<PreparedItem>>.Success(result);
     }
@@ -261,8 +347,10 @@ internal sealed class SaveGoodsIssueCommandHandler(IUnitOfWork<Guid> unitOfWork)
         decimal Quantity,
         string? AssetNumber,
         Guid DestinationId,
-        string ExitReason,
+        Guid? ShippingLocationId,
+        GoodsIssueExitReason ExitReason,
+        bool IsReturnable,
         string? Description,
-        string DeliveringUnit,
+        string? DeliveringUnit,
         DateTimeOffset? ReturnAtUtc);
 }

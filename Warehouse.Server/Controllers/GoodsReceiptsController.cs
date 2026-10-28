@@ -43,10 +43,12 @@ public sealed class GoodsReceiptsController(
             return BadRequest(Result<GoodsReceiptImportSummary>.Error("حجم فایل نباید بیشتر از ۵۰ مگابایت باشد."));
         var canManageInvoice = (await authorizationService.AuthorizeAsync(User,
             PermissionPolicyNames.Inventory.GoodsReceiptsReceiptInvoiceOperations)).Succeeded;
+        var canManageReceipt = (await authorizationService.AuthorizeAsync(User,
+            PermissionPolicyNames.Inventory.GoodsReceiptsReceiptRegistration)).Succeeded;
         await using var stream = new MemoryStream();
         await request.File.CopyToAsync(stream, cancellationToken);
         var result = await sender.Send(new ImportGoodsReceiptsCommand(request.File.FileName,
-            stream.ToArray(), canManageInvoice), cancellationToken);
+            stream.ToArray(), canManageInvoice, canManageReceipt), cancellationToken);
         return result.IsSuccess ? Ok(result) : BadRequest(result);
     }
 
@@ -289,13 +291,17 @@ public sealed class GoodsReceiptsController(
         [FromBody] CreateGoodsReceiptRequest request,
         CancellationToken cancellationToken)
     {
-        var canManageReceiptInvoice =
+        var canManageInvoice =
             (await authorizationService.AuthorizeAsync(
                 User,
                 PermissionPolicyNames.Inventory.GoodsReceiptsReceiptInvoiceOperations)).Succeeded;
+        var canManageReceipt =
+            (await authorizationService.AuthorizeAsync(
+                User,
+                PermissionPolicyNames.Inventory.GoodsReceiptsReceiptRegistration)).Succeeded;
         var createsOtherMasterData =
             (!request.DelivererId.HasValue && !string.IsNullOrWhiteSpace(request.DelivererFullName)) ||
-            (canManageReceiptInvoice && request.Items.Any(item =>
+            (canManageInvoice && request.Items.Any(item =>
                 !item.SupplierId.HasValue && !string.IsNullOrWhiteSpace(item.SupplierTitle)));
         if (createsOtherMasterData &&
             !(await authorizationService.AuthorizeAsync(
@@ -324,11 +330,11 @@ public sealed class GoodsReceiptsController(
                 item.ProductCode,
                 item.UnitOfMeasureId,
                 item.WarehouseId,
-                canManageReceiptInvoice ? item.InvoiceStatus : null,
-                canManageReceiptInvoice ? item.InvoiceNumber : null,
-                canManageReceiptInvoice ? item.SupplierId : null,
-                canManageReceiptInvoice ? item.SupplierTitle : null,
-                canManageReceiptInvoice ? item.ReceiptNumber : null,
+                canManageInvoice ? item.InvoiceStatus : null,
+                canManageInvoice ? item.InvoiceNumber : null,
+                canManageInvoice ? item.SupplierId : null,
+                canManageInvoice ? item.SupplierTitle : null,
+                canManageReceipt ? item.ReceiptNumber : null,
                 item.Quantity,
                 item.RequestNumber,
                 item.Description,
@@ -350,16 +356,20 @@ public sealed class GoodsReceiptsController(
         [FromBody] CreateGoodsReceiptRequest request,
         CancellationToken cancellationToken)
     {
-        var canManageReceiptInvoice =
+        var canManageInvoice =
             (await authorizationService.AuthorizeAsync(
                 User,
                 PermissionPolicyNames.Inventory.GoodsReceiptsReceiptInvoiceOperations)).Succeeded;
+        var canManageReceipt =
+            (await authorizationService.AuthorizeAsync(
+                User,
+                PermissionPolicyNames.Inventory.GoodsReceiptsReceiptRegistration)).Succeeded;
         var canInitialEntry = (await authorizationService.AuthorizeAsync(
             User, PermissionPolicyNames.Inventory.GoodsReceiptsInitialEntry)).Succeeded;
-        if (!canInitialEntry && !canManageReceiptInvoice) return Forbid();
+        if (!canInitialEntry && !canManageInvoice && !canManageReceipt) return Forbid();
         var createsOtherMasterData =
             (canInitialEntry && !request.DelivererId.HasValue && !string.IsNullOrWhiteSpace(request.DelivererFullName)) ||
-            (canManageReceiptInvoice && request.Items.Any(item =>
+            (canManageInvoice && request.Items.Any(item =>
                 !item.SupplierId.HasValue && !string.IsNullOrWhiteSpace(item.SupplierTitle)));
         if (createsOtherMasterData &&
             !(await authorizationService.AuthorizeAsync(
@@ -388,17 +398,17 @@ public sealed class GoodsReceiptsController(
                 item.ProductCode,
                 item.UnitOfMeasureId,
                 item.WarehouseId,
-                canManageReceiptInvoice ? item.InvoiceStatus : null,
-                canManageReceiptInvoice ? item.InvoiceNumber : null,
-                canManageReceiptInvoice ? item.SupplierId : null,
-                canManageReceiptInvoice ? item.SupplierTitle : null,
-                canManageReceiptInvoice ? item.ReceiptNumber : null,
+                canManageInvoice ? item.InvoiceStatus : null,
+                canManageInvoice ? item.InvoiceNumber : null,
+                canManageInvoice ? item.SupplierId : null,
+                canManageInvoice ? item.SupplierTitle : null,
+                canManageReceipt ? item.ReceiptNumber : null,
                 item.Quantity,
                 item.RequestNumber,
                 item.Description,
                 canInitialEntry ? item.IssueNumber : null)).ToArray());
         var result = await sender.Send(new UpdateGoodsReceiptCommand(
-            id, command, canInitialEntry, canManageReceiptInvoice,
+            id, command, canInitialEntry, canManageInvoice, canManageReceipt,
             request.ConcurrencyStamp ?? Guid.Empty), cancellationToken);
         return result.IsSuccess
             ? Ok(result)

@@ -30,7 +30,11 @@ internal static class GoodsIssueProjection
                     AssetNumber = item.AssetNumber,
                     DestinationId = item.DestinationId,
                     DestinationTitle = item.Destination == null ? null : item.Destination.Title,
-                    ExitReason = item.ExitReason,
+                    ShippingLocationId = item.ShippingLocationId,
+                    ShippingLocationTitle = item.ShippingLocation == null ? null : item.ShippingLocation.Title,
+                    ExitReason = item.ExitReasonType,
+                    LegacyExitReason = item.ExitReason,
+                    IsReturnable = item.IsReturnable,
                     Description = item.Description,
                     DeliveringUnit = item.DeliveringUnit,
                     ReturnAtUtc = item.ReturnAtUtc

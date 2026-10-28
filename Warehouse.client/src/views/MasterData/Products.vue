@@ -541,6 +541,7 @@ const saveProduct = handleSubmit(async (values) => {
   const controller = new AbortController()
   activeOperationRequest = controller
   const itemBeingEdited = editingItem.value
+  if ((!itemBeingEdited && !canCreate) || (itemBeingEdited && !canManage)) return
   const payload = {
     title: values.title.trim(),
     code: values.code.trim(),

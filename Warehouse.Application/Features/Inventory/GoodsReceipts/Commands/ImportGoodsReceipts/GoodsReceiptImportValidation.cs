@@ -13,13 +13,33 @@ internal static class GoodsReceiptImportValidation
         IReadOnlyList<Person> People);
 
     public static async Task<ValidationResult> ValidateAsync(List<GoodsReceiptExcelReader.Row> rows,
-        IUnitOfWork<Guid> unitOfWork, bool canManageInvoice, CancellationToken token)
+        IUnitOfWork<Guid> unitOfWork, bool canManageInvoice, bool canManageReceipt,
+        CancellationToken token)
     {
         var products = await unitOfWork.Repository<Product>().GetAllAsync(token);
         var units = await unitOfWork.Repository<UnitOfMeasure>().GetAllAsync(token);
         var warehouses = await unitOfWork.Repository<StorageWarehouse>().GetAllAsync(token);
         var suppliers = await unitOfWork.Repository<Supplier>().GetAllAsync(token);
         var people = await unitOfWork.Repository<Person>().GetAllAsync(token);
+        var requestedPageNumbers = rows
+            .Select(row => row.PageNumber.Trim())
+            .Where(pageNumber => pageNumber.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var receiptRepository = unitOfWork.Repository<GoodsReceipt>();
+        var storedPageNumbers = await receiptRepository.ToListAsync(
+            receiptRepository.Entities
+                .Where(receipt => requestedPageNumbers.Contains(receipt.PageNumber))
+                .Select(receipt => receipt.PageNumber),
+            token);
+        var existingPageNumbers = storedPageNumbers.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var duplicatedFilePageNumbers = rows
+            .Select(row => row.PageNumber.Trim())
+            .Where(pageNumber => pageNumber.Length > 0)
+            .GroupBy(pageNumber => pageNumber, StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var valid = new List<ValidRow>();
         var errors = new List<GoodsReceiptImportRowError>();
         foreach (var row in rows)
@@ -34,6 +54,10 @@ internal static class GoodsReceiptImportValidation
             if (row.Deliverer.Length > 200 || TextComparison.CreateCompactKey(row.Deliverer).Length == 0)
                 messages.Add("نام تحویل‌دهنده الزامی است و نباید بیشتر از ۲۰۰ نویسه باشد.");
             if (row.PageNumber.Length is 0 or > 100) messages.Add("شماره صفحه الزامی است و نباید بیشتر از ۱۰۰ نویسه باشد.");
+            else if (existingPageNumbers.Contains(row.PageNumber.Trim()))
+                messages.Add($"شماره صفحه «{row.PageNumber.Trim()}» قبلاً ثبت شده است؛ همان شماره را در فهرست ورودی کالا پیدا کنید و کالا را به همان سند اضافه کنید.");
+            else if (duplicatedFilePageNumbers.Contains(row.PageNumber.Trim()))
+                messages.Add($"شماره صفحه «{row.PageNumber.Trim()}» در فایل تکراری است؛ هر شماره صفحه را فقط یک‌بار وارد کنید.");
             if (row.Description.Length > 1000) messages.Add("توضیحات نباید بیشتر از ۱۰۰۰ نویسه باشد.");
             if (row.InvoiceNumber.Length > 100 || row.ReceiptNumber.Length > 100)
                 messages.Add("شماره رسید و شماره فاکتور نباید بیشتر از ۱۰۰ نویسه باشند.");
@@ -78,8 +102,10 @@ internal static class GoodsReceiptImportValidation
                 messages.Add("برای وضعیت دارای فاکتور، شماره فاکتور الزامی است.");
             //if (invoice == InvoiceStatus.DoesNotHave && row.InvoiceNumber.Length > 0)
             //    messages.Add("وضعیت فاکتور «ندارد» است اما شماره فاکتور وارد شده است.");
-            if (!canManageInvoice && (invoice == InvoiceStatus.HasInvoice || row.InvoiceNumber.Length > 0 || row.Supplier.Length > 0 || row.ReceiptNumber.Length > 0))
-                messages.Add("مجوز ثبت اطلاعات رسید و فاکتور را ندارید.");
+            if (!canManageInvoice && (invoice == InvoiceStatus.HasInvoice || row.InvoiceNumber.Length > 0 || row.Supplier.Length > 0))
+                messages.Add("مجوز ثبت اطلاعات فاکتور را ندارید.");
+            if (!canManageReceipt && row.ReceiptNumber.Length > 0)
+                messages.Add("مجوز ثبت رسید را ندارید.");
             if (messages.Count > 0) errors.Add(new GoodsReceiptImportRowError(row.Number, string.Join(" ", messages)));
             else valid.Add(new ValidRow(row, candidates[0].Id, matchingWarehouses[0].Id,
                 row.Supplier.Length > 0 ? matchingSuppliers[0].Id : null, invoice,

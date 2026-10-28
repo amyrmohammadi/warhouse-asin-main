@@ -32,14 +32,14 @@ public sealed class InvoicesControllerTests
     }
 
     [Fact]
-    public void UpdateItem_UsesReceiptAndInvoiceOperationsPolicy()
+    public void UpdateItem_UsesReceiptRegistrationPolicy()
     {
         var action = typeof(InvoicesController).GetMethod(nameof(InvoicesController.UpdateItem))!;
         var authorize = action.GetCustomAttribute<AuthorizeAttribute>();
 
         Assert.NotNull(authorize);
         Assert.Equal(
-            PermissionPolicyNames.Inventory.GoodsReceiptsReceiptInvoiceOperations,
+            PermissionPolicyNames.Inventory.GoodsReceiptsReceiptRegistration,
             authorize.Policy);
     }
 
@@ -47,15 +47,18 @@ public sealed class InvoicesControllerTests
     public async Task Update_ForwardsAllInvoiceFieldsAndUsesEditPolicy()
     {
         var action = typeof(InvoicesController).GetMethod(nameof(InvoicesController.Update))!;
-        Assert.Equal(PermissionPolicyNames.Inventory.GoodsReceiptsReceiptInvoiceOperations,
-            action.GetCustomAttribute<AuthorizeAttribute>()?.Policy);
+        Assert.Null(action.GetCustomAttribute<AuthorizeAttribute>()?.Policy);
         var sender = Substitute.For<ISender>();
+        var auth = Substitute.For<IAuthorizationService>();
+        auth.AuthorizeAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<object?>(), Arg.Any<string>())
+            .Returns(AuthorizationResult.Success());
         var invoiceId = Guid.NewGuid();
         var itemId = Guid.NewGuid();
         var stamp = Guid.NewGuid();
         sender.Send(Arg.Any<UpdateInvoiceCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result<InvoiceDetails>.Success(new InvoiceDetails { Id = invoiceId }));
-        var controller = new InvoicesController(sender, Substitute.For<IAuthorizationService>());
+        var controller = new InvoicesController(sender, auth)
+        { ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() } };
         var supplierId = Guid.NewGuid();
         var request = new UpdateInvoiceRequest("INV-2", supplierId, "شرح", new DateOnly(2026, 10, 27),
             InvoiceProcessingStatus.FinanceApproved,
@@ -71,8 +74,49 @@ public sealed class InvoicesControllerTests
             command.ProcessingStatus == InvoiceProcessingStatus.FinanceApproved &&
             command.Items.Count == 1 && command.Items.Single().Id == itemId &&
             command.Items.Single().ReceiptNumber == "REC-1" &&
-            command.Items.Single().GoodsReceiptConcurrencyStamp == stamp),
+            command.Items.Single().GoodsReceiptConcurrencyStamp == stamp &&
+            command.CanEditInvoice && command.CanEditReceipt),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Update_WithoutInvoiceOrReceiptPermission_IsForbidden()
+    {
+        var sender = Substitute.For<ISender>();
+        var auth = Substitute.For<IAuthorizationService>();
+        auth.AuthorizeAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<object?>(), Arg.Any<string>())
+            .Returns(AuthorizationResult.Failed());
+        var controller = new InvoicesController(sender, auth)
+        { ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() } };
+        var request = new UpdateInvoiceRequest("INV-1", null, null, null,
+            InvoiceProcessingStatus.UnderReview, []);
+
+        var response = await controller.Update(Guid.NewGuid(), request, default);
+
+        Assert.IsType<ForbidResult>(response.Result);
+        await sender.DidNotReceive().Send(Arg.Any<UpdateInvoiceCommand>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Update_WithReceiptPermission_OnlyForwardsReceiptEditPermission()
+    {
+        var sender = Substitute.For<ISender>();
+        var auth = Substitute.For<IAuthorizationService>();
+        auth.AuthorizeAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<object?>(), Arg.Any<string>())
+            .Returns(call => call.Arg<string>() == PermissionPolicyNames.Inventory.GoodsReceiptsReceiptRegistration
+                ? AuthorizationResult.Success() : AuthorizationResult.Failed());
+        sender.Send(Arg.Any<UpdateInvoiceCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result<InvoiceDetails>.Success(new InvoiceDetails()));
+        var controller = new InvoicesController(sender, auth)
+        { ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() } };
+        var request = new UpdateInvoiceRequest("IGNORED", null, null, null,
+            InvoiceProcessingStatus.UnderReview, []);
+
+        var response = await controller.Update(Guid.NewGuid(), request, default);
+
+        Assert.IsType<OkObjectResult>(response.Result);
+        await sender.Received(1).Send(Arg.Is<UpdateInvoiceCommand>(command =>
+            !command.CanEditInvoice && command.CanEditReceipt), Arg.Any<CancellationToken>());
     }
 
     [Fact]

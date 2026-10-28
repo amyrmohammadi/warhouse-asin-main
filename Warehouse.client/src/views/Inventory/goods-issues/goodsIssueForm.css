@@ -34,14 +34,16 @@
   --quantity-width: 70px;
   --asset-width: 100px;
   --destination-width: 100px;
+  --shipping-location-width: 130px;
   --reason-width: 11rem;
   --description-width: 140px;
   --delivering-width: 110px;
+  --returnable-width: 86px;
   --return-width: 130px;
   border-collapse: separate;
   border-spacing: 0;
   font-size: .74rem;
-  min-width: calc(var(--row-width) + var(--product-width) + var(--code-width) + var(--unit-width) + var(--quantity-width) + var(--asset-width) + var(--destination-width) + var(--reason-width) + var(--description-width) + var(--delivering-width) + var(--return-width) + var(--row-width));
+  min-width: calc(var(--row-width) + var(--product-width) + var(--code-width) + var(--unit-width) + var(--quantity-width) + var(--asset-width) + var(--destination-width) + var(--shipping-location-width) + var(--reason-width) + var(--description-width) + var(--delivering-width) + var(--returnable-width) + var(--return-width) + var(--row-width));
   table-layout: fixed;
   width: 100%;
 }
@@ -76,16 +78,20 @@
 .goods-issue-list-table tbody .goods-issue-list-product-unit-cell,
 .goods-issue-list-table tbody .goods-issue-list-quantity-cell,
 .goods-issue-list-table tbody .goods-issue-list-asset-cell,
+.goods-issue-list-table tbody .goods-issue-list-shipping-location-cell,
 .goods-issue-list-table tbody .goods-issue-list-reason-cell,
 .goods-issue-list-table tbody .goods-issue-list-description-cell,
 .goods-issue-list-table tbody .goods-issue-list-delivering-unit-cell,
+.goods-issue-list-table tbody .goods-issue-list-returnable-cell,
 .goods-issue-list-table tbody .goods-issue-list-return-cell {
   height: 1px;
 }
 .goods-issue-list-table tbody tr:has(.product-select--open),
-.goods-issue-list-table tbody tr:has(.destination-select--open) { position: relative; z-index: 100068; }
+.goods-issue-list-table tbody tr:has(.destination-select--open),
+.goods-issue-list-table tbody tr:has(.supplier-select--open) { position: relative; z-index: 100068; }
 .goods-issue-list-table td:has(.product-select--open),
-.goods-issue-list-table td:has(.destination-select--open) { z-index: 100069; }
+.goods-issue-list-table td:has(.destination-select--open),
+.goods-issue-list-table td:has(.supplier-select--open) { z-index: 100069; }
 .goods-issue-list-table tbody tr:nth-last-child(-n + 3) :deep(.product-select__menu),
 .goods-issue-list-table tbody tr:nth-last-child(-n + 3) :deep(.destination-select__menu) { bottom: calc(100% + .35rem); top: auto; }
 
@@ -123,9 +129,11 @@
 .goods-issue-list-quantity-cell { width: var(--quantity-width); }
 .goods-issue-list-asset-cell { width: var(--asset-width); }
 .goods-issue-list-destination-cell { width: var(--destination-width); }
+.goods-issue-list-shipping-location-cell { width: var(--shipping-location-width); }
 .goods-issue-list-reason-cell { width: var(--reason-width); }
 .goods-issue-list-description-cell { width: var(--description-width); }
 .goods-issue-list-delivering-unit-cell { width: var(--delivering-width); }
+.goods-issue-list-returnable-cell { width: var(--returnable-width); }
 .goods-issue-list-return-cell { width: var(--return-width); }
 .goods-issue-list-action-column { background: var(--surface); text-align: center !important; width: var(--row-width); }
 .goods-issue-list-action-column .master-data-row-action { margin-inline: auto; }
@@ -155,6 +163,20 @@
 }
 .goods-issue-list-destination-cell :deep(.destination-select__control .form-control) { font-size: .68rem; }
 .goods-issue-list-destination-cell :deep(.destination-select .form-control:focus) { background-color: transparent; }
+
+.goods-issue-list-shipping-location-cell :deep(.supplier-select) {
+  --supplier-select-input-background: transparent;
+  --supplier-select-input-border-color: transparent;
+  --supplier-select-input-border-width: 0;
+  --supplier-select-input-radius: 0;
+}
+.goods-issue-list-shipping-location-cell :deep(.supplier-select__control .form-control) { font-size: .68rem; }
+.goods-issue-list-shipping-location-cell :deep(.supplier-select .form-control:focus) { background-color: transparent; }
+
+.goods-issue-list-returnable-cell { text-align: center; vertical-align: middle !important; }
+.goods-issue-returnable-checkbox { cursor: pointer; height: 1rem; margin: .45rem auto; width: 1rem; }
+.goods-issue-returnable-field { align-items: center; display: flex; }
+.goods-issue-returnable-label { align-items: center; cursor: pointer; display: inline-flex; gap: .45rem; margin: 0; }
 
 .goods-issue-list-return-cell :deep(.vpd-main) {
   display: block;

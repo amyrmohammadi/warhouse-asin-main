@@ -25,6 +25,36 @@ public sealed class SaveGoodsIssueValidationTests
     }
 
     [Fact]
+    public async Task Send_NewProductWithoutTitle_ThrowsValidationException()
+    {
+        await using var context = new ApplicationTestContext();
+        var item = ValidItem() with
+        {
+            ProductId = null,
+            ProductTitle = null,
+            UnitOfMeasureId = Guid.NewGuid()
+        };
+
+        await Assert.ThrowsAsync<ValidationException>(() =>
+            context.Sender.Send(ValidCommand() with { Items = [item] }));
+    }
+
+    [Fact]
+    public async Task Send_NewProductWithoutUnit_ThrowsValidationException()
+    {
+        await using var context = new ApplicationTestContext();
+        var item = ValidItem() with
+        {
+            ProductId = null,
+            ProductTitle = "کالای جدید",
+            UnitOfMeasureId = null
+        };
+
+        await Assert.ThrowsAsync<ValidationException>(() =>
+            context.Sender.Send(ValidCommand() with { Items = [item] }));
+    }
+
+    [Fact]
     public async Task Send_WithoutDestination_ThrowsValidationException()
     {
         await using var context = new ApplicationTestContext();
@@ -59,6 +89,28 @@ public sealed class SaveGoodsIssueValidationTests
 
         await Assert.ThrowsAsync<ValidationException>(() =>
             context.Sender.Send(ValidCommand() with { Description = new string('ت', 1001) }));
+    }
+
+    [Fact]
+    public async Task Send_WithoutDeliveringUnit_PassesValidation()
+    {
+        await using var context = new ApplicationTestContext();
+        var issueRepository = Substitute.For<IRepositoryAsync<GoodsIssue, Guid>>();
+        issueRepository.Entities.Returns(Array.Empty<GoodsIssue>().AsQueryable());
+        issueRepository.CountAsync(
+                Arg.Any<IQueryable<GoodsIssue>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(1);
+        context.UnitOfWork.Repository<GoodsIssue>().Returns(issueRepository);
+        var command = ValidCommand() with
+        {
+            Items = [ValidItem() with { DeliveringUnit = null }]
+        };
+
+        var result = await context.Sender.Send(command);
+
+        Assert.False(result.IsSuccess);
+        Assert.Contains("این کد یا شماره خروج قبلاً ثبت شده است.", result.Messages);
     }
 
     [Fact]

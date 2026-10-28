@@ -29,5 +29,6 @@ public enum AppPermission
     GoodsIssuesImport,
     GoodsIssuesExport,
     InvoicesRead,
-    InvoicesMissingReceiptCountRead
+    InvoicesMissingReceiptCountRead,
+    GoodsReceiptsReceiptRegistration
 }

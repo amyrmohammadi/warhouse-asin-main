@@ -44,6 +44,15 @@ public sealed class ImportGoodsReceiptsTests
                 Arg.Any<IQueryable<Invoice>>(),
                 Arg.Any<CancellationToken>())
             .Returns(Array.Empty<Invoice>());
+        receipts.Entities.Returns(Array.Empty<GoodsReceipt>().AsQueryable());
+        receipts.ToListAsync(
+                Arg.Any<IQueryable<string>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<string>());
+        receipts.CountAsync(
+                Arg.Any<IQueryable<GoodsReceipt>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(0);
 
         using var workbook = new XLWorkbook();
         var sheet = workbook.Worksheets.Add("ورود کالا");
@@ -61,7 +70,7 @@ public sealed class ImportGoodsReceiptsTests
         using var stream = new MemoryStream();
         workbook.SaveAs(stream);
 
-        var result = await context.Sender.Send(new ImportGoodsReceiptsCommand("receipts.xlsx", stream.ToArray(), true));
+        var result = await context.Sender.Send(new ImportGoodsReceiptsCommand("receipts.xlsx", stream.ToArray(), true, true));
 
         Assert.True(result.IsSuccess);
         if (invoice == "invalid")

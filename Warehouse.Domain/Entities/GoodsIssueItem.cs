@@ -1,4 +1,5 @@
 using Warehouse.Domain.Common;
+using Warehouse.Domain.Enums;
 
 namespace Warehouse.Domain.Entities;
 
@@ -13,7 +14,10 @@ public sealed class GoodsIssueItem : Entity<Guid>
         decimal quantity,
         string? assetNumber,
         Guid? destinationId,
-        string? exitReason,
+        Guid? shippingLocationId,
+        GoodsIssueExitReason exitReasonType,
+        bool isReturnable,
+        string? legacyExitReason,
         string? description,
         string? deliveringUnit,
         DateTimeOffset? returnAtUtc,
@@ -26,7 +30,10 @@ public sealed class GoodsIssueItem : Entity<Guid>
         Quantity = quantity;
         AssetNumber = Normalize(assetNumber);
         DestinationId = destinationId;
-        ExitReason = Normalize(exitReason);
+        ShippingLocationId = shippingLocationId;
+        ExitReasonType = exitReasonType;
+        IsReturnable = isReturnable;
+        ExitReason = Normalize(legacyExitReason);
         Description = Normalize(description);
         DeliveringUnit = Normalize(deliveringUnit);
         ReturnAtUtc = returnAtUtc?.ToUniversalTime();
@@ -42,6 +49,11 @@ public sealed class GoodsIssueItem : Entity<Guid>
     public string? AssetNumber { get; private set; }
     public Guid? DestinationId { get; private set; }
     public GoodsIssueDestination? Destination { get; private set; }
+    public Guid? ShippingLocationId { get; private set; }
+    public Supplier? ShippingLocation { get; private set; }
+    public GoodsIssueExitReason ExitReasonType { get; private set; }
+    public bool IsReturnable { get; private set; } = true;
+    // متن قدیمی برای حفظ اطلاعات تاریخی قبل از enum شدن علت خروج.
     public string? ExitReason { get; private set; }
     public string? Description { get; private set; }
     public string? DeliveringUnit { get; private set; }

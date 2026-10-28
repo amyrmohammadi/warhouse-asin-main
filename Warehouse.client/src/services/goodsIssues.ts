@@ -2,6 +2,27 @@ import type { ApiResult } from '@/services/auth'
 import { expireSession, getSession } from '@/services/auth'
 import type { DateFilterValue, NumericFilterValue, TextFilterValue } from '@/types/dataTableFilters'
 
+export type GoodsIssueExitReason =
+  | 'Maintenance'
+  | 'Sample'
+  | 'Purchase'
+  | 'Sale'
+  | 'Services'
+  | 'Consignment'
+  | 'Repair'
+  | 'Other'
+
+export const GOODS_ISSUE_EXIT_REASON_OPTIONS: Array<{ value: GoodsIssueExitReason; label: string }> = [
+  { value: 'Maintenance', label: 'تعمیرات' },
+  { value: 'Sample', label: 'نمونه' },
+  { value: 'Purchase', label: 'خرید' },
+  { value: 'Sale', label: 'فروش' },
+  { value: 'Services', label: 'خدمات' },
+  { value: 'Consignment', label: 'امانی' },
+  { value: 'Repair', label: 'تعمیر' },
+  { value: 'Other', label: 'سایر' },
+]
+
 export interface GoodsIssueItem {
   id: string
   productId: string | null
@@ -12,7 +33,11 @@ export interface GoodsIssueItem {
   assetNumber: string | null
   destinationId: string | null
   destinationTitle: string | null
-  exitReason: string | null
+  shippingLocationId: string | null
+  shippingLocationTitle: string | null
+  exitReason: GoodsIssueExitReason
+  legacyExitReason: string | null
+  isReturnable: boolean
   description: string | null
   deliveringUnit: string | null
   returnAtUtc: string | null
@@ -47,6 +72,7 @@ export interface GoodsIssueList<T> {
 
 export interface GoodsIssueOptions {
   people: Array<{ id: string; fullName: string; phoneNumber: string }>
+  unitsOfMeasure: Array<{ id: string; concurrencyStamp: string; title: string; description: string | null }>
 }
 
 export interface GoodsIssueImportSummary {
@@ -66,13 +92,17 @@ export function importGoodsIssues(file: File, signal?: AbortSignal): Promise<Goo
 export interface SaveGoodsIssueItem {
   productId: string | null
   productCode: string
+  productTitle: string | null
+  unitOfMeasureId: string | null
   quantity: number
   assetNumber: string | null
   destinationId: string | null
   destinationTitle: string | null
-  exitReason: string
+  shippingLocationId: string | null
+  exitReason: GoodsIssueExitReason
+  isReturnable: boolean
   description: string | null
-  deliveringUnit: string
+  deliveringUnit: string | null
   returnAtUtc: string | null
 }
 

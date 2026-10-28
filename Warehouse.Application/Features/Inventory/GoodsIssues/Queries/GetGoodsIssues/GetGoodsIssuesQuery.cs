@@ -7,6 +7,7 @@ using Warehouse.Application.Common.Models.Filtering;
 using Warehouse.Application.Common.Models.Inventory;
 using Warehouse.Application.Common.Validation;
 using Warehouse.Domain.Entities;
+using Warehouse.Domain.Enums;
 
 namespace Warehouse.Application.Features.Inventory.GoodsIssues.Queries.GetGoodsIssues;
 
@@ -54,6 +55,7 @@ internal sealed class GetGoodsIssuesQueryHandler(IUnitOfWork<Guid> unitOfWork)
         var search = request.Search?.Trim();
         if (!string.IsNullOrWhiteSpace(search))
         {
+            var hasExitReason = GoodsIssueExitReasonParser.TryFromText(search, out var exitReason);
             query = query.Where(issue =>
                 issue.IssueNumber.Contains(search) ||
                 (issue.Description != null && issue.Description.Contains(search)) ||
@@ -62,6 +64,8 @@ internal sealed class GetGoodsIssuesQueryHandler(IUnitOfWork<Guid> unitOfWork)
                     item.ProductCode.Contains(search) ||
                     (item.AssetNumber != null && item.AssetNumber.Contains(search)) ||
                     (item.Destination != null && item.Destination.Title.Contains(search)) ||
+                    (item.ShippingLocation != null && item.ShippingLocation.Title.Contains(search)) ||
+                    (hasExitReason && item.ExitReasonType == exitReason) ||
                     (item.ExitReason != null && item.ExitReason.Contains(search)) ||
                     (item.DeliveringUnit != null && item.DeliveringUnit.Contains(search))));
         }

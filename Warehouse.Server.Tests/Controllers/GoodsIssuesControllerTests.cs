@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Security.Claims;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -48,5 +49,71 @@ public sealed class GoodsIssuesControllerTests
         var response = await controller.Update(Guid.NewGuid(), request, default);
 
         Assert.IsType<ConflictObjectResult>(response.Result);
+    }
+
+    [Fact]
+    public async Task Create_WithUnselectedProductAndOnlyMasterDataManage_IsForbidden()
+    {
+        var sender = Substitute.For<ISender>();
+        var controller = new GoodsIssuesController(
+            sender,
+            Authorize(PermissionPolicyNames.MasterData.Manage));
+        var request = Request(productId: null);
+
+        var response = await controller.Create(request, default);
+
+        Assert.IsType<ForbidResult>(response.Result);
+        await sender.DidNotReceive().Send(
+            Arg.Any<SaveGoodsIssueCommand>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Create_WithUnselectedProductAndProductsCreate_IsAllowed()
+    {
+        var sender = Substitute.For<ISender>();
+        sender.Send(Arg.Any<SaveGoodsIssueCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result<GoodsIssueSummary>.Success(new GoodsIssueSummary
+            {
+                Id = Guid.NewGuid(),
+                IssueNumber = "OUT-1"
+            }));
+        var controller = new GoodsIssuesController(
+            sender,
+            Authorize(PermissionPolicyNames.MasterData.ProductsCreate));
+
+        var unitId = Guid.NewGuid();
+        var response = await controller.Create(
+            Request(productId: null, productTitle: "کالای جدید", unitOfMeasureId: unitId), default);
+
+        Assert.IsType<CreatedAtActionResult>(response.Result);
+        await sender.Received(1).Send(
+            Arg.Is<SaveGoodsIssueCommand>(command =>
+                command.Items.Single().ProductId == null &&
+                command.Items.Single().ProductTitle == "کالای جدید" &&
+                command.Items.Single().UnitOfMeasureId == unitId),
+            Arg.Any<CancellationToken>());
+    }
+
+    private static SaveGoodsIssueRequest Request(
+        Guid? productId,
+        string? productTitle = null,
+        Guid? unitOfMeasureId = null) => new(
+        "OUT-1", DateTimeOffset.UtcNow, null, Guid.NewGuid(), null,
+        [new SaveGoodsIssueItemRequest(
+            productId, "P-1", 1, null, Guid.NewGuid(), null,
+            "علت خروج", null, null, null, productTitle, unitOfMeasureId)]);
+
+    private static IAuthorizationService Authorize(params string[] grantedPolicies)
+    {
+        var authorizationService = Substitute.For<IAuthorizationService>();
+        authorizationService.AuthorizeAsync(
+                Arg.Any<ClaimsPrincipal>(),
+                Arg.Any<object?>(),
+                Arg.Any<string>())
+            .Returns(call => grantedPolicies.Contains(call.Arg<string>())
+                ? AuthorizationResult.Success()
+                : AuthorizationResult.Failed());
+        return authorizationService;
     }
 }

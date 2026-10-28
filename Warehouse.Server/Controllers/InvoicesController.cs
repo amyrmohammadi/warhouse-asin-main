@@ -58,7 +58,7 @@ public sealed class InvoicesController(
         return result.IsSuccess ? Ok(result) : NotFound(result);
     }
 
-    [Authorize(Policy = PermissionPolicyNames.Inventory.GoodsReceiptsReceiptInvoiceOperations)]
+    [Authorize]
     [HttpPut("{id:guid}")]
     [ProducesResponseType(typeof(Result<InvoiceDetails>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(Result<InvoiceDetails>), StatusCodes.Status409Conflict)]
@@ -67,18 +67,25 @@ public sealed class InvoicesController(
         [FromBody] UpdateInvoiceRequest request,
         CancellationToken cancellationToken)
     {
+        var canEditInvoice = (await authorizationService.AuthorizeAsync(User,
+            PermissionPolicyNames.Inventory.GoodsReceiptsReceiptInvoiceOperations)).Succeeded;
+        var canEditReceipt = (await authorizationService.AuthorizeAsync(User,
+            PermissionPolicyNames.Inventory.GoodsReceiptsReceiptRegistration)).Succeeded;
+        if (!canEditInvoice && !canEditReceipt) return Forbid();
+
         var result = await sender.Send(new UpdateInvoiceCommand(id, request.InvoiceNumber,
             request.SupplierId, request.Description,
             request.InvoiceDate, request.ProcessingStatus,
             (request.Items ?? []).Select(item => new UpdateInvoiceReceiptItem(item.Id,
-                item.ReceiptNumber, item.GoodsReceiptConcurrencyStamp)).ToArray()), cancellationToken);
+                item.ReceiptNumber, item.GoodsReceiptConcurrencyStamp)).ToArray(),
+            canEditInvoice, canEditReceipt), cancellationToken);
         if (result.IsSuccess) return Ok(result);
         return result.Messages.Contains(ConcurrencyMessages.Conflict, StringComparer.Ordinal)
             ? Conflict(result)
             : BadRequest(result);
     }
 
-    [Authorize(Policy = PermissionPolicyNames.Inventory.GoodsReceiptsReceiptInvoiceOperations)]
+    [Authorize(Policy = PermissionPolicyNames.Inventory.GoodsReceiptsReceiptRegistration)]
     [HttpPut("{invoiceId:guid}/items/{itemId:guid}")]
     [ProducesResponseType(typeof(Result<UpdateInvoiceItemResult>), StatusCodes.Status409Conflict)]
     public async Task<ActionResult<Result<UpdateInvoiceItemResult>>> UpdateItem(

@@ -170,17 +170,48 @@ public sealed class GoodsReceiptsControllerTests
     }
 
     [Theory]
-    [InlineData(false, false)]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
-    [InlineData(true, true)]
-    public async Task Update_UsesServerPermissions(bool initial, bool invoice)
+    [InlineData(true, "R-1")]
+    [InlineData(false, null)]
+    public async Task Create_OnlyForwardsReceiptNumberWithReceiptRegistrationPermission(
+        bool receiptPermission, string? expectedReceiptNumber)
+    {
+        var sender = Substitute.For<ISender>();
+        var auth = Substitute.For<IAuthorizationService>();
+        auth.AuthorizeAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<object?>(), Arg.Any<string>())
+            .Returns(call => call.Arg<string>() == PermissionPolicyNames.Inventory.GoodsReceiptsReceiptRegistration &&
+                receiptPermission ? AuthorizationResult.Success() : AuthorizationResult.Failed());
+        sender.Send(Arg.Any<CreateGoodsReceiptCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result<GoodsReceiptSummary>.Success(new GoodsReceiptSummary()));
+        var controller = new GoodsReceiptsController(sender, auth)
+        { ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() } };
+        var request = Request();
+        request = request with
+        {
+            Items = [request.Items.Single() with { ReceiptNumber = "R-1" }]
+        };
+
+        var response = await controller.Create(request, default);
+
+        Assert.IsType<CreatedAtActionResult>(response.Result);
+        await sender.Received(1).Send(Arg.Is<CreateGoodsReceiptCommand>(command =>
+            command.Items.Single().ReceiptNumber == expectedReceiptNumber),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(false, false, false)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(false, false, true)]
+    [InlineData(true, true, true)]
+    public async Task Update_UsesServerPermissions(bool initial, bool invoice, bool receipt)
     {
         var sender = Substitute.For<ISender>();
         var auth = Substitute.For<IAuthorizationService>();
         auth.AuthorizeAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<object?>(), Arg.Any<string>())
             .Returns(call => (call.Arg<string>() == PermissionPolicyNames.Inventory.GoodsReceiptsInitialEntry ? initial :
-                call.Arg<string>() == PermissionPolicyNames.Inventory.GoodsReceiptsReceiptInvoiceOperations && invoice)
+                call.Arg<string>() == PermissionPolicyNames.Inventory.GoodsReceiptsReceiptInvoiceOperations ? invoice :
+                call.Arg<string>() == PermissionPolicyNames.Inventory.GoodsReceiptsReceiptRegistration && receipt)
                 ? AuthorizationResult.Success() : AuthorizationResult.Failed());
         sender.Send(Arg.Any<UpdateGoodsReceiptCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result<GoodsReceiptSummary>.Success(new GoodsReceiptSummary()));
@@ -188,7 +219,7 @@ public sealed class GoodsReceiptsControllerTests
         { ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() } };
         var id = Guid.NewGuid();
         var response = await controller.Update(id, Request(), default);
-        if (!initial && !invoice)
+        if (!initial && !invoice && !receipt)
         {
             Assert.IsType<ForbidResult>(response.Result);
             await sender.DidNotReceive().Send(Arg.Any<UpdateGoodsReceiptCommand>(), Arg.Any<CancellationToken>());
@@ -197,7 +228,8 @@ public sealed class GoodsReceiptsControllerTests
         {
             Assert.IsType<OkObjectResult>(response.Result);
             await sender.Received(1).Send(Arg.Is<UpdateGoodsReceiptCommand>(command =>
-                command.Id == id && command.CanEditInitialEntry == initial && command.CanEditReceiptInvoice == invoice),
+                command.Id == id && command.CanEditInitialEntry == initial &&
+                command.CanEditInvoice == invoice && command.CanEditReceipt == receipt),
                 Arg.Any<CancellationToken>());
         }
     }

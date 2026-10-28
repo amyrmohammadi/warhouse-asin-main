@@ -8,11 +8,15 @@ import EntryItemsHeader from '@/components/EntryItemsHeader.vue'
 import GoodsIssueDestinationSelect from '@/components/selectors/GoodsIssueDestinationSelect.vue'
 import PersonSelect, { type PersonSelectOption } from '@/components/selectors/PersonSelect.vue'
 import ProductSelect from '@/components/selectors/ProductSelect.vue'
+import SupplierSelect from '@/components/selectors/SupplierSelect.vue'
+import UnitSelect from '@/components/selectors/UnitSelect.vue'
+import { GOODS_ISSUE_EXIT_REASON_OPTIONS } from '@/services/goodsIssues'
+import type { UnitOfMeasure } from '@/services/unitsOfMeasure'
 import { entryFieldAttrs } from '@/utils/entryFocus'
 
 import { useGoodsIssueForm, type ConfirmOptions } from './useGoodsIssueForm'
 
-defineProps<{ people: PersonSelectOption[] }>()
+defineProps<{ people: PersonSelectOption[]; units: UnitOfMeasure[] }>()
 const emit = defineEmits<{ saved: [reason: 'saved' | 'deleted'] }>()
 const confirmDialog = ref<{ ask: (options: ConfirmOptions) => Promise<boolean> } | null>(null)
 
@@ -20,14 +24,18 @@ const {
   permissions, open, editingId, saving, formError, form, errors, rows, mode,
   setMode, addRow, removeRow, itemHasContent, isNewIssuer, isNewDestination,
   rowError, clearRowError, openCreate, openEdit, save, remove, removeDocument,
-  selectProduct, onProductText, clearProduct,
+  selectProduct, onProductText, clearProduct, onUnitText,
   selectDestination, onDestinationText, clearDestination,
-  advanceFromProductTitle, advanceFromProductCode,
+  selectShippingLocation, onShippingLocationText, clearShippingLocation, onReturnableChange,
+  advanceFromProductTitle, advanceFromProductCode, advanceFromUnit,
 } = useGoodsIssueForm({
   confirm: options => confirmDialog.value?.ask(options) ?? Promise.resolve(false),
   onSaved: reason => emit('saved', reason),
 })
-const { canDelete, canManageMasterData } = permissions
+const { canDelete, canManageMasterData, canCreateProducts } = permissions
+const productNotFoundText = canCreateProducts
+  ? 'کالایی پیدا نشد؛ اطلاعات کالای جدید را تکمیل کنید.'
+  : 'کالایی پیدا نشد؛ فقط انتخاب کالای موجود مجاز است.'
 
 defineExpose({ openCreate, openEdit, removeDocument })
 </script>
@@ -87,15 +95,17 @@ defineExpose({ openCreate, openEdit, removeDocument })
             <thead>
               <tr>
                 <th class="goods-issue-list-row-number">#</th>
-                <th class="goods-issue-list-product-cell">عنوان کالا</th>
+                <th class="goods-issue-list-product-cell">عنوان کالا <span class="text-danger">*</span></th>
                 <th class="goods-issue-list-code-cell">کد کالا <span class="text-danger">*</span></th>
-                <th class="goods-issue-list-product-unit-cell">واحد کالا</th>
+                <th class="goods-issue-list-product-unit-cell">واحد کالا <span class="text-danger">*</span></th>
                 <th class="goods-issue-list-quantity-cell">تعداد <span class="text-danger">*</span></th>
                 <th class="goods-issue-list-asset-cell">شماره اموال</th>
                 <th class="goods-issue-list-destination-cell">مقصد <span class="text-danger">*</span></th>
-                <th class="goods-issue-list-reason-cell">علت خروج <span class="text-danger">*</span></th>
+                <th class="goods-issue-list-shipping-location-cell">مکان ارسال</th>
+                <th class="goods-issue-list-reason-cell">علت خروج</th>
                 <th class="goods-issue-list-description-cell">توضیحات</th>
-                <th class="goods-issue-list-delivering-unit-cell">واحد تحویل‌دهنده <span class="text-danger">*</span></th>
+                <th class="goods-issue-list-delivering-unit-cell">واحد تحویل‌دهنده</th>
+                <th class="goods-issue-list-returnable-cell">برگشت داده می‌شود</th>
                 <th class="goods-issue-list-return-cell">تاریخ عودت</th>
                 <th class="goods-issue-list-action-column" aria-label="عملیات"></th>
               </tr>
@@ -107,7 +117,8 @@ defineExpose({ openCreate, openEdit, removeDocument })
                 <td class="goods-issue-list-product-cell">
                   <ProductSelect :model-value="item.productId" :text="item.productTitle" size="sm"
                                  search-by="title" placeholder="" aria-label="عنوان کالا" :disabled="saving"
-                                 :error="rowError(item, 'product')"
+                                 :error="rowError(item, 'product')" :not-found-text="productNotFoundText"
+                                 v-bind="entryFieldAttrs(item.key, 'product')"
                                  @update:model-value="item.productId = $event"
                                  @update:text="onProductText(item, 'title', $event)"
                                  @select="selectProduct(item, $event)" @clear="clearProduct(item, 'title')"
@@ -116,15 +127,23 @@ defineExpose({ openCreate, openEdit, removeDocument })
                 <td class="goods-issue-list-code-cell">
                   <ProductSelect :model-value="item.productId" :text="item.productCode" size="sm"
                                  search-by="code" placeholder="" aria-label="کد کالا" :disabled="saving"
-                                 :error="rowError(item, 'code')" v-bind="entryFieldAttrs(item.key, 'code')"
+                                 :error="rowError(item, 'code')" :not-found-text="productNotFoundText"
+                                 v-bind="entryFieldAttrs(item.key, 'code')"
                                  @update:model-value="item.productId = $event"
                                  @update:text="onProductText(item, 'code', $event)"
                                  @select="selectProduct(item, $event)" @clear="clearProduct(item, 'code')"
                                  @enter="advanceFromProductCode(item)" />
                 </td>
                 <td class="goods-issue-list-product-unit-cell">
-                  <input :value="item.productUnitOfMeasureTitle" class="form-control form-control-sm"
-                         aria-label="واحد کالا" readonly />
+                  <UnitSelect :model-value="item.productUnitOfMeasureId" :text="item.productUnitOfMeasureTitle"
+                              :units="units" size="sm" borderless aria-label="واحد کالا"
+                              :readonly="Boolean(item.productId)" :disabled="saving"
+                              :error="rowError(item, 'unit')" v-bind="entryFieldAttrs(item.key, 'unit')"
+                              @update:model-value="item.productUnitOfMeasureId = $event"
+                              @update:text="onUnitText(item, $event)" @enter="advanceFromUnit(item)" />
+                  <small v-if="rowError(item, 'unit')" class="invalid-feedback d-block goods-issue-cell-error">{{ rowError(item, 'unit') }}</small>
+                  <small v-else-if="!item.productId && item.productUnitOfMeasureTitle.trim() && !item.productUnitOfMeasureId"
+                         class="goods-issue-cell-note goods-issue-new-master-data--denied">واحد نامعتبر</small>
                 </td>
                 <td class="goods-issue-list-quantity-cell">
                   <input v-model.number="item.quantity" class="form-control form-control-sm"
@@ -148,10 +167,22 @@ defineExpose({ openCreate, openEdit, removeDocument })
                   <small v-if="isNewDestination(item) && !canManageMasterData && !rowError(item, 'destination')"
                          class="goods-issue-cell-note goods-issue-new-master-data--denied">بدون مجوز افزودن</small>
                 </td>
+                <td class="goods-issue-list-shipping-location-cell">
+                  <SupplierSelect :model-value="item.shippingLocationId" :text="item.shippingLocationTitle"
+                                  size="sm" placeholder="" aria-label="مکان ارسال" :disabled="saving"
+                                  :error="rowError(item, 'shippingLocation')"
+                                  @update:model-value="item.shippingLocationId = $event"
+                                  @update:text="onShippingLocationText(item, $event)"
+                                  @select="selectShippingLocation(item, $event)"
+                                  @clear="clearShippingLocation(item)" />
+                </td>
                 <td class="goods-issue-list-reason-cell">
-                  <textarea v-model="item.exitReason" class="form-control form-control-sm goods-issue-list-textarea"
-                            :class="{ 'is-invalid': rowError(item, 'exitReason') }" rows="1" maxlength="1000"
-                            aria-label="علت خروج" :disabled="saving" @input="clearRowError(item, 'exitReason')"></textarea>
+                  <select v-model="item.exitReason" class="form-control form-control-sm"
+                          aria-label="علت خروج" :disabled="saving">
+                    <option v-for="option in GOODS_ISSUE_EXIT_REASON_OPTIONS" :key="option.value" :value="option.value">
+                      {{ option.label }}
+                    </option>
+                  </select>
                 </td>
                 <td class="goods-issue-list-description-cell">
                   <textarea v-model="item.description" class="form-control form-control-sm goods-issue-list-textarea"
@@ -162,8 +193,12 @@ defineExpose({ openCreate, openEdit, removeDocument })
                          :class="{ 'is-invalid': rowError(item, 'deliveringUnit') }" aria-label="واحد تحویل‌دهنده"
                          :disabled="saving" @input="clearRowError(item, 'deliveringUnit')" />
                 </td>
+                <td class="goods-issue-list-returnable-cell">
+                  <input v-model="item.isReturnable" class="goods-issue-returnable-checkbox" type="checkbox"
+                         aria-label="برگشت داده می‌شود" :disabled="saving" @change="onReturnableChange(item)" />
+                </td>
                 <td class="goods-issue-list-return-cell">
-                  <DatePicker v-if="item.productCode.trim()" v-model="item.returnAtLocal" type="date"
+                  <DatePicker v-if="item.productCode.trim() && item.isReturnable" v-model="item.returnAtLocal" type="date"
                               format="YYYY-MM-DD" display-format="jYYYY/jMM/jDD" locale="fa"
                               placeholder="انتخاب تاریخ" :editable="true" :clearable="true" :auto-submit="true"
                               :disabled="saving" color="#2563eb" @input="clearRowError(item, 'returnAtLocal')" />
@@ -190,12 +225,37 @@ defineExpose({ openCreate, openEdit, removeDocument })
           </div>
           <div class="goods-issue-item__grid">
             <div class="form-group">
+              <label>عنوان کالا <span class="text-danger">*</span></label>
+              <ProductSelect :model-value="item.productId" :text="item.productTitle" search-by="title"
+                             placeholder="ورود یا انتخاب عنوان" :disabled="saving" :error="rowError(item, 'product')"
+                             :not-found-text="productNotFoundText" v-bind="entryFieldAttrs(item.key, 'product')"
+                             @update:model-value="item.productId = $event"
+                             @update:text="onProductText(item, 'title', $event)" @select="selectProduct(item, $event)"
+                             @clear="clearProduct(item, 'title')" @enter="advanceFromProductTitle(item)" />
+              <small v-if="rowError(item, 'product')" class="invalid-feedback d-block">{{ rowError(item, 'product') }}</small>
+            </div>
+            <div class="form-group">
               <label>کد کالا <span class="text-danger">*</span></label>
               <ProductSelect :model-value="item.productId" :text="item.productCode" search-by="code"
                              placeholder="ورود یا انتخاب کد" :disabled="saving" :error="rowError(item, 'code')"
+                             :not-found-text="productNotFoundText"
                              @update:model-value="item.productId = $event"
                              @update:text="onProductText(item, 'code', $event)" @select="selectProduct(item, $event)"
                              @clear="clearProduct(item, 'code')" @enter="advanceFromProductCode(item)" />
+            </div>
+            <div class="form-group">
+              <label>واحد کالا <span class="text-danger">*</span></label>
+              <UnitSelect :model-value="item.productUnitOfMeasureId" :text="item.productUnitOfMeasureTitle"
+                          :units="units" placeholder="انتخاب واحد" :readonly="Boolean(item.productId)"
+                          :disabled="saving" :error="rowError(item, 'unit')"
+                          v-bind="entryFieldAttrs(item.key, 'unit')"
+                          @update:model-value="item.productUnitOfMeasureId = $event"
+                          @update:text="onUnitText(item, $event)" @enter="advanceFromUnit(item)" />
+              <small v-if="rowError(item, 'unit')" class="invalid-feedback d-block">{{ rowError(item, 'unit') }}</small>
+              <small v-else-if="!item.productId && item.productUnitOfMeasureTitle.trim() && !item.productUnitOfMeasureId"
+                     class="goods-issue-new-master-data goods-issue-new-master-data--denied">
+                واحد جدید قابل افزودن نیست؛ از فهرست واحدهای موجود انتخاب کنید.
+              </small>
             </div>
             <div class="form-group">
               <label>تعداد <span class="text-danger">*</span></label>
@@ -218,23 +278,41 @@ defineExpose({ openCreate, openEdit, removeDocument })
               </small>
             </div>
             <div class="form-group">
-              <label>واحد تحویل‌دهنده <span class="text-danger">*</span></label>
+              <SupplierSelect :model-value="item.shippingLocationId" :text="item.shippingLocationTitle"
+                              label="مکان ارسال" placeholder="انتخاب از فهرست تأمین‌کنندگان"
+                              :disabled="saving" :error="rowError(item, 'shippingLocation')"
+                              @update:model-value="item.shippingLocationId = $event"
+                              @update:text="onShippingLocationText(item, $event)"
+                              @select="selectShippingLocation(item, $event)"
+                              @clear="clearShippingLocation(item)" />
+            </div>
+            <div class="form-group">
+              <label>علت خروج</label>
+              <select v-model="item.exitReason" class="form-control" :disabled="saving">
+                <option v-for="option in GOODS_ISSUE_EXIT_REASON_OPTIONS" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </option>
+              </select>
+              <small v-if="item.legacyExitReason" class="text-muted">مقدار قبلی: {{ item.legacyExitReason }}</small>
+            </div>
+            <div class="form-group">
+              <label>واحد تحویل‌دهنده</label>
               <input v-model="item.deliveringUnit" class="form-control"
                      :class="{ 'is-invalid': rowError(item, 'deliveringUnit') }" maxlength="200" :disabled="saving"
                      @input="clearRowError(item, 'deliveringUnit')" />
               <small v-if="rowError(item, 'deliveringUnit')" class="invalid-feedback d-block">{{ rowError(item, 'deliveringUnit') }}</small>
             </div>
-            <div class="form-group"><label>تاریخ عودت</label>
+            <div class="form-group goods-issue-returnable-field">
+              <label class="goods-issue-returnable-label">
+                <input v-model="item.isReturnable" type="checkbox" :disabled="saving" @change="onReturnableChange(item)" />
+                برگشت داده می‌شود
+              </label>
+            </div>
+            <div v-if="item.isReturnable" class="form-group"><label>تاریخ عودت</label>
               <DatePicker v-model="item.returnAtLocal" type="date" format="YYYY-MM-DD" display-format="jYYYY/jMM/jDD"
                           :editable="true" :clearable="true" :disabled="saving" color="#2563eb"
                           @input="clearRowError(item, 'returnAtLocal')" />
               <small v-if="rowError(item, 'returnAtLocal')" class="invalid-feedback d-block">{{ rowError(item, 'returnAtLocal') }}</small>
-            </div>
-            <div class="form-group goods-issue-item__wide">
-              <label>علت خروج <span class="text-danger">*</span></label>
-              <textarea v-model="item.exitReason" class="form-control" :class="{ 'is-invalid': rowError(item, 'exitReason') }"
-                        rows="2" maxlength="1000" :disabled="saving" @input="clearRowError(item, 'exitReason')"></textarea>
-              <small v-if="rowError(item, 'exitReason')" class="invalid-feedback d-block">{{ rowError(item, 'exitReason') }}</small>
             </div>
             <div class="form-group goods-issue-item__wide"><label>توضیحات</label><textarea v-model="item.description" class="form-control" rows="2" maxlength="1000" :disabled="saving"></textarea></div>
           </div>

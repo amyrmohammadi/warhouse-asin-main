@@ -20,6 +20,8 @@ public sealed class Supplier : ConcurrencyEntity<Guid>
 
     public ICollection<Invoice> Invoices { get; private set; } = [];
 
+    public ICollection<GoodsIssueItem> GoodsIssueShippingItems { get; private set; } = [];
+
     public void Update(string title, string? description)
     {
         Title = title.Trim();

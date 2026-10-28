@@ -184,7 +184,7 @@ public sealed class ApplicationDbContext
                 .HasMaxLength(32)
                 .HasDefaultValue(InvoiceProcessingStatus.UnderReview)
                 .IsRequired();
-            entity.HasIndex(invoice => invoice.InvoiceNumber).IsUnique();
+            entity.HasIndex(invoice => new { invoice.InvoiceNumber, invoice.SupplierId }).IsUnique();
             entity.HasIndex(invoice => invoice.SupplierId);
             entity.HasOne(invoice => invoice.Supplier)
                 .WithMany(supplier => supplier.Invoices)
@@ -339,12 +339,19 @@ public sealed class ApplicationDbContext
             entity.Property(item => item.Quantity).HasPrecision(18, 3).IsRequired();
             entity.Property(item => item.AssetNumber).HasMaxLength(100);
             entity.Property(item => item.ExitReason).HasMaxLength(1000);
+            entity.Property(item => item.ExitReasonType)
+                .HasConversion<string>()
+                .HasMaxLength(32)
+                .HasDefaultValue(GoodsIssueExitReason.Other)
+                .IsRequired();
+            entity.Property(item => item.IsReturnable).HasDefaultValue(true).IsRequired();
             entity.Property(item => item.Description).HasMaxLength(1000);
             entity.Property(item => item.DeliveringUnit).HasMaxLength(200);
             entity.Property(item => item.SortOrder).IsRequired();
             entity.HasIndex(item => item.GoodsIssueId);
             entity.HasIndex(item => item.ProductId);
             entity.HasIndex(item => item.DestinationId);
+            entity.HasIndex(item => item.ShippingLocationId);
             entity.HasOne(item => item.GoodsIssue)
                 .WithMany(issue => issue.Items)
                 .HasForeignKey(item => item.GoodsIssueId)
@@ -356,6 +363,10 @@ public sealed class ApplicationDbContext
             entity.HasOne(item => item.Destination)
                 .WithMany(destination => destination.GoodsIssueItems)
                 .HasForeignKey(item => item.DestinationId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.ShippingLocation)
+                .WithMany(supplier => supplier.GoodsIssueShippingItems)
+                .HasForeignKey(item => item.ShippingLocationId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

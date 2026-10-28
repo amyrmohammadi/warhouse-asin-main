@@ -53,8 +53,8 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                         [SupplierId],
                         ROW_NUMBER() OVER
                         (
-                            PARTITION BY LTRIM(RTRIM([InvoiceNumber]))
-                            ORDER BY CASE WHEN [SupplierId] IS NULL THEN 1 ELSE 0 END, [Id]
+                            PARTITION BY LTRIM(RTRIM([InvoiceNumber])), [SupplierId]
+                            ORDER BY [Id]
                         ) AS [RowNumber]
                     FROM [Business].[GoodsReceiptItems]
                     WHERE NULLIF(LTRIM(RTRIM([InvoiceNumber])), N'') IS NOT NULL
@@ -68,7 +68,12 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                 SET receiptItem.[InvoiceId] = invoice.[Id]
                 FROM [Business].[GoodsReceiptItems] AS receiptItem
                 INNER JOIN [Business].[Invoices] AS invoice
-                    ON invoice.[InvoiceNumber] = LTRIM(RTRIM(receiptItem.[InvoiceNumber]));
+                    ON invoice.[InvoiceNumber] = LTRIM(RTRIM(receiptItem.[InvoiceNumber]))
+                    AND
+                    (
+                        invoice.[SupplierId] = receiptItem.[SupplierId]
+                        OR (invoice.[SupplierId] IS NULL AND receiptItem.[SupplierId] IS NULL)
+                    );
                 """);
 
             migrationBuilder.DropIndex(
@@ -87,10 +92,10 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                 table: "GoodsReceiptItems");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Invoices_InvoiceNumber",
+                name: "IX_Invoices_InvoiceNumber_SupplierId",
                 schema: "Business",
                 table: "Invoices",
-                column: "InvoiceNumber",
+                columns: new[] { "InvoiceNumber", "SupplierId" },
                 unique: true);
 
             migrationBuilder.CreateIndex(

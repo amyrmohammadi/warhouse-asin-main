@@ -1,5 +1,7 @@
 namespace Warehouse.Server.Contracts.Inventory;
 
+using Warehouse.Domain.Enums;
+
 public sealed class ImportGoodsIssuesRequest
 {
     public IFormFile? File { get; init; }
@@ -21,7 +23,11 @@ public sealed record SaveGoodsIssueItemRequest(
     string? AssetNumber,
     Guid? DestinationId,
     string? DestinationTitle,
-    string ExitReason,
+    GoodsIssueExitReason ExitReason,
     string? Description,
-    string DeliveringUnit,
-    DateTimeOffset? ReturnAtUtc);
+    string? DeliveringUnit,
+    DateTimeOffset? ReturnAtUtc,
+    string? ProductTitle = null,
+    Guid? UnitOfMeasureId = null,
+    Guid? ShippingLocationId = null,
+    bool IsReturnable = true);

@@ -14,6 +14,18 @@
   width: 10rem !important;
 }
 .inventory-table-container .inventory-quantity-cell { color: var(--text-primary); font-weight: 400; }
+.inventory-data-page .inventory-table-container table.dataTable > thead > tr > th,
+.inventory-data-page .inventory-table-container table.dataTable > tbody > tr > td {
+  padding-left: 2px !important;
+  padding-right: 2px !important;
+}
+.inventory-table-container .inventory-product-title-column {
+  max-width: 200px !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap !important;
+  width: 200px !important;
+}
 
 ::highlight(table-search) { background-color: #fde047; color: #111827; }
 
@@ -31,7 +43,8 @@
   .inventory-table-container table.dataTable { table-layout: fixed; width: 100% !important; }
   .inventory-table-container--items .inventory-date-column { width: 8rem !important; }
   .inventory-table-container--items .inventory-product-title-column {
-    text-align: right !important; white-space: normal !important; width: auto !important;
+    max-width: 200px !important; text-align: right !important;
+    white-space: nowrap !important; width: 200px !important;
   }
   .inventory-table-container table.dataTable > thead > tr > th,
   .inventory-table-container table.dataTable > tbody > tr > td { border: 0 !important; }

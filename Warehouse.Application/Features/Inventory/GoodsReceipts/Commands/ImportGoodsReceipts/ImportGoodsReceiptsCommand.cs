@@ -4,7 +4,7 @@ using Warehouse.Application.Common.Models;
 namespace Warehouse.Application.Features.Inventory.GoodsReceipts.Commands.ImportGoodsReceipts;
 
 public sealed record ImportGoodsReceiptsCommand(string FileName, byte[] FileContent,
-    bool CanManageReceiptInvoice) : IRequest<Result<GoodsReceiptImportSummary>>
+    bool CanManageInvoice, bool CanManageReceipt) : IRequest<Result<GoodsReceiptImportSummary>>
 {
     public const int MaxFileSizeBytes = 50 * 1024 * 1024;
 }

@@ -7,6 +7,7 @@ using Warehouse.Application.Common.Models.Filtering;
 using Warehouse.Application.Common.Models.Inventory;
 using Warehouse.Application.Common.Validation;
 using Warehouse.Domain.Entities;
+using Warehouse.Domain.Enums;
 
 namespace Warehouse.Application.Features.Inventory.GoodsIssues.Queries.GetGoodsIssueItems;
 
@@ -54,6 +55,7 @@ internal sealed class GetGoodsIssueItemsQueryHandler(IUnitOfWork<Guid> unitOfWor
         var search = request.Search?.Trim();
         if (!string.IsNullOrWhiteSpace(search))
         {
+            var hasExitReason = GoodsIssueExitReasonParser.TryFromText(search, out var exitReason);
             query = query.Where(item =>
                 item.GoodsIssue.IssueNumber.Contains(search) ||
                 (item.GoodsIssue.Description != null && item.GoodsIssue.Description.Contains(search)) ||
@@ -61,6 +63,8 @@ internal sealed class GetGoodsIssueItemsQueryHandler(IUnitOfWork<Guid> unitOfWor
                 item.ProductCode.Contains(search) ||
                 (item.AssetNumber != null && item.AssetNumber.Contains(search)) ||
                 (item.Destination != null && item.Destination.Title.Contains(search)) ||
+                (item.ShippingLocation != null && item.ShippingLocation.Title.Contains(search)) ||
+                (hasExitReason && item.ExitReasonType == exitReason) ||
                 (item.ExitReason != null && item.ExitReason.Contains(search)) ||
                 (item.DeliveringUnit != null && item.DeliveringUnit.Contains(search)));
         }
@@ -97,7 +101,11 @@ internal sealed class GetGoodsIssueItemsQueryHandler(IUnitOfWork<Guid> unitOfWor
             AssetNumber = item.AssetNumber,
             DestinationId = item.DestinationId,
             DestinationTitle = item.Destination == null ? null : item.Destination.Title,
-            ExitReason = item.ExitReason,
+            ShippingLocationId = item.ShippingLocationId,
+            ShippingLocationTitle = item.ShippingLocation == null ? null : item.ShippingLocation.Title,
+            ExitReason = item.ExitReasonType,
+            LegacyExitReason = item.ExitReason,
+            IsReturnable = item.IsReturnable,
             Description = item.Description,
             DeliveringUnit = item.DeliveringUnit,
             ReturnAtUtc = item.ReturnAtUtc

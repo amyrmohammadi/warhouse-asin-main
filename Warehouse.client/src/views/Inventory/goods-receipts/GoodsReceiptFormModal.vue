@@ -34,7 +34,7 @@ const {
   confirm: options => confirmDialog.value?.ask(options) ?? Promise.resolve(false),
   onSaved: reason => emit('saved', reason),
 })
-const { canInitialEntry, canManageReceiptInvoice, canManageMasterData, canCreateProducts } = permissions
+const { canInitialEntry, canManageInvoice, canManageReceipt, canManageMasterData, canCreateProducts } = permissions
 
 const productNotFoundText = canCreateProducts
   ? 'کالایی پیدا نشد؛ اطلاعات کالای جدید را تکمیل کنید.'
@@ -173,7 +173,7 @@ defineExpose({ openCreate, openEdit })
 
                 <td class="receipt-list-invoice-status-cell">
                   <select v-model="item.invoiceStatus" class="form-control form-control-sm" aria-label="وضعیت فاکتور"
-                          :disabled="saving || !canManageReceiptInvoice" @change="onInvoiceStatusChange(item)">
+                          :disabled="saving || !canManageInvoice" @change="onInvoiceStatusChange(item)">
                     <option :value="null" aria-label="بدون انتخاب"></option>
                     <option value="DoesNotHave">ندارد</option>
                     <option value="HasInvoice">دارد</option>
@@ -183,7 +183,7 @@ defineExpose({ openCreate, openEdit })
                 <td class="receipt-list-invoice-number-cell">
                   <input v-model="item.invoiceNumber" class="form-control form-control-sm"
                          :class="{ 'is-invalid': rowError(item, 'invoiceNumber') }" type="text" maxlength="100"
-                         aria-label="شماره فاکتور" :disabled="saving || !canManageReceiptInvoice || !hasInvoiceNumber(item)"
+                         aria-label="شماره فاکتور" :disabled="saving || !canManageInvoice || !hasInvoiceNumber(item)"
                          @input="clearRowError(item, 'invoiceNumber')" />
                   <small v-if="rowError(item, 'invoiceNumber')" class="invalid-feedback d-block receipt-list-cell-error">{{ rowError(item, 'invoiceNumber') }}</small>
                 </td>
@@ -191,7 +191,7 @@ defineExpose({ openCreate, openEdit })
                 <td class="receipt-list-supplier-cell">
                   <SupplierSelect :model-value="item.supplierId || null" :text="item.supplierText" size="sm" placeholder="‌"
                                   :error="rowError(item, 'supplier')" error-class="receipt-list-cell-error"
-                                  :disabled="saving || !canManageReceiptInvoice" allow-create
+                                  :disabled="saving || !canManageInvoice" allow-create
                                   @update:model-value="item.supplierId = $event ?? ''"
                                   @update:text="item.supplierText = $event; clearRowError(item, 'supplier')"
                                   @clear="clearRowError(item, 'supplier')" />
@@ -201,7 +201,7 @@ defineExpose({ openCreate, openEdit })
 
                 <td class="receipt-list-receipt-number-cell">
                   <input v-model="item.receiptNumber" class="form-control form-control-sm" type="text" maxlength="100"
-                         aria-label="شماره رسید" :disabled="saving || !canManageReceiptInvoice" />
+                         aria-label="شماره رسید" :disabled="saving" :readonly="!canManageReceipt" />
                 </td>
 
                 <td class="receipt-list-issue-number-cell">
@@ -300,7 +300,7 @@ defineExpose({ openCreate, openEdit })
             </div>
             <div class="form-group mb-0">
               <label>وضعیت فاکتور</label>
-              <select v-model="item.invoiceStatus" class="form-control" :disabled="saving || !canManageReceiptInvoice"
+              <select v-model="item.invoiceStatus" class="form-control" :disabled="saving || !canManageInvoice"
                       @change="onInvoiceStatusChange(item)">
                 <option :value="null" aria-label="بدون انتخاب"></option>
                 <option value="DoesNotHave">ندارد</option>
@@ -310,7 +310,7 @@ defineExpose({ openCreate, openEdit })
             <div class="form-group mb-0">
               <label>شماره فاکتور <span v-if="hasInvoiceNumber(item)" class="text-danger">*</span></label>
               <input v-model="item.invoiceNumber" class="form-control" :class="{ 'is-invalid': rowError(item, 'invoiceNumber') }"
-                     type="text" maxlength="100" :disabled="saving || !canManageReceiptInvoice || !hasInvoiceNumber(item)"
+                     type="text" maxlength="100" :disabled="saving || !canManageInvoice || !hasInvoiceNumber(item)"
                      @input="clearRowError(item, 'invoiceNumber')" />
               <small v-if="rowError(item, 'invoiceNumber')" class="invalid-feedback d-block">{{ rowError(item, 'invoiceNumber') }}</small>
             </div>
@@ -318,14 +318,14 @@ defineExpose({ openCreate, openEdit })
               <label>طرف حساب</label>
               <SupplierSelect :model-value="item.supplierId || null" :text="item.supplierText"
                               placeholder="تایپ یا انتخاب تأمین‌کننده" :error="rowError(item, 'supplier')"
-                              :disabled="saving || !canManageReceiptInvoice" allow-create
+                              :disabled="saving || !canManageInvoice" allow-create
                               @update:model-value="item.supplierId = $event ?? ''" @update:text="item.supplierText = $event"
                               @clear="clearRowError(item, 'supplier')" />
             </div>
             <div class="form-group mb-0">
               <label>شماره رسید</label>
               <input v-model="item.receiptNumber" class="form-control" type="text" maxlength="100"
-                     :disabled="saving || !canManageReceiptInvoice" />
+                     :disabled="saving" :readonly="!canManageReceipt" />
             </div>
             <div class="form-group mb-0">
               <label>شماره خروج</label>

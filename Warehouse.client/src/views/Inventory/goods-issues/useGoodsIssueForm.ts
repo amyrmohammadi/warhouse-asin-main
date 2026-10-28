@@ -13,10 +13,12 @@ import {
   GoodsIssuesApiError,
   updateGoodsIssue,
   type GoodsIssue,
+  type GoodsIssueExitReason,
   type GoodsIssueItemRow,
   type SaveGoodsIssueRequest,
 } from '@/services/goodsIssues'
 import type { Product } from '@/services/products'
+import type { SupplierOption } from '@/services/suppliers'
 import { toast } from '@/services/toast'
 import {
   localDateTimeToIso,
@@ -32,12 +34,17 @@ export interface FormItem {
   productId: string | null
   productCode: string
   productTitle: string
+  productUnitOfMeasureId: string | null
   productUnitOfMeasureTitle: string
   quantity: number | null
   assetNumber: string
   destinationId: string | null
   destinationTitle: string
-  exitReason: string
+  shippingLocationId: string | null
+  shippingLocationTitle: string
+  exitReason: GoodsIssueExitReason
+  legacyExitReason: string
+  isReturnable: boolean
   description: string
   deliveringUnit: string
   returnAtLocal: string
@@ -57,12 +64,14 @@ interface Dependencies {
   onSaved: (reason: 'saved' | 'deleted') => void
 }
 
-type ItemField = 'product' | 'code' | 'quantity' | 'assetNumber' | 'destination'
-  | 'exitReason' | 'description' | 'deliveringUnit' | 'returnAtLocal'
+type ItemField = 'product' | 'code' | 'unit' | 'quantity' | 'assetNumber' | 'destination'
+  | 'shippingLocation' | 'exitReason' | 'description' | 'deliveringUnit' | 'returnAtLocal'
 
 const ITEM_FIELD_MAP: [string, ItemField][] = [
-  ['productid', 'product'], ['productcode', 'code'], ['quantity', 'quantity'],
-  ['assetnumber', 'assetNumber'], ['destination', 'destination'], ['exitreason', 'exitReason'],
+  ['productid', 'product'], ['producttitle', 'product'], ['productcode', 'code'],
+  ['unitofmeasureid', 'unit'], ['quantity', 'quantity'],
+  ['assetnumber', 'assetNumber'], ['destination', 'destination'], ['shippinglocation', 'shippingLocation'],
+  ['exitreason', 'exitReason'],
   ['deliveringunit', 'deliveringUnit'], ['returnatutc', 'returnAtLocal'], ['description', 'description'],
 ]
 const FORM_FIELD_MAP: [string, string][] = [
@@ -76,12 +85,17 @@ function newItem(key: number): FormItem {
     productId: null,
     productCode: '',
     productTitle: '',
+    productUnitOfMeasureId: null,
     productUnitOfMeasureTitle: '',
     quantity: null,
     assetNumber: '',
     destinationId: null,
     destinationTitle: '',
-    exitReason: '',
+    shippingLocationId: null,
+    shippingLocationTitle: '',
+    exitReason: 'Other',
+    legacyExitReason: '',
+    isReturnable: true,
     description: '',
     deliveringUnit: '',
     returnAtLocal: '',
@@ -92,7 +106,8 @@ function itemHasContent(item: FormItem): boolean {
   return Boolean(
     item.productId || item.productTitle.trim() || item.productCode.trim() || item.quantity !== null
     || item.assetNumber.trim() || item.destinationId || item.destinationTitle.trim()
-    || item.exitReason.trim() || item.description.trim() || item.deliveringUnit.trim()
+    || item.shippingLocationId || item.shippingLocationTitle.trim()
+    || item.description.trim() || item.deliveringUnit.trim()
     || item.returnAtLocal,
   )
 }
@@ -104,6 +119,7 @@ export function useGoodsIssueForm(deps: Dependencies) {
     canUpdate: has('GoodsIssuesUpdate'),
     canDelete: has('GoodsIssuesDelete'),
     canManageMasterData: has('MasterDataManage'),
+    canCreateProducts: has('ProductsCreate'),
   }
   const { handleUnauthorized } = useUnauthorizedRedirect('/dashboard/inventory/goods-issues')
   const channel = useRequestChannel()
@@ -165,14 +181,19 @@ export function useGoodsIssueForm(deps: Dependencies) {
         productId: item.productId,
         productCode: item.productCode,
         productTitle: item.productTitle ?? '',
+        productUnitOfMeasureId: null,
         productUnitOfMeasureTitle: item.productUnitOfMeasureTitle ?? '',
         quantity: item.quantity,
         assetNumber: item.assetNumber ?? '',
         destinationId: item.destinationId,
         destinationTitle: item.destinationTitle,
+        shippingLocationId: item.shippingLocationId,
+        shippingLocationTitle: item.shippingLocationTitle ?? '',
         exitReason: item.exitReason,
+        legacyExitReason: item.legacyExitReason ?? '',
+        isReturnable: item.isReturnable,
         description: item.description ?? '',
-        deliveringUnit: item.deliveringUnit,
+        deliveringUnit: item.deliveringUnit ?? '',
         returnAtLocal: item.returnAtUtc ? toLocalDate(item.returnAtUtc) : '',
       })))
       open.value = true
@@ -192,28 +213,42 @@ export function useGoodsIssueForm(deps: Dependencies) {
   }
 
   function selectProduct(item: FormItem, product: Product): void {
-    entry.inheritFromPrevious(item, ['destinationId', 'destinationTitle'])
+    entry.inheritFromPrevious(item, [
+      'destinationId', 'destinationTitle', 'shippingLocationId', 'shippingLocationTitle',
+      'exitReason', 'isReturnable',
+    ])
     item.productId = product.id
     item.productCode = product.code
     item.productTitle = product.title
+    item.productUnitOfMeasureId = product.unitOfMeasureId
     item.productUnitOfMeasureTitle = product.unitOfMeasureTitle
     clearRowError(item, 'product')
     clearRowError(item, 'code')
+    clearRowError(item, 'unit')
     focusEntryField(item.key, 'quantity')
   }
 
   function onProductText(item: FormItem, field: 'title' | 'code', value: string): void {
     if (field === 'title') item.productTitle = value
     else item.productCode = value
-    entry.inheritFromPrevious(item, ['destinationId', 'destinationTitle'])
+    entry.inheritFromPrevious(item, [
+      'destinationId', 'destinationTitle', 'shippingLocationId', 'shippingLocationTitle',
+      'exitReason', 'isReturnable',
+    ])
     clearRowError(item, field === 'title' ? 'product' : 'code')
   }
 
   function clearProduct(item: FormItem, field: 'title' | 'code'): void {
     item.productId = null
+    item.productUnitOfMeasureId = null
     item.productUnitOfMeasureTitle = ''
     if (field === 'title') item.productCode = ''
     else item.productTitle = ''
+  }
+
+  function onUnitText(item: FormItem, value: string): void {
+    item.productUnitOfMeasureTitle = value
+    clearRowError(item, 'unit')
   }
 
   function selectDestination(item: FormItem, destination: GoodsIssueDestinationOption): void {
@@ -232,9 +267,33 @@ export function useGoodsIssueForm(deps: Dependencies) {
     clearRowError(item, 'destination')
   }
 
+  function selectShippingLocation(item: FormItem, supplier: SupplierOption): void {
+    item.shippingLocationId = supplier.id
+    item.shippingLocationTitle = supplier.title
+    clearRowError(item, 'shippingLocation')
+  }
+
+  function onShippingLocationText(item: FormItem, value: string): void {
+    item.shippingLocationTitle = value
+    clearRowError(item, 'shippingLocation')
+  }
+
+  function clearShippingLocation(item: FormItem): void {
+    item.shippingLocationId = null
+    item.shippingLocationTitle = ''
+    clearRowError(item, 'shippingLocation')
+  }
+
+  function onReturnableChange(item: FormItem): void {
+    if (!item.isReturnable) item.returnAtLocal = ''
+    clearRowError(item, 'returnAtLocal')
+  }
+
   const advanceFromProductTitle = (item: FormItem): void =>
     focusEntryField(item.key, item.productId ? 'quantity' : 'code')
-  const advanceFromProductCode = (item: FormItem): void => focusEntryField(item.key, 'quantity')
+  const advanceFromProductCode = (item: FormItem): void =>
+    focusEntryField(item.key, item.productId ? 'quantity' : 'unit')
+  const advanceFromUnit = (item: FormItem): void => focusEntryField(item.key, 'quantity')
 
   function validate(): boolean {
     errors.clearAll()
@@ -252,13 +311,17 @@ export function useGoodsIssueForm(deps: Dependencies) {
     for (const item of items) {
       const set = (field: ItemField, message: string) => errors.setRow(item.key, field, message)
       if (!item.productCode.trim()) set('code', 'کد کالا الزامی است.')
+      else if (!item.productId && !permissions.canCreateProducts)
+        set('code', 'مجوز افزودن کالای جدید را ندارید؛ کالا را از فهرست انتخاب کنید.')
+      if (!item.productId && permissions.canCreateProducts) {
+        if (!item.productTitle.trim()) set('product', 'عنوان کالای جدید الزامی است.')
+        if (!item.productUnitOfMeasureId) set('unit', 'واحد کالای جدید را از فهرست انتخاب کنید.')
+      }
       if (!item.quantity || item.quantity <= 0) set('quantity', 'تعداد باید بزرگ‌تر از صفر باشد.')
       if (!item.destinationTitle.trim()) set('destination', 'مقصد الزامی است.')
       else if (isNewDestination(item) && !permissions.canManageMasterData)
         set('destination', 'مقصد را از فهرست انتخاب کنید.')
-      if (!item.exitReason.trim()) set('exitReason', 'علت خروج الزامی است.')
-      if (!item.deliveringUnit.trim()) set('deliveringUnit', 'واحد تحویل‌دهنده الزامی است.')
-      if (issuedAt && item.returnAtLocal && new Date(`${item.returnAtLocal}T00:00:00`) < issuedAt)
+      if (issuedAt && item.isReturnable && item.returnAtLocal && new Date(`${item.returnAtLocal}T00:00:00`) < issuedAt)
         set('returnAtLocal', 'تاریخ عودت نمی‌تواند قبل از تاریخ خروج باشد.')
     }
     return !errors.hasAny()
@@ -300,14 +363,18 @@ export function useGoodsIssueForm(deps: Dependencies) {
       items: entry.rowsForSubmission.value.map(item => ({
         productId: item.productId,
         productCode: item.productCode.trim(),
+        productTitle: item.productId ? null : item.productTitle.trim(),
+        unitOfMeasureId: item.productId ? null : item.productUnitOfMeasureId,
         quantity: Number(item.quantity),
         assetNumber: item.assetNumber.trim() || null,
         destinationId: item.destinationId,
         destinationTitle: item.destinationId ? null : item.destinationTitle.trim(),
-        exitReason: item.exitReason.trim(),
+        shippingLocationId: item.shippingLocationId,
+        exitReason: item.exitReason,
+        isReturnable: item.isReturnable,
         description: item.description.trim() || null,
-        deliveringUnit: item.deliveringUnit.trim(),
-        returnAtUtc: item.returnAtLocal ? localDateToIso(item.returnAtLocal) : null,
+        deliveringUnit: item.deliveringUnit.trim() || null,
+        returnAtUtc: item.isReturnable && item.returnAtLocal ? localDateToIso(item.returnAtLocal) : null,
       })),
     }
   }
@@ -406,10 +473,16 @@ export function useGoodsIssueForm(deps: Dependencies) {
     selectProduct,
     onProductText,
     clearProduct,
+    onUnitText,
     selectDestination,
     onDestinationText,
     clearDestination,
+    selectShippingLocation,
+    onShippingLocationText,
+    clearShippingLocation,
+    onReturnableChange,
     advanceFromProductTitle,
     advanceFromProductCode,
+    advanceFromUnit,
   }
 }

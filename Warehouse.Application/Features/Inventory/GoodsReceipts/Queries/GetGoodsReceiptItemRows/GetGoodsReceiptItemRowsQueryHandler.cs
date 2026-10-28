@@ -39,12 +39,16 @@ internal sealed class GetGoodsReceiptItemRowsQueryHandler(IUnitOfWork<Guid> unit
         if (!string.IsNullOrWhiteSpace(search))
         {
             query = query.Where(item =>
-            item.GoodsReceipt.Deliverer.FullName.Contains(search) || 
-            item.GoodsReceipt.PageNumber.Contains(search) ||
+                item.GoodsReceipt.Deliverer.FullName.Contains(search) ||
+                item.GoodsReceipt.PageNumber.Contains(search) ||
+                (item.GoodsReceipt.Description != null &&
+                    item.GoodsReceipt.Description.Contains(search)) ||
                 item.Product.Title.Contains(search) ||
                 item.Product.Code.Contains(search) ||
-                item.GoodsReceipt.PageNumber.Contains(search) ||
                 (item.Invoice != null && item.Invoice.InvoiceNumber.Contains(search)) ||
+                (item.Invoice != null && item.Invoice.Supplier != null &&
+                    item.Invoice.Supplier.Title.Contains(search)) ||
+                (item.Description != null && item.Description.Contains(search)) ||
                 (item.ReceiptNumber != null && item.ReceiptNumber.Contains(search)));
         }
 

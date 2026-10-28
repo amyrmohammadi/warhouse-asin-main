@@ -411,10 +411,10 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("InvoiceNumber")
-                        .IsUnique();
-
                     b.HasIndex("SupplierId");
+
+                    b.HasIndex("InvoiceNumber", "SupplierId")
+                        .IsUnique();
 
                     b.ToTable("Invoices", "Business");
                 });

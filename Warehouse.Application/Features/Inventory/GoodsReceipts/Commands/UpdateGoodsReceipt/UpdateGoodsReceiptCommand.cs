@@ -10,7 +10,8 @@ using Warehouse.Domain.Entities;
 namespace Warehouse.Application.Features.Inventory.GoodsReceipts.Commands.UpdateGoodsReceipt;
 
 public sealed record UpdateGoodsReceiptCommand(Guid Id, CreateGoodsReceiptCommand Values,
-    bool CanEditInitialEntry, bool CanEditReceiptInvoice, Guid ConcurrencyStamp = default)
+    bool CanEditInitialEntry, bool CanEditInvoice, bool CanEditReceipt,
+    Guid ConcurrencyStamp = default)
     : IRequest<Result<GoodsReceiptSummary>>;
 
 internal sealed class UpdateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfWork)
@@ -18,7 +19,7 @@ internal sealed class UpdateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
 {
     public async Task<Result<GoodsReceiptSummary>> Handle(UpdateGoodsReceiptCommand request, CancellationToken cancellationToken)
     {
-        if (!request.CanEditInitialEntry && !request.CanEditReceiptInvoice)
+        if (!request.CanEditInitialEntry && !request.CanEditInvoice && !request.CanEditReceipt)
             return Result<GoodsReceiptSummary>.Error("مجوز ویرایش سند را ندارید.");
         var receipt = await unitOfWork.Repository<GoodsReceipt>()
                       .GetByIdAsync(request.Id, cancellationToken);
@@ -69,18 +70,18 @@ internal sealed class UpdateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                     }
                     return new CreateGoodsReceiptItem(
                         item.ProductId, null, null, null, item.WarehouseId,
-                        request.CanEditReceiptInvoice ? requested?.InvoiceStatus : item.InvoiceStatus,
-                        request.CanEditReceiptInvoice ? requested?.InvoiceNumber :
+                        request.CanEditInvoice ? requested?.InvoiceStatus : item.InvoiceStatus,
+                        request.CanEditInvoice ? requested?.InvoiceNumber :
                             item.InvoiceId.HasValue ? invoicesById[item.InvoiceId.Value].InvoiceNumber : null,
-                        request.CanEditReceiptInvoice ? requested?.SupplierId :
+                        request.CanEditInvoice ? requested?.SupplierId :
                             item.InvoiceId.HasValue ? invoicesById[item.InvoiceId.Value].SupplierId : null,
-                        request.CanEditReceiptInvoice ? requested?.SupplierTitle : null,
-                        request.CanEditReceiptInvoice ? requested?.ReceiptNumber : item.ReceiptNumber,
+                        request.CanEditInvoice ? requested?.SupplierTitle : null,
+                        request.CanEditReceipt ? requested?.ReceiptNumber : item.ReceiptNumber,
                         item.Quantity, item.RequestNumber, item.Description);
                 }).ToArray()
             };
         }
-        else if (!request.CanEditReceiptInvoice)
+        else if (!request.CanEditInvoice || !request.CanEditReceipt)
         {
             var storedByProduct = storedItems
                 .GroupBy(item => item.ProductId)
@@ -98,21 +99,21 @@ internal sealed class UpdateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                     }
                     return item with
                     {
-                        InvoiceStatus = stored?.InvoiceStatus,
-                        InvoiceNumber = stored?.InvoiceId is Guid invoiceId
+                        InvoiceStatus = request.CanEditInvoice ? item.InvoiceStatus : stored?.InvoiceStatus,
+                        InvoiceNumber = request.CanEditInvoice ? item.InvoiceNumber : stored?.InvoiceId is Guid invoiceId
                             ? invoicesById[invoiceId].InvoiceNumber
                             : null,
-                        SupplierId = stored?.InvoiceId is Guid supplierInvoiceId
+                        SupplierId = request.CanEditInvoice ? item.SupplierId : stored?.InvoiceId is Guid supplierInvoiceId
                             ? invoicesById[supplierInvoiceId].SupplierId
                             : null,
-                        SupplierTitle = null,
-                        ReceiptNumber = stored?.ReceiptNumber
+                        SupplierTitle = request.CanEditInvoice ? item.SupplierTitle : null,
+                        ReceiptNumber = request.CanEditReceipt ? item.ReceiptNumber : stored?.ReceiptNumber
                     };
                 }).ToArray()
             };
         }
         await new CreateGoodsReceiptCommandValidator().ValidateAndThrowAsync(values, cancellationToken);
         return await new CreateGoodsReceiptCommandHandler(unitOfWork).SaveAsync(values, cancellationToken,
-            receipt, request.CanEditInitialEntry, request.CanEditReceiptInvoice);
+            receipt, request.CanEditInitialEntry, request.CanEditInvoice, request.CanEditReceipt);
     }
 }
