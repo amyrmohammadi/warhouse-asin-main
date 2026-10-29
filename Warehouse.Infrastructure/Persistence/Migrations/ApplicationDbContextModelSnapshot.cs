@@ -170,6 +170,9 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
+                    b.Property<bool>("IsFinalized")
+                        .HasColumnType("bit");
+
                     b.Property<string>("IssueNumber")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -407,6 +410,9 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
+                    b.Property<DateOnly?>("FinanceDeliveryDate")
+                        .HasColumnType("date");
+
                     b.Property<DateOnly?>("InvoiceDate")
                         .HasColumnType("date");
 
@@ -426,6 +432,9 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(32)")
                         .HasDefaultValue("UnderReview");
 
+                    b.Property<DateOnly?>("ReceiptDate")
+                        .HasColumnType("date");
+
                     b.Property<Guid?>("SupplierId")
                         .HasColumnType("uniqueidentifier");
 
@@ -433,9 +442,9 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("SupplierId");
 
-                    b.HasIndex("InvoiceNumber", "SupplierId")
+                    b.HasIndex("InvoiceNumber", "SupplierId", "ReceiptDate")
                         .IsUnique()
-                        .HasFilter("[SupplierId] IS NOT NULL");
+                        .HasFilter("[SupplierId] IS NOT NULL AND [ReceiptDate] IS NOT NULL");
 
                     b.ToTable("Invoices", "Business");
                 });

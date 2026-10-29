@@ -9,7 +9,8 @@ public sealed record UpdateInvoiceRequest(
     DateOnly? InvoiceDate,
     InvoiceProcessingStatus ProcessingStatus,
     IReadOnlyCollection<UpdateInvoiceReceiptItemRequest> Items,
-    decimal? Price = null);
+    decimal? Price = null,
+    DateOnly? FinanceDeliveryDate = null);
 
 public sealed record UpdateInvoiceReceiptItemRequest(
     Guid Id,

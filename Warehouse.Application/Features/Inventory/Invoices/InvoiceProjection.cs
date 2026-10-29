@@ -13,6 +13,7 @@ internal static class InvoiceProjection
             InvoiceNumber = invoice.InvoiceNumber,
             Description = invoice.Description,
             InvoiceDate = invoice.InvoiceDate,
+            FinanceDeliveryDate = invoice.FinanceDeliveryDate,
             ProcessingStatus = invoice.ProcessingStatus,
             Counterparty = invoice.Supplier == null ? null : invoice.Supplier.Title,
             ReceiptNumbers = invoice.GoodsReceiptItems
@@ -31,6 +32,7 @@ internal static class InvoiceProjection
             InvoiceNumber = invoice.InvoiceNumber,
             Description = invoice.Description,
             InvoiceDate = invoice.InvoiceDate,
+            FinanceDeliveryDate = invoice.FinanceDeliveryDate,
             ProcessingStatus = invoice.ProcessingStatus,
             Counterparty = invoice.Supplier == null ? null : invoice.Supplier.Title,
             SupplierId = invoice.SupplierId,

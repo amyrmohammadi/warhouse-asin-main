@@ -8,6 +8,7 @@ export interface InvoiceSummary {
   invoiceNumber: string
   description: string | null
   invoiceDate: string | null
+  financeDeliveryDate: string | null
   processingStatus: InvoiceProcessingStatus
   counterparty: string | null
   receiptNumbers: string[]
@@ -48,6 +49,7 @@ export interface UpdateInvoiceRequest {
   supplierId: string | null
   description: string | null
   invoiceDate: string | null
+  financeDeliveryDate: string | null
   processingStatus: InvoiceProcessingStatus
   items: Array<{
     price: number | null

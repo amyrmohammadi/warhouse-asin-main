@@ -25,6 +25,7 @@ internal sealed class GetGoodsReceiptMetricsQueryHandler(IUnitOfWork<Guid> unitO
         int? missingInvoice = null;
         int? todayItems = null;
         int? todayDocuments = null;
+        int? todayCreatedItems=null;
 
         if (request.IncludeMissingReceipt)
             missingReceipt = await items.CountAsync(items.Entities.Where(item =>
@@ -48,7 +49,8 @@ internal sealed class GetGoodsReceiptMetricsQueryHandler(IUnitOfWork<Guid> unitO
                     receipt.EnteredAtUtc >= startUtc && receipt.EnteredAtUtc < endUtc), cancellationToken);
         }
 
-        return Result<GoodsReceiptMetrics>.Success(new(
-            missingReceipt, missingInvoice, todayItems, todayDocuments));
+
+            return Result<GoodsReceiptMetrics>.Success(new(
+                missingReceipt, missingInvoice, todayItems, todayDocuments));
     }
 }

@@ -273,7 +273,7 @@ function actionClass(action: AuditAction): string {
 
 function actorLabel(audit: AuditLogListItem): string {
   if (audit.userFullName === 'System') return 'سیستم'
-  return audit.userFullName || 'نام کامل ثبت نشده'
+  return audit.userFullName || ''
 }
 
 function formatDate(value: string): string {
@@ -288,7 +288,7 @@ function formatDate(value: string): string {
 }
 
 function formatJson(value: string | null): string {
-  if (!value) return '—'
+  if (!value) return ''
 
   try {
     return JSON.stringify(JSON.parse(value), null, 2)
@@ -298,7 +298,7 @@ function formatJson(value: string | null): string {
 }
 
 function formatChangedColumns(value: string | null): string {
-  if (!value) return '—'
+  if (!value) return ''
 
   try {
     const columns = JSON.parse(value) as unknown

@@ -66,3 +66,10 @@
   .inventory-data-page .users-table-summary,
   .inventory-data-page .users-table-pagination { justify-content: center; margin: 0; width: 100%; }
 }
+.dt-layout-table > div
+ {
+    max-height: 50vh;
+    overflow: auto !important;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+}

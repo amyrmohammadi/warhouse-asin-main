@@ -14,6 +14,7 @@ public sealed class InvoiceSummary
     public string? Description { get; init; }
 
     public DateOnly? InvoiceDate { get; init; }
+    public DateOnly? FinanceDeliveryDate { get; init; }
 
     public InvoiceProcessingStatus ProcessingStatus { get; init; }
 
@@ -67,6 +68,7 @@ public sealed class InvoiceDetails
     public string? Description { get; init; }
 
     public DateOnly? InvoiceDate { get; init; }
+    public DateOnly? FinanceDeliveryDate { get; init; }
 
     public InvoiceProcessingStatus ProcessingStatus { get; init; }
 

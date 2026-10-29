@@ -4,4 +4,5 @@ public sealed record GoodsReceiptMetrics(
     int? ItemsWithoutReceiptCount,
     int? ItemsWithoutInvoiceCount,
     int? TodayItemCount,
-    int? TodayDocumentCount);
+    int? TodayDocumentCount
+    );

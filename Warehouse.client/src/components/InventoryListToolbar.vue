@@ -76,6 +76,9 @@ function onFileChange(event: Event): void {
       </div>
     </div>
 
+    <div v-if="$slots['create-actions']" class="inventory-toolbar__extra">
+      <slot name="create-actions" />
+    </div>
     <button v-if="canCreate" class="btn btn-primary btn-sm mobile-icon-button inventory-toolbar__add" type="button"
             :title="createLabel" :disabled="createDisabled" @click="emit('create')">
       <i class="las la-plus ml-1" aria-hidden="true"></i>
@@ -83,8 +86,9 @@ function onFileChange(event: Event): void {
     </button>
   </div>
 
-  <div v-if="canCreate || canExport || canImport" class="inventory-mobile-actions" role="toolbar"
+  <div v-if="canCreate || canExport || canImport || $slots['create-actions']" class="inventory-mobile-actions" role="toolbar"
        :aria-label="`عملیات ${entityLabel}`">
+    <slot name="create-actions" />
     <button v-if="canCreate" class="btn btn-primary" type="button" :disabled="createDisabled" @click="emit('create')">
       <i class="las la-plus" aria-hidden="true"></i><span>{{ createLabel }}</span>
     </button>
@@ -143,6 +147,7 @@ function onFileChange(event: Event): void {
   .inventory-toolbar__import, .inventory-toolbar__export { display: none; }
   .inventory-toolbar__columns { border-radius: .35rem !important; }
   .inventory-toolbar__add { display: none !important; }
+  .inventory-toolbar__extra { display: none; }
 
   .inventory-mobile-actions {
     background: var(--surface); background: color-mix(in srgb, var(--surface) 94%, transparent);

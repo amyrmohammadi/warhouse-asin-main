@@ -98,6 +98,8 @@ internal sealed class SaveGoodsIssueCommandHandler(IUnitOfWork<Guid> unitOfWork)
             existingIssue = await issueRepository.GetByIdAsync(request.Id.Value, cancellationToken);
             if (existingIssue is null)
                 return Result<GoodsIssueSummary>.Error("سند خروج کالا پیدا نشد.");
+            if (existingIssue.IsFinalized)
+                return Result<GoodsIssueSummary>.Error(GoodsIssue.FinalizedMessage);
             if (!request.ConcurrencyStamp.HasValue ||
                 request.ConcurrencyStamp.Value != existingIssue.ConcurrencyStamp)
                 return Result<GoodsIssueSummary>.Error(ConcurrencyMessages.Conflict);

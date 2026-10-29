@@ -239,12 +239,12 @@ internal sealed class AuditTrailService(
         JsonElement value,
         HistoryLookups lookups)
     {
-        if (value.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null) return "—";
+        if (value.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null) return string.Empty;
 
         var raw = value.ValueKind == JsonValueKind.String
             ? value.GetString()
             : value.GetRawText();
-        if (string.IsNullOrWhiteSpace(raw)) return "—";
+        if (string.IsNullOrWhiteSpace(raw)) return string.Empty;
 
         if (Guid.TryParse(raw, out var id))
         {

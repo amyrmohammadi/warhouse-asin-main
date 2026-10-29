@@ -761,7 +761,7 @@ onBeforeUnmount(() => {
                       :src="getUserProfileImageUrl(rowData)"
                       :alt="cellData ? `تصویر ${cellData}` : 'تصویر کاربر'"
                     />
-                    <strong class="text-black">{{ cellData || '—' }}</strong>
+                    <strong class="text-black">{{ cellData ?? '' }}</strong>
                   </div>
                 </template>
 
@@ -770,7 +770,7 @@ onBeforeUnmount(() => {
                 </template>
 
                 <template #column-phoneNumber="{ cellData }">
-                  <span dir="ltr" class="d-inline-block">{{ cellData || '—' }}</span>
+                  <span dir="ltr" class="d-inline-block">{{ cellData ?? '' }}</span>
                 </template>
 
                 <template #column-roles="{ cellData }">

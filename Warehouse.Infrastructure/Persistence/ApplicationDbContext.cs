@@ -180,12 +180,14 @@ public sealed class ApplicationDbContext
             entity.Property(invoice => invoice.Description).HasMaxLength(1000);
             entity.Property(invoice => invoice.Price).HasPrecision(18, 2);
             entity.Property(invoice => invoice.InvoiceDate).HasColumnType("date");
+            entity.Property(invoice => invoice.FinanceDeliveryDate).HasColumnType("date");
+            entity.Property(invoice => invoice.ReceiptDate).HasColumnType("date");
             entity.Property(invoice => invoice.ProcessingStatus)
                 .HasConversion<string>()
                 .HasMaxLength(32)
                 .HasDefaultValue(InvoiceProcessingStatus.UnderReview)
                 .IsRequired();
-            entity.HasIndex(invoice => new { invoice.InvoiceNumber, invoice.SupplierId }).IsUnique();
+            entity.HasIndex(invoice => new { invoice.InvoiceNumber, invoice.SupplierId, invoice.ReceiptDate }).IsUnique();
             entity.HasIndex(invoice => invoice.SupplierId);
             entity.HasOne(invoice => invoice.Supplier)
                 .WithMany(supplier => supplier.Invoices)
@@ -476,7 +478,6 @@ public sealed class ApplicationDbContext
                         auditEntry.Sanitize(propertyName, property.CurrentValue);
                 }
             }
-
             AuditTrails.Add(auditEntry.ToAuditTrail());
         }
     }

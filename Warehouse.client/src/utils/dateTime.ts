@@ -33,7 +33,7 @@ const persianDate = new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
 })
 
 /** تقویم جلالی صریح است و به تنظیمات مرورگر وابسته نیست. */
-export function formatPersianDate(value: string | null | undefined, fallback = '—'): string {
+export function formatPersianDate(value: string | null | undefined, fallback = ''): string {
   return value ? persianDate.format(new Date(value)) : fallback
 }
 

@@ -41,8 +41,12 @@ public sealed class UpdateGoodsReceiptTests
         await context.UnitOfWork.Received(1).RollBackTransaction(Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task UpdateInvoice_SameNumberForDifferentSupplier_CreatesSeparateInvoice()
+    [Theory]
+    [InlineData(true, 0, false)]
+    [InlineData(false, 1, false)]
+    [InlineData(false, 0, true)]
+    public async Task UpdateInvoice_MatchesNumberSupplierAndReceiptDay(
+        bool differentSupplier, int dayDifference, bool reuseInvoice)
     {
         await using var context = new ApplicationTestContext();
         var warehouse = new StorageWarehouse("انبار", null);
@@ -52,12 +56,15 @@ public sealed class UpdateGoodsReceiptTests
         var firstSupplier = new Supplier("تأمین‌کننده اول", null);
         var secondSupplier = new Supplier("تأمین‌کننده دوم", null);
         var oldInvoice = new Invoice("OLD-INVOICE", firstSupplier.Id);
-        var selectedInvoice = new Invoice("EXISTING-INVOICE", secondSupplier.Id);
+        var enteredAt = new DateTimeOffset(2026, 10, 20, 10, 0, 0, TimeSpan.Zero);
+        var selectedSupplier = differentSupplier ? secondSupplier : firstSupplier;
+        var selectedInvoice = new Invoice("EXISTING-INVOICE", selectedSupplier.Id,
+            Invoice.GetReceiptDate(enteredAt).AddDays(dayDifference));
         typeof(Product).GetProperty(nameof(Product.UnitOfMeasure))!.SetValue(product, unit);
         typeof(Invoice).GetProperty(nameof(Invoice.Supplier))!.SetValue(oldInvoice, firstSupplier);
-        typeof(Invoice).GetProperty(nameof(Invoice.Supplier))!.SetValue(selectedInvoice, secondSupplier);
+        typeof(Invoice).GetProperty(nameof(Invoice.Supplier))!.SetValue(selectedInvoice, selectedSupplier);
 
-        var receipt = new GoodsReceipt(DateTimeOffset.UtcNow, null, person.Id, "1");
+        var receipt = new GoodsReceipt(enteredAt, null, person.Id, "1");
         typeof(GoodsReceipt).GetProperty(nameof(GoodsReceipt.Deliverer))!.SetValue(receipt, person);
         receipt.AddItem(product.Id, warehouse.Id, InvoiceStatus.HasInvoice, oldInvoice,
             "OLD-RECEIPT", 1, null, null, 0);
@@ -87,13 +94,14 @@ public sealed class UpdateGoodsReceiptTests
                 receipt.Id, values, true, true, true, receipt.ConcurrencyStamp));
 
         Assert.True(result.IsSuccess);
-        Assert.NotEqual(selectedInvoice.Id, item.InvoiceId);
+        Assert.Equal(reuseInvoice, selectedInvoice.Id == item.InvoiceId);
         Assert.Equal("EXISTING-INVOICE", item.Invoice?.InvoiceNumber);
         Assert.Equal(firstSupplier.Id, item.Invoice?.SupplierId);
         Assert.Equal("OLD-INVOICE", oldInvoice.InvoiceNumber);
         Assert.Equal(firstSupplier.Id, oldInvoice.SupplierId);
-        Assert.Equal(secondSupplier.Id, selectedInvoice.SupplierId);
-        Assert.Equal(3, invoices.Entities.Count());
+        Assert.Equal(selectedSupplier.Id, selectedInvoice.SupplierId);
+        Assert.Equal(Invoice.GetReceiptDate(enteredAt), item.Invoice?.ReceiptDate);
+        Assert.Equal(reuseInvoice ? 2 : 3, invoices.Entities.Count());
     }
 
     [Theory]

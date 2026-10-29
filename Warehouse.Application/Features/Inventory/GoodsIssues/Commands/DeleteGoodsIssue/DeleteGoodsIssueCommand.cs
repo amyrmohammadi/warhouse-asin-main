@@ -15,6 +15,7 @@ internal sealed class DeleteGoodsIssueCommandHandler(IUnitOfWork<Guid> unitOfWor
         var repository = unitOfWork.Repository<GoodsIssue>();
         var issue = await repository.GetByIdAsync(request.Id, cancellationToken);
         if (issue is null) return Result.Error("سند خروج کالا پیدا نشد.");
+        if (issue.IsFinalized) return Result.Error(GoodsIssue.FinalizedMessage);
         var itemRepository = unitOfWork.Repository<GoodsIssueItem>();
         var linkedItems = await itemRepository.CountAsync(
             itemRepository.Entities.Where(item =>

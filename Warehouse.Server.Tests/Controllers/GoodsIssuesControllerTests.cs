@@ -21,6 +21,8 @@ public sealed class GoodsIssuesControllerTests
     [InlineData(nameof(GoodsIssuesController.Update), PermissionPolicyNames.Inventory.GoodsIssuesUpdate)]
     [InlineData(nameof(GoodsIssuesController.Delete), PermissionPolicyNames.Inventory.GoodsIssuesDelete)]
     [InlineData(nameof(GoodsIssuesController.Import), PermissionPolicyNames.Inventory.GoodsIssuesImport)]
+    [InlineData(nameof(GoodsIssuesController.FinalizeDocuments), PermissionPolicyNames.Inventory.GoodsIssuesFinalize)]
+    [InlineData(nameof(GoodsIssuesController.ReopenDocuments), PermissionPolicyNames.Inventory.GoodsIssuesReopen)]
     public void WriteActions_UseDedicatedPolicies(string actionName, string expectedPolicy)
     {
         var action = typeof(GoodsIssuesController).GetMethod(actionName)!;

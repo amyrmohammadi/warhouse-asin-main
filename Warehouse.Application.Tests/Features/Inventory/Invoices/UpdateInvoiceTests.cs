@@ -44,13 +44,16 @@ public sealed class UpdateInvoiceTests
             "  INV-2  ", supplier.Id, "  توضیحات جدید  ", new DateOnly(2026, 10, 27),
             InvoiceProcessingStatus.SentToFinance,
             [new(items[0].Id, "R-1", receipt.ConcurrencyStamp, 100),
-             new(items[1].Id, "R-2", receipt.ConcurrencyStamp, 125)], Price: manualPrice));
+             new(items[1].Id, "R-2", receipt.ConcurrencyStamp, 125)], Price: manualPrice,
+             FinanceDeliveryDate: new DateOnly(2026, 10, 29)));
 
         Assert.True(result.IsSuccess);
         Assert.Equal("INV-2", invoice.InvoiceNumber);
         Assert.Equal(supplier.Id, invoice.SupplierId);
         Assert.Equal("توضیحات جدید", invoice.Description);
         Assert.Equal(new DateOnly(2026, 10, 27), invoice.InvoiceDate);
+        Assert.Equal(new DateOnly(2026, 10, 29), invoice.FinanceDeliveryDate);
+        Assert.Equal(invoice.FinanceDeliveryDate, result.Data!.FinanceDeliveryDate);
         Assert.Equal(InvoiceProcessingStatus.SentToFinance, invoice.ProcessingStatus);
         Assert.Equal(["R-1", "R-2"], result.Data!.Items.Select(item => item.ReceiptNumber));
         Assert.Equal(expectedPrice, invoice.Price);

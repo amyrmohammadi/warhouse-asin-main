@@ -34,7 +34,7 @@ public sealed class LibreOfficeIntegrationTests
                 }).ToArray()
             });
             Assert.True(pdf.AsSpan().StartsWith("%PDF-"u8));
-            Assert.Equal((itemCount + 10) / 11, Regex.Matches(Encoding.Latin1.GetString(pdf), @"/Type\s*/Page\b").Count);
+            Assert.Equal((itemCount + GoodsIssuePdfServiceTests.TemplateRowsPerPage - 1) / GoodsIssuePdfServiceTests.TemplateRowsPerPage, Regex.Matches(Encoding.Latin1.GetString(pdf), @"/Type\s*/Page\b").Count);
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); }
     }

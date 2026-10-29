@@ -2,6 +2,9 @@
 import type { ColumnsConfig, Config } from 'datatables.net'
 import DataTablesCore from 'datatables.net-bs4'
 import DataTable from 'datatables.net-vue3'
+import DatePicker from 'vue3-persian-datetime-picker'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import BaseModal from '@/components/BaseModal.vue'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 
 import { highlightTableText } from '@/components/UseTableHighlight'
@@ -18,6 +21,7 @@ import { isAbortError, useRequestChannel } from '@/composables/useRequestChannel
 import { useUnauthorizedRedirect } from '@/composables/useUnauthorizedRedirect'
 import type { GoodsIssueDestinationOption } from '@/services/goodsIssueDestinations'
 import {
+  setGoodsIssueFinalization,
   exportGoodsIssueItems,
   getGoodsIssues,
   getGoodsIssuePdf,
@@ -72,7 +76,9 @@ const { has } = usePermissions()
 const canCreate = has('GoodsIssuesCreate')
 const canUpdate = has('GoodsIssuesUpdate')
 const canDelete = has('GoodsIssuesDelete')
-const canChange = canUpdate || canDelete
+const canFinalize = has('GoodsIssuesFinalize')
+const canReopen = has('GoodsIssuesReopen')
+
 const canExport = has('GoodsIssuesExport')
 const canImport = has('GoodsIssuesImport')
 
@@ -84,6 +90,10 @@ const deletingId = ref<string | null>(null)
 const exporting = ref(false)
 const printingId = ref<string | null>(null)
 const importOpen = ref(false)
+const finalizationOpen = ref(false)
+const finalizationDay = ref('')
+const finalizationBusy = ref(false)
+const confirmation = ref<InstanceType<typeof ConfirmDialog> | null>(null)
 const importFile = ref<File | null>(null)
 const importSummary = ref<GoodsIssueImportSummary | null>(null)
 
@@ -181,7 +191,7 @@ const columns: Record<TableMode, ColumnsConfig[]> = {
     { data: 'issuerFullName', name: 'issuerFullName', title: 'خارج‌کننده', className: 'min-tablet-l' },
     { data: 'description', name: 'description', title: 'توضیحات کلی', className: 'min-tablet-p inventory-wide-column', orderable: false },
     { data: 'items', name: 'itemCount', title: 'تعداد اقلام', className: 'min-tablet-l text-bold', orderable: false },
-    ...(canChange || canExport ? [actions('id')] : []),
+    actions('id'),
   ],
   items: [
     rowNumber,
@@ -200,7 +210,7 @@ const columns: Record<TableMode, ColumnsConfig[]> = {
     { data: 'isReturnable', name: 'isReturnable', title: 'برگشت دارد', className: 'min-desktop text-center' },
     { data: 'returnAtUtc', name: 'returnAtUtc', title: 'تاریخ عودت', className: 'min-desktop' },
     { data: 'issuerFullName', name: 'issuerFullName', title: 'خارج‌کننده', className: 'min-desktop' },
-    ...(canChange || canExport ? [actions('goodsIssueId')] : []),
+    actions('goodsIssueId'),
   ],
 }
 
@@ -253,13 +263,41 @@ watch(tableMode, () => {
   closeMenu()
 })
 
+async function changeFinalization(finalized: boolean, row?: GoodsIssue | GoodsIssueItemRow): Promise<void> {
+  if (finalizationBusy.value || (finalized ? !canFinalize : !canReopen)) return
+  if (!row && !finalizationDay.value) {
+    toast.error('روز خروج را انتخاب کنید.')
+    return
+  }
+  const title = finalized ? 'تأیید نهایی' : 'برگشت از تأیید نهایی'
+  const target = row ? 'سند ' + row.issueNumber : 'تمام اسناد روز ' + formatPersianDate(finalizationDay.value)
+  finalizationBusy.value = true
+  try {
+    if (!await confirmation.value?.ask({
+      title: title + ' ' + target,
+      text: finalized ? 'پس از تأیید، ویرایش و حذف سند و اقلام آن قفل می‌شود.' : 'پس از برگشت، ویرایش سند با مجوز مربوط امکان‌پذیر می‌شود.',
+    })) return
+    const count = await setGoodsIssueFinalization(finalized, row
+      ? { id: 'goodsIssueId' in row ? row.goodsIssueId : row.id, concurrencyStamp: row.concurrencyStamp }
+      : { day: finalizationDay.value })
+    toast.success(count ? title + ' برای ' + formatPersianNumber(count) + ' سند انجام شد.' : 'سندی برای تغییر وضعیت وجود نداشت.')
+    if (!row) finalizationOpen.value = false
+    list.reload(false)
+  } catch (error) {
+    if (await handleUnauthorized(error)) return
+    toast.error(error instanceof Error ? error.message : 'تغییر تأیید نهایی انجام نشد.')
+    list.reload(false)
+  } finally {
+    finalizationBusy.value = false
+  }
+}
 async function openCreate(): Promise<void> {
   if (!await options.load()) return
   formModal.value?.openCreate()
 }
 
 async function openEdit(row: GoodsIssue | GoodsIssueItemRow): Promise<void> {
-  if (!canUpdate || editLoading.value) return
+  if (!canUpdate || row.isFinalized || finalizationBusy.value || editLoading.value) return
   editLoading.value = true
   try {
     if (!await options.load()) return
@@ -270,7 +308,7 @@ async function openEdit(row: GoodsIssue | GoodsIssueItemRow): Promise<void> {
 }
 
 async function removeDocument(row: GoodsIssue | GoodsIssueItemRow): Promise<void> {
-  if (!canDelete || deletingId.value) return
+  if (!canDelete || row.isFinalized || finalizationBusy.value || deletingId.value) return
   const id = 'goodsIssueId' in row ? row.goodsIssueId : row.id
   deletingId.value = id
   try {
@@ -355,6 +393,28 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
+  <ConfirmDialog ref="confirmation" />
+  <BaseModal v-model="finalizationOpen" title="تأیید نهایی اسناد یک روز" :busy="finalizationBusy" initial-focus=".close">
+    <label>روز خروج</label>
+    <DatePicker v-model="finalizationDay" type="date" format="YYYY-MM-DD"
+                display-format="jYYYY/jMM/jDD" placeholder="روز خروج را انتخاب کنید"
+                :disabled="finalizationBusy" color="#2563eb" />
+    <p class="text-muted small mt-3 mb-0">
+      عملیات شامل تمام اسناد روز انتخاب‌شده است و به صفحه فعلی یا فیلترهای جدول محدود نمی‌شود.
+    </p>
+    <template #footer="{ close }">
+      <button class="btn btn-light btn-sm finalization-modal-button" type="button" :disabled="finalizationBusy" @click="close">بستن</button>
+      <button v-if="canReopen" class="btn btn-outline-warning btn-sm finalization-modal-button" type="button"
+              :disabled="!finalizationDay || finalizationBusy || editLoading || deletingId !== null"
+              @click="changeFinalization(false)">برگشت از تأیید نهایی</button>
+      <button v-if="canFinalize" class="btn btn-success btn-sm finalization-modal-button" type="button"
+              :disabled="!finalizationDay || finalizationBusy || editLoading || deletingId !== null"
+              @click="changeFinalization(true)">
+        <span v-if="finalizationBusy" class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+        تأیید نهایی اسناد روز
+      </button>
+    </template>
+  </BaseModal>
   <Teleport to="body">
     <div v-if="printingId !== null" class="goods-issue-print-loading" role="status" aria-live="polite" aria-busy="true" dir="rtl">
       <div class="goods-issue-print-loading__content">
@@ -387,7 +447,15 @@ onBeforeUnmount(() => {
                               :columns="toggleable[tableMode]" :is-column-visible="isColumnVisible"
                               :column-menu-open="menuOpen"
                               @update:mode="tableMode = $event as TableMode" @create="openCreate" @import="onImportFile" @export="exportItems"
-                              @toggle-column="toggleColumn" @toggle-column-menu="toggleMenu" />
+                              @toggle-column="toggleColumn" @toggle-column-menu="toggleMenu">
+          <template v-if="canFinalize || canReopen" #create-actions>
+            <button class="btn btn-outline-success btn-sm" type="button" :disabled="finalizationBusy"
+                    @click="finalizationOpen = true">
+              <i class="las la-check-circle" aria-hidden="true"></i>
+              <span>تأیید نهایی اسناد</span>
+            </button>
+          </template>
+        </InventoryListToolbar>
       </div>
 
       <div class="card-body">
@@ -444,10 +512,10 @@ onBeforeUnmount(() => {
             <template #column-issueNumber="{ cellData }"><span dir="ltr">{{ cellData }}</span></template>
             <template #column-productCode="{ cellData }"><span dir="ltr">{{ cellData }}</span></template>
             <template #column-productTitle="{ cellData }">
-              <strong class="text-black" :title="String(cellData ?? '')">{{ cellData || '—' }}</strong>
+              <strong class="text-black" :title="String(cellData ?? '')">{{ cellData ?? '' }}</strong>
             </template>
             <template #column-quantity="{ cellData }"><span class="inventory-quantity-cell">{{ formatPersianNumber(cellData) }}</span></template>
-            <template #column-assetNumber="{ cellData }"><span dir="ltr">{{ cellData || '—' }}</span></template>
+            <template #column-assetNumber="{ cellData }"><span dir="ltr">{{ cellData ?? '' }}</span></template>
             <template #column-exitReason="{ cellData, rowData }">
               <span class="badge light badge-pill goods-issue-exit-reason-chip"
                     :class="exitReasonBadges[cellData as GoodsIssueExitReason] || 'badge-dark'"
@@ -455,15 +523,29 @@ onBeforeUnmount(() => {
                 {{ exitReasonText(cellData as GoodsIssueExitReason, (rowData as GoodsIssueItemRow).legacyExitReason) }}
               </span>
             </template>
-            <template #column-description="{ cellData }"><span class="inventory-description-cell" :title="cellData || ''">{{ cellData || '—' }}</span></template>
-            <template #column-issueDescription="{ cellData }"><span class="inventory-description-cell" :title="cellData || ''">{{ cellData || '—' }}</span></template>
+            <template #column-description="{ cellData }"><span class="inventory-description-cell" :title="cellData || ''">{{ cellData ?? '' }}</span></template>
+            <template #column-issueDescription="{ cellData }"><span class="inventory-description-cell" :title="cellData || ''">{{ cellData ?? '' }}</span></template>
             <template #column-returnAtUtc="{ cellData }">{{ formatPersianDate(cellData) }}</template>
             <template #column-isReturnable="{ cellData }">
               <span class="badge" :class="cellData ? 'light badge-success' : 'light badge-secondary'">{{ cellData ? 'بله' : 'خیر' }}</span>
             </template>
             <template #column-itemCount="{ cellData }"><span class="badge light badge-info">{{ (cellData as GoodsIssue['items']).length }} کالا</span></template>
-            <template v-if="canChange || canExport" #column-actions="{ rowData }">
+            <template #column-actions="{ rowData }">
               <div class="d-flex justify-content-center">
+                <button class="btn users-table__role-action finalization-toggle" type="button"
+                        :class="{ 'finalization-toggle--approved': rowData.isFinalized }"
+                        :title="rowData.isFinalized ? 'تأیید نهایی شده؛ برگشت از تأیید' : 'تأیید نهایی سند'"
+                        :aria-label="rowData.isFinalized ? 'برگشت سند از تأیید نهایی' : 'تأیید نهایی سند'"
+                        :aria-pressed="rowData.isFinalized"
+                        :disabled="finalizationBusy || editLoading || deletingId !== null || (rowData.isFinalized ? !canReopen : !canFinalize)"
+                        @click="changeFinalization(!rowData.isFinalized, rowData)">
+                  <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+                    <circle v-if="rowData.isFinalized" cx="12" cy="12" r="11" fill="currentColor" />
+                    <path d="m6.5 12 3.5 3.5 7.5-7.5" fill="none"
+                          :stroke="rowData.isFinalized ? 'white' : 'currentColor'"
+                          :stroke-width="rowData.isFinalized ? 3 : 1.8" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </button>
                 <button v-if="canExport" class="btn users-table__role-action" type="button" title="چاپ سند خروج"
                         aria-label="چاپ سند خروج" :disabled="printingId !== null"
                         @click="printDocument(rowData)">
@@ -471,11 +553,11 @@ onBeforeUnmount(() => {
                         class="spinner-border spinner-border-sm" aria-hidden="true"></span>
                   <i v-else class="las la-print" aria-hidden="true"></i>
                 </button>
-                <button v-if="canUpdate" class="btn users-table__role-action" type="button" title="ویرایش سند"
-                        aria-label="ویرایش سند" :disabled="editLoading || deletingId !== null"
+                <button v-if="canUpdate && !rowData.isFinalized" class="btn users-table__role-action" type="button" title="ویرایش سند"
+                        aria-label="ویرایش سند" :disabled="finalizationBusy || editLoading || deletingId !== null"
                         @click="openEdit(rowData)"><i class="las la-edit" aria-hidden="true"></i></button>
-                <button v-if="canDelete" class="btn users-table__role-action text-danger" type="button" title="حذف سند"
-                        aria-label="حذف سند" :disabled="editLoading || deletingId !== null"
+                <button v-if="canDelete && !rowData.isFinalized" class="btn users-table__role-action text-danger" type="button" title="حذف سند"
+                        aria-label="حذف سند" :disabled="finalizationBusy || editLoading || deletingId !== null"
                         @click="removeDocument(rowData)"><span v-if="deletingId === ('goodsIssueId' in rowData ? rowData.goodsIssueId : rowData.id)"
                         class="spinner-border spinner-border-sm" aria-hidden="true"></span><i v-else class="las la-trash" aria-hidden="true"></i></button>
               </div>
@@ -488,6 +570,28 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.finalization-toggle {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  padding: 0;
+}
+.finalization-toggle svg { width: 20px; height: 20px; flex-shrink: 0; }
+.finalization-toggle--approved { color: #28a745 !important; }
+.finalization-toggle:disabled { opacity: 1; }
+.goods-issues-page :deep(.inventory-toolbar__extra > .btn) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--toolbar-h, 2.1rem);
+  white-space: nowrap;
+}
+.finalization-modal-button {
+  width: auto;
+  min-height: 2rem;
+  padding: .3rem .65rem;
+  font-size: .8rem;
+  line-height: 1.5;
+}
 .goods-issue-exit-reason-chip {
   max-width: 100%;
   padding: .25rem .4rem;
@@ -523,8 +627,8 @@ onBeforeUnmount(() => {
 }
 .goods-issues-page :deep(.inventory-table-container table.dataTable > thead > tr > th),
 .goods-issues-page :deep(.inventory-table-container table.dataTable > tbody > tr > td) {
-  padding-left: 2px !important;
-  padding-right: 2px !important;
+  padding-left: 4px !important;
+  padding-right: 4px !important;
 }
 .goods-issues-page :deep(.dt-layout-table > div) {
   max-height: 50vh;

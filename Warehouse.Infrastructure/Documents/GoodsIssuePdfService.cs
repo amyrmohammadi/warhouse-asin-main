@@ -32,6 +32,16 @@ public sealed class GoodsIssuePdfService(IExcelToPdfService excelToPdfService) :
             return copy.ToArray();
         }, StringComparer.Ordinal);
         var originalSheet = ReadXml(parts, "xl/worksheets/sheet1.xml");
+        var footerRow = originalSheet.Descendants(Main + "mergeCell")
+            .Select(cell => (string?)cell.Attribute("ref"))
+            .Where(reference => reference is not null && reference.StartsWith('A'))
+            .Select(reference => reference!.Split(':'))
+            .Where(range => range.Length == 2 && range[1].StartsWith('J'))
+            .Select(range => int.Parse(range[0][1..], CultureInfo.InvariantCulture))
+            .Where(row => row > FirstDataRow)
+            .Min();
+        var rowsPerPage = footerRow - FirstDataRow;
+        var signatureRow = footerRow + 1;
         var originalRelations = ReadXml(parts, "xl/worksheets/_rels/sheet1.xml.rels");
         var workbook = ReadXml(parts, "xl/workbook.xml");
         var relations = ReadXml(parts, "xl/_rels/workbook.xml.rels");
@@ -40,11 +50,11 @@ public sealed class GoodsIssuePdfService(IExcelToPdfService excelToPdfService) :
         var sharedStrings = ReadXml(parts, "xl/sharedStrings.xml").Root!.Elements(Main + "si")
             .Select(item => string.Concat(item.Descendants(Main + "t").Select(text => text.Value))).ToArray();
         var rightToLeftStyles = new Dictionary<string, string>();
-        var cellStyles = CreateDataStyles(styles, originalSheet);
-        var dateStyles = CreateDataStyles(styles, originalSheet, 20);
+        var cellStyles = CreateDataStyles(styles, originalSheet, footerRow);
+        var dateStyles = CreateDataStyles(styles, originalSheet, footerRow, 20);
         var dateCellStyles = cellStyles.ToDictionary(style => style.Value, style => dateStyles[style.Key]);
         var printRows = CreatePrintRows(issue, token);
-        var pageCount = Math.Max(1, (printRows.Count + RowsPerPage - 1) / RowsPerPage);
+        var pageCount = Math.Max(1, (printRows.Count + rowsPerPage - 1) / rowsPerPage);
         var sheetNames = new List<string>();
         var originalName = workbook.Root!.Element(Main + "sheets")!.Element(Main + "sheet")!.Attribute("name")!.Value;
         for (var page = 0; page < pageCount; page++)
@@ -56,12 +66,12 @@ public sealed class GoodsIssuePdfService(IExcelToPdfService excelToPdfService) :
             sheetNames.Add(sheetName);
             SetText(sheet, "A6", "شماره: " + issue.IssueNumber);
             SetText(sheet, "E6", "تاریخ: " + PersianDate(issue.IssuedAtUtc));
-            SetText(sheet, "A20", $"خروج اقلام و کالاهای فوق توسط آقای {issue.IssuerFullName} با وسیله نقلیه/ بدون وسیله نقلیه به شماره شهربانی .......................... بلامانع است.");
-            SetText(sheet, "A21", "خارج‌کننده: " + issue.IssuerFullName);
-            for (var slot = 0; slot < RowsPerPage; slot++)
+            SetText(sheet, "A" + footerRow, $"خروج اقلام و کالاهای فوق توسط آقای {issue.IssuerFullName} با وسیله نقلیه/ بدون وسیله نقلیه به شماره شهربانی .......................... بلامانع است.");
+            SetText(sheet, "A" + signatureRow, "خارج‌کننده: " + issue.IssuerFullName);
+            for (var slot = 0; slot < rowsPerPage; slot++)
             {
-                var rowNumber = 9 + slot;
-                var index = page * RowsPerPage + slot;
+                var rowNumber = FirstDataRow + slot;
+                var index = page * rowsPerPage + slot;
                 var row = index < printRows.Count ? printRows[index] : null;
                 foreach (var column in new[] { "A", "B", "D", "E", "F", "G", "H" })
                     SetText(sheet, column + rowNumber, "", cellStyles);
@@ -85,7 +95,7 @@ public sealed class GoodsIssuePdfService(IExcelToPdfService excelToPdfService) :
                     new XAttribute(OfficeRelations + "id", sheetRelationId)));
                 workbook.Root.Element(Main + "definedNames")!.Add(new XElement(Main + "definedName",
                     new XAttribute("name", "_xlnm.Print_Area"), new XAttribute("localSheetId", page),
-                    $"'{sheetName}'!$A$1:$J$21"));
+                    $"'{sheetName}'!$A$1:$J${signatureRow}"));
                 relations.Root!.Add(new XElement(PackageRelations + "Relationship",
                     new XAttribute("Id", sheetRelationId), new XAttribute("Type", OfficeRelations.NamespaceName + "/worksheet"),
                     new XAttribute("Target", $"worksheets/sheet{page + 1}.xml")));
@@ -102,6 +112,12 @@ public sealed class GoodsIssuePdfService(IExcelToPdfService excelToPdfService) :
             }
             SetRightToLeftTextDirection(sheet, styles, sharedStrings, rightToLeftStyles);
             parts[sheetPath] = WriteXml(sheet);
+        }
+        foreach (var area in workbook.Descendants(Main + "definedName")
+                     .Where(name => (string?)name.Attribute("name") == "_xlnm.Print_Area"))
+        {
+            var page = (int?)area.Attribute("localSheetId") ?? 0;
+            area.Value = $"'{sheetNames[page].Replace("'", "''")}'!$A$1:$J${signatureRow}";
         }
         parts["xl/workbook.xml"] = WriteXml(workbook);
         parts["xl/_rels/workbook.xml.rels"] = WriteXml(relations);
@@ -164,7 +180,7 @@ public sealed class GoodsIssuePdfService(IExcelToPdfService excelToPdfService) :
         return lines.Count == 0 ? [""] : lines.Chunk(3).Select(group => string.Join('\n', group)).ToList();
     }
 
-    private static Dictionary<string, string> CreateDataStyles(XDocument styles, XDocument sheet, int fontSize = 24)
+    private static Dictionary<string, string> CreateDataStyles(XDocument styles, XDocument sheet, int footerRow, int fontSize = 24)
     {
         var fonts = styles.Root!.Element(Main + "fonts")!;
         var font = new XElement(fonts.Elements().ElementAt(15));
@@ -175,7 +191,7 @@ public sealed class GoodsIssuePdfService(IExcelToPdfService excelToPdfService) :
         var formats = styles.Root.Element(Main + "cellXfs")!;
         var result = new Dictionary<string, string>();
         var templateStyles = sheet.Descendants(Main + "row")
-            .Where(row => (int)row.Attribute("r")! is >= 9 and <= 19)
+            .Where(row => (int)row.Attribute("r")! >= FirstDataRow && (int)row.Attribute("r")! < footerRow)
             .Elements(Main + "c").Select(cell => (int?)cell.Attribute("s") ?? 0).Distinct().ToArray();
         foreach (var index in templateStyles)
         {
@@ -298,7 +314,7 @@ public sealed class GoodsIssuePdfService(IExcelToPdfService excelToPdfService) :
 
     private sealed record PrintRow(string Number, string Product, string Description, string Quantity,
         string Unit, string Returnable, string ReturnDate);
-    private const int RowsPerPage = 11;
+    private const int FirstDataRow = 9;
     private static readonly XNamespace Main = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
     private static readonly XNamespace OfficeRelations = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
     private static readonly XNamespace PackageRelations = "http://schemas.openxmlformats.org/package/2006/relationships";

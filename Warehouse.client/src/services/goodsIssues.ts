@@ -44,6 +44,7 @@ export interface GoodsIssueItem {
 }
 
 export interface GoodsIssue {
+  isFinalized: boolean
   id: string
   concurrencyStamp: string
   issueNumber: string
@@ -55,6 +56,8 @@ export interface GoodsIssue {
 }
 
 export interface GoodsIssueItemRow extends GoodsIssueItem {
+  isFinalized: boolean
+  concurrencyStamp: string
   goodsIssueId: string
   issueNumber: string
   issuedAtUtc: string
@@ -163,6 +166,14 @@ export function getGoodsIssues(
 
 export function getGoodsIssue(id: string, signal?: AbortSignal): Promise<GoodsIssue> {
   return request(`/endpoint/inventory/goods-issues/${encodeURIComponent(id)}`, { signal }, 'دریافت سند خروج انجام نشد.')
+}
+
+export function setGoodsIssueFinalization(
+  finalized: boolean, values: { id?: string; day?: string; concurrencyStamp?: string },
+): Promise<number> {
+  return request(`/endpoint/inventory/goods-issues/${finalized ? 'finalize' : 'reopen'}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(values),
+  }, 'تغییر تأیید نهایی انجام نشد.')
 }
 
 export async function getGoodsIssuePdf(id: string, signal?: AbortSignal): Promise<Blob> {

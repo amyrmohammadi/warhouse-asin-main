@@ -83,6 +83,8 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                         invoiceNumber,
                         source.SupplierId,
                         source.SupplierTitle,
+                        Invoice.GetReceiptDate(existing is not null && !updateInitial
+                            ? existing.EnteredAtUtc : request.EnteredAtUtc),
                         invoiceCache,
                         cancellationToken);
                     if (resolvedInvoice.Error is not null)
@@ -242,7 +244,14 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                         .Select(item => item.EnteredAtUtc)
                         .Concat(linkedIssues.Any(item => item?.Id == issueId)
                             ? [request.EnteredAtUtc] : []);
-                    issue!.SetReturnAtUtc(dates.Any() ? dates.Max() : null);
+                    var returnAtUtc = dates.Any() ? dates.Max() : (DateTimeOffset?)null;
+                    if (issue!.ReturnAtUtc != returnAtUtc &&
+                        !await GoodsIssues.GoodsIssueEditGuard.CanChangeItemAsync(unitOfWork, issue, cancellationToken))
+                    {
+                        await unitOfWork.RollBackTransaction(cancellationToken);
+                        return Result<GoodsReceiptSummary>.Error(GoodsIssue.FinalizedMessage);
+                    }
+                    issue.SetReturnAtUtc(returnAtUtc);
                 }
             }
 
@@ -336,6 +345,7 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
         string invoiceNumber,
         Guid? supplierId,
         string? supplierTitle,
+        DateOnly receiptDate,
         IDictionary<string, Invoice> invoiceCache,
         CancellationToken cancellationToken)
     {
@@ -349,7 +359,7 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
         }
 
         var resolvedSupplierId = resolvedSupplier.Supplier?.Id;
-        var cacheKey = CreateInvoiceKey(invoiceNumber, resolvedSupplierId);
+        var cacheKey = CreateInvoiceKey(invoiceNumber, resolvedSupplierId, receiptDate);
         if (invoiceCache.TryGetValue(cacheKey, out var cachedInvoice))
         {
             return (cachedInvoice, null);
@@ -360,7 +370,7 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
             invoiceRepository.Entities
                 .Where(invoice =>
                     invoice.InvoiceNumber == invoiceNumber &&
-                    invoice.SupplierId == resolvedSupplierId)
+                    invoice.SupplierId == resolvedSupplierId && invoice.ReceiptDate == receiptDate)
                 .Take(1),
             cancellationToken);
         if (matches.Count > 0)
@@ -375,14 +385,14 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
             return (tracked, null);
         }
 
-        var created = new Invoice(invoiceNumber, resolvedSupplierId);
+        var created = new Invoice(invoiceNumber, resolvedSupplierId, receiptDate);
         await invoiceRepository.AddAsync(created, cancellationToken);
         invoiceCache[cacheKey] = created;
         return (created, null);
     }
 
-    private static string CreateInvoiceKey(string invoiceNumber, Guid? supplierId) =>
-        $"{invoiceNumber.ToUpperInvariant()}\u001F{supplierId?.ToString("D") ?? "-"}";
+    private static string CreateInvoiceKey(string invoiceNumber, Guid? supplierId, DateOnly receiptDate) =>
+        $"{invoiceNumber.ToUpperInvariant()}\u001F{supplierId?.ToString("D") ?? "-"}\u001F{receiptDate:yyyy-MM-dd}";
 
     private static string NormalizeSupplierTitle(string value) =>
         string.Join(

@@ -108,7 +108,7 @@ async function logout(): Promise<void> {
             </div>
             <div class="activity-row d-flex align-items-center justify-content-between">
               <span>اعتبار توکن تا</span>
-              <strong class="text-black">{{ session ? new Date(session.accessTokenExpiresAtUtc).toLocaleString('fa-IR') : '—' }}</strong>
+              <strong class="text-black">{{ session ? new Date(session.accessTokenExpiresAtUtc).toLocaleString('fa-IR') : '' }}</strong>
             </div>
             <button class="btn btn-primary btn-block mt-3" type="button" @click="logout">خروج از حساب</button>
           </div>

@@ -69,7 +69,7 @@ const metricCards = [
   { key: 'itemsWithoutReceiptCount', permission: 'GoodsReceiptsMissingReceiptCountRead', title: 'کالاهای بدون رسید', tone: 'blue', mode: 'items' },
   { key: 'itemsWithoutInvoiceCount', permission: 'GoodsReceiptsMissingInvoiceCountRead', title: 'فاکتور بلاتکلیف', tone: 'amber', mode: 'items' },
   { key: 'todayItemCount', permission: 'GoodsReceiptsTodayItemCountRead', title: 'تعداد اقلام ورودی امروز', tone: 'teal', mode: 'items' },
-  { key: 'todayDocumentCount', permission: 'GoodsReceiptsTodayDocumentCountRead', title: 'تعداد اسناد ورودی امروز', tone: 'violet', mode: 'receipts' },
+  { key: 'todayDocumentCount', permission: 'GoodsReceiptsTodayDocumentCountRead', title: 'تعداد اسناد ورودی امروز', tone: 'violet', mode: 'receipts' }  
 ] as const
 type MetricCard = (typeof metricCards)[number]
 const visibleMetricCards = metricCards.filter(card => has(card.permission))

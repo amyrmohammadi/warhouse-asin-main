@@ -10,7 +10,7 @@ internal sealed class ApplicationDbContextFactory
     {
         var connectionString = Environment.GetEnvironmentVariable(
             "ConnectionStrings__DefaultConnection")
-            ?? "Server=.;Database=cactosn1_mophydb;Integrated Security=true;MultipleActiveResultSets=true;TrustServerCertificate=True";
+            ?? "Server=.;Database=Warhouse_db;Integrated Security=true;MultipleActiveResultSets=true;TrustServerCertificate=True";
 
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseSqlServer(connectionString)

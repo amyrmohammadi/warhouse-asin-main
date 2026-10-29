@@ -37,11 +37,13 @@ const form = reactive({
   supplierText: '',
   description: '',
   invoiceDate: '',
+  financeDeliveryDate: '',
   processingStatus: 'UnderReview' as InvoiceProcessingStatus,
   price: null as number | null,
   items: [] as Array<{ id: string; receiptNumber: string; price: number | null; goodsReceiptConcurrencyStamp: string }>,
 })
 const formError = ref('')
+const showItemPrices = false
 const manualPrice = ref(false)
 const calculatedPrice = computed(() => {
   if (!form.items.some(item => item.price != null)) return null
@@ -74,6 +76,7 @@ watch([() => props.editMode, () => props.details], ([editing, details]) => {
   form.supplierText = details.counterparty ?? ''
   form.description = details.description ?? ''
   form.invoiceDate = details.invoiceDate ?? ''
+  form.financeDeliveryDate = details.financeDeliveryDate ?? ''
   form.processingStatus = details.processingStatus
   form.items = details.items.map(item => ({
     id: item.id,
@@ -102,6 +105,7 @@ function submit(): void {
     supplierId: props.canEditInvoice ? form.supplierId : props.details.supplierId,
     description: props.canEditInvoice ? (form.description.trim() || null) : props.details.description,
     invoiceDate: props.canEditInvoice ? (form.invoiceDate || null) : props.details.invoiceDate,
+    financeDeliveryDate: props.canEditInvoice ? (form.financeDeliveryDate || null) : props.details.financeDeliveryDate,
     processingStatus: props.canEditInvoice ? form.processingStatus : props.details.processingStatus,
     items: form.items.map(item => ({
       id: item.id,
@@ -157,13 +161,20 @@ function submit(): void {
           </select>
         </div>
         <div class="col-md-4 form-group">
+          <label>تاریخ تحویل به مالی</label>
+          <DatePicker v-model="form.financeDeliveryDate" type="date" format="YYYY-MM-DD"
+                      display-format="jYYYY/jMM/jDD" placeholder="انتخاب تاریخ تحویل به مالی"
+                      color="#2563eb" :editable="canEditInvoice" :clearable="canEditInvoice"
+                      :disabled="saving || !canEditInvoice" />
+        </div>
+        <div class="col-md-4 form-group">
           <label for="invoice-price">قیمت فاکتور</label>
           <input id="invoice-price" :value="form.price" class="form-control" type="number"
                  min="0" max="9999999999999999.99" step="0.01" dir="ltr"
                  :disabled="saving" :readonly="!canEditInvoice" @input="setInvoicePrice" />
           <small class="text-muted d-block">قیمت فاکتور را می‌توانید دستی وارد یا تغییر دهید.</small>
-          <small class="text-muted d-block">جمع قیمت کل اقلام: {{ calculatedPrice == null ? '—' : formatPersianNumber(calculatedPrice) }}</small>
-          <button v-if="canEditInvoice" type="button" class="btn btn-link btn-sm p-0" :disabled="saving"
+          <small v-if="showItemPrices" class="text-muted d-block">جمع قیمت کل اقلام: {{ calculatedPrice == null ? '' : formatPersianNumber(calculatedPrice) }}</small>
+          <button v-if="showItemPrices && canEditInvoice" type="button" class="btn btn-link btn-sm p-0" :disabled="saving"
                   @click="useCalculatedPrice">محاسبه از جمع اقلام</button>
         </div>
         <div class="col-12 form-group">
@@ -174,11 +185,12 @@ function submit(): void {
       </div>
       <div v-else class="invoice-items-modal__summary">
         <div><span>شماره فاکتور</span><strong dir="ltr">{{ details.invoiceNumber }}</strong></div>
-        <div><span>طرف حساب</span><strong>{{ details.counterparty || '—' }}</strong></div>
+        <div><span>طرف حساب</span><strong>{{ details.counterparty || '' }}</strong></div>
+        <div><span>تاریخ تحویل به مالی</span><strong>{{ formatPersianDate(details.financeDeliveryDate) }}</strong></div>
         <div><span>تاریخ فاکتور</span><strong>{{ formatPersianDate(details.invoiceDate) }}</strong></div>
-        <div><span>وضعیت فاکتور</span><strong>{{ statusLabel[details.processingStatus] ?? '—' }}</strong></div>
-        <div><span>قیمت فاکتور</span><strong>{{ details.price == null ? '—' : formatPersianNumber(details.price) }}</strong></div>
-        <div class="invoice-items-modal__description"><span>توضیحات</span><strong>{{ details.description || '—' }}</strong></div>
+        <div><span>وضعیت فاکتور</span><strong>{{ statusLabel[details.processingStatus] ?? '' }}</strong></div>
+        <div><span>قیمت فاکتور</span><strong>{{ details.price == null ? '' : formatPersianNumber(details.price) }}</strong></div>
+        <div class="invoice-items-modal__description"><span>توضیحات</span><strong>{{ details.description || '' }}</strong></div>
       </div>
 
       <h6 class="mb-2">اقلام و رسیدهای فاکتور</h6>
@@ -188,7 +200,7 @@ function submit(): void {
           <thead>
             <tr>
               <th class="text-center">ردیف</th><th>عنوان کالا</th><th>کد کالا</th><th>تعداد</th>
-              <th>واحد</th><th>قیمت کل قلم</th><th>انبار</th><th>تاریخ ورود</th><th>شماره صفحه</th><th>شماره رسید</th>
+              <th>واحد</th><th v-if="showItemPrices">قیمت کل قلم</th><th>انبار</th><th>تاریخ ورود</th><th>شماره صفحه</th><th>شماره رسید</th>
             </tr>
           </thead>
           <tbody>
@@ -198,13 +210,13 @@ function submit(): void {
               <td dir="ltr">{{ item.productCode }}</td>
               <td>{{ formatPersianNumber(item.quantity) }}</td>
               <td>{{ item.unitOfMeasureTitle }}</td>
-              <td>
+              <td v-if="showItemPrices">
                 <input v-if="editMode" :value="form.items[index].price"
                        class="form-control form-control-sm invoice-items-table__price-input"
                        type="number" min="0" max="9999999999999999.99" step="0.01" dir="ltr"
                        :disabled="saving" :readonly="!canEditInvoice" :aria-label="`قیمت کل قلم ردیف ${index + 1}`"
                        @input="setItemPrice(index, $event)" />
-                <span v-else>{{ item.price == null ? '—' : formatPersianNumber(item.price) }}</span>
+                <span v-else>{{ item.price == null ? '' : formatPersianNumber(item.price) }}</span>
               </td>
               <td>{{ item.warehouseTitle }}</td>
               <td>{{ formatPersianDate(item.enteredAtUtc) }}</td>
@@ -215,7 +227,7 @@ function submit(): void {
                        type="text" maxlength="100" dir="ltr" :disabled="saving" :readonly="!canEditReceipt"
                        :aria-label="`شماره رسید ردیف ${index + 1}`" />
                 <span v-else-if="item.receiptNumber" dir="ltr">{{ item.receiptNumber }}</span>
-                <span v-else class="badge badge-light text-muted">ثبت نشده</span>
+                
               </td>
             </tr>
           </tbody>

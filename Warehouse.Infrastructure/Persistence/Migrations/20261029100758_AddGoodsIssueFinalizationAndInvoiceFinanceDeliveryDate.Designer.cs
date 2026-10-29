@@ -12,8 +12,8 @@ using Warehouse.Infrastructure.Persistence;
 namespace Warehouse.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20261028184519_AddInvoiceAndReceiptItemPrices")]
-    partial class AddInvoiceAndReceiptItemPrices
+    [Migration("20261029100758_AddGoodsIssueFinalizationAndInvoiceFinanceDeliveryDate")]
+    partial class AddGoodsIssueFinalizationAndInvoiceFinanceDeliveryDate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -172,6 +172,9 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                     b.Property<string>("Description")
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
+
+                    b.Property<bool>("IsFinalized")
+                        .HasColumnType("bit");
 
                     b.Property<string>("IssueNumber")
                         .IsRequired()
@@ -410,6 +413,9 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
+                    b.Property<DateOnly?>("FinanceDeliveryDate")
+                        .HasColumnType("date");
+
                     b.Property<DateOnly?>("InvoiceDate")
                         .HasColumnType("date");
 
@@ -429,6 +435,9 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(32)")
                         .HasDefaultValue("UnderReview");
 
+                    b.Property<DateOnly?>("ReceiptDate")
+                        .HasColumnType("date");
+
                     b.Property<Guid?>("SupplierId")
                         .HasColumnType("uniqueidentifier");
 
@@ -436,9 +445,9 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("SupplierId");
 
-                    b.HasIndex("InvoiceNumber", "SupplierId")
+                    b.HasIndex("InvoiceNumber", "SupplierId", "ReceiptDate")
                         .IsUnique()
-                        .HasFilter("[SupplierId] IS NOT NULL");
+                        .HasFilter("[SupplierId] IS NOT NULL AND [ReceiptDate] IS NOT NULL");
 
                     b.ToTable("Invoices", "Business");
                 });

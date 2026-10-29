@@ -755,7 +755,7 @@ onBeforeUnmount(() => {
                 </template>
 
                 <template #column-description="{ cellData }">
-                  <span class="product-description">{{ cellData || '—' }}</span>
+                  <span class="product-description">{{ cellData ?? '' }}</span>
                 </template>
 
                 <template v-if="canManage" #column-actions="{ cellData }">

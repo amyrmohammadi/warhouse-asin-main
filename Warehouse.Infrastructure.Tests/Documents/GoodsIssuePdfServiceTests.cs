@@ -32,26 +32,26 @@ public sealed class GoodsIssuePdfServiceTests
         Assert.Equal("عدد", Text(sheet, "E9"));
         Assert.Equal("دارد", Text(sheet, "F9"));
         Assert.Equal("۱۴۰۵/۰۸/۰۶", Text(sheet, "G9"));
-        Assert.Contains("علی رضایی", Text(sheet, "A20"));
-        Assert.Contains("علی رضایی", Text(sheet, "A21"));
+        Assert.Contains("علی رضایی", Text(sheet, "A" + FooterRow));
+        Assert.Contains("علی رضایی", Text(sheet, "A" + (FooterRow + 1)));
         Assert.Equal("", Text(sheet, "A10"));
         Assert.Equal("1", sheet.Root!.Element(Main + "sheetViews")!.Element(Main + "sheetView")!.Attribute("rightToLeft")!.Value);
         Assert.Equal("11", sheet.Root.Element(Main + "pageSetup")!.Attribute("paperSize")!.Value);
         Assert.Contains(sheet.Descendants(Main + "mergeCell"), cell => (string?)cell.Attribute("ref") == "B9:C9");
-        Assert.Contains("$A$1:$J$21", Read(zip, "xl/workbook.xml").ToString());
+        Assert.Contains("$A$1:$J$" + (FooterRow + 1), Read(zip, "xl/workbook.xml").ToString());
         await ExcelInputValidator.ValidateAsync(converter.Workbook!, new LibreOfficeOptions(), default);
     }
 
     [Fact]
-    public async Task Generate_ClonesCompleteFormsForMoreThanElevenRows_AndRetainsLogoAndPrinterSettings()
+    public async Task Generate_ClonesCompleteFormsAtTemplateCapacity_AndRetainsLogoAndPrinterSettings()
     {
-        var issue = Issue(Enumerable.Range(1, 12).Select(Item).ToArray());
+        var issue = Issue(Enumerable.Range(1, TemplateRowsPerPage + 1).Select(Item).ToArray());
         var converter = new RecordingConverter();
         await new GoodsIssuePdfService(converter).GenerateAsync(issue);
         using var zip = new ZipArchive(new MemoryStream(converter.Workbook!));
         var workbook = Read(zip, "xl/workbook.xml");
         Assert.Equal(2, workbook.Root!.Element(Main + "sheets")!.Elements().Count());
-        Assert.Equal("۱۲", Text(Read(zip, "xl/worksheets/sheet2.xml"), "A9"));
+        Assert.Equal(string.Concat((TemplateRowsPerPage + 1).ToString().Select(c => (char)(c - '0' + '۰'))), Text(Read(zip, "xl/worksheets/sheet2.xml"), "A9"));
         Assert.Equal("", Text(Read(zip, "xl/worksheets/sheet2.xml"), "A10"));
         var areas = workbook.Descendants(Main + "definedName").Where(name => (string?)name.Attribute("name") == "_xlnm.Print_Area").ToArray();
         Assert.Equal(2, areas.Length);
@@ -130,7 +130,7 @@ public sealed class GoodsIssuePdfServiceTests
         using var zip = new ZipArchive(new MemoryStream(converter.Workbook!));
         var sheet = Read(zip, "xl/worksheets/sheet1.xml");
         var formats = Read(zip, "xl/styles.xml").Root!.Element(Main + "cellXfs")!.Elements().ToArray();
-        foreach (var address in new[] { "A6", "A7", "B9", "H9", "A20", "A21", "D21", "F21", "I21" })
+        foreach (var address in new[] { "A6", "A7", "B9", "H9", "A" + FooterRow, "A" + (FooterRow + 1), "D" + (FooterRow + 1), "F" + (FooterRow + 1), "I" + (FooterRow + 1) })
         {
             var cell = sheet.Descendants(Main + "c").Single(cell => (string?)cell.Attribute("r") == address);
             var alignment = formats[(int)cell.Attribute("s")!].Element(Main + "alignment")!;
@@ -181,6 +181,22 @@ public sealed class GoodsIssuePdfServiceTests
         }
     }
 
+    internal static int TemplateRowsPerPage => FooterRow - 9;
+
+    private static int FooterRow
+    {
+        get
+        {
+            using var template = Template();
+            return Read(template, "xl/worksheets/sheet1.xml").Descendants(Main + "mergeCell")
+                .Select(cell => (string?)cell.Attribute("ref"))
+                .Where(reference => reference is not null && reference.StartsWith('A'))
+                .Select(reference => reference!.Split(':'))
+                .Where(range => range.Length == 2 && range[1].StartsWith('J'))
+                .Select(range => int.Parse(range[0][1..]))
+                .Where(row => row > 9).Min();
+        }
+    }
     private static GoodsIssueSummary Issue(IReadOnlyCollection<GoodsIssueItemSummary> items) => new()
     {
         Id = Guid.NewGuid(), IssueNumber = "OUT-433", IssuerFullName = "علی رضایی",

@@ -11,6 +11,8 @@ const props = withDefaults(defineProps<{
   persistent?: boolean
   /** در حال ذخیره: بستن ممنوع. */
   busy?: boolean
+  /** انتخاب محل فوکوس اولیه برای جلوگیری از بازشدن خودکار ورودی‌هایی مثل تقویم. */
+  initialFocus?: string
   /** مثلاً تأیید «تغییرات ذخیره‌نشده». اگر false برگرداند مودال بسته نمی‌شود. */
   closeGuard?: () => boolean | Promise<boolean>
   /** کلاس اضافه روی ریشه برای استایل مخصوص هر صفحه. */
@@ -66,7 +68,7 @@ watch(() => props.modelValue, async open => {
     push()
     document.addEventListener('keydown', onKeydown)
     await nextTick()
-    dialog.value?.querySelector<HTMLElement>('[autofocus],input:not([readonly]),textarea,select')?.focus()
+    dialog.value?.querySelector<HTMLElement>(props.initialFocus ?? '[autofocus],input:not([readonly]),textarea,select')?.focus()
   } else {
     release()
     previouslyFocused?.focus()

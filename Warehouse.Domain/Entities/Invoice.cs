@@ -9,12 +9,13 @@ public sealed class Invoice : Entity<Guid>
     {
     }
 
-    public Invoice(string invoiceNumber, Guid? supplierId)
+    public Invoice(string invoiceNumber, Guid? supplierId, DateOnly? receiptDate = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(invoiceNumber);
         Id = Guid.NewGuid();
         InvoiceNumber = NormalizeNumber(invoiceNumber);
         SupplierId = supplierId;
+        ReceiptDate = receiptDate;
     }
 
     public string InvoiceNumber { get; private set; } = string.Empty;
@@ -30,6 +31,15 @@ public sealed class Invoice : Entity<Guid>
     }
 
     public DateOnly? InvoiceDate { get; private set; }
+    public DateOnly? FinanceDeliveryDate { get; private set; }
+
+    public void UpdateFinanceDeliveryDate(DateOnly? date) => FinanceDeliveryDate = date;
+
+    public DateOnly? ReceiptDate { get; private set; }
+
+    public static DateOnly GetReceiptDate(DateTimeOffset enteredAtUtc) =>
+        DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(enteredAtUtc,
+            TimeZoneInfo.FindSystemTimeZoneById("Asia/Tehran")).DateTime);
 
     public InvoiceProcessingStatus ProcessingStatus { get; private set; } = InvoiceProcessingStatus.UnderReview;
 

@@ -1,46 +1,44 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
+﻿using System;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace Warehouse.Infrastructure.Persistence.Migrations
 {
     /// <inheritdoc />
-    public partial class AddInvoiceAndReceiptItemPrices : Migration
+    public partial class AddGoodsIssueFinalizationAndInvoiceFinanceDeliveryDate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<decimal>(
-                name: "Price",
+            migrationBuilder.AddColumn<DateOnly>(
+                name: "FinanceDeliveryDate",
                 schema: "Business",
                 table: "Invoices",
-                type: "decimal(18,2)",
-                precision: 18,
-                scale: 2,
+                type: "date",
                 nullable: true);
 
-            migrationBuilder.AddColumn<decimal>(
-                name: "Price",
+            migrationBuilder.AddColumn<bool>(
+                name: "IsFinalized",
                 schema: "Business",
-                table: "GoodsReceiptItems",
-                type: "decimal(18,2)",
-                precision: 18,
-                scale: 2,
-                nullable: true);
+                table: "GoodsIssues",
+                type: "bit",
+                nullable: false,
+                defaultValue: false);
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropColumn(
-                name: "Price",
+                name: "FinanceDeliveryDate",
                 schema: "Business",
                 table: "Invoices");
 
             migrationBuilder.DropColumn(
-                name: "Price",
+                name: "IsFinalized",
                 schema: "Business",
-                table: "GoodsReceiptItems");
+                table: "GoodsIssues");
         }
     }
 }

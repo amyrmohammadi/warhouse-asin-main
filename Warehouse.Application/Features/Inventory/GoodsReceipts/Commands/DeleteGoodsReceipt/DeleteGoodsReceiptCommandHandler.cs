@@ -33,7 +33,14 @@ internal sealed class DeleteGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                     .Select(item => item.GoodsReceipt.EnteredAtUtc), cancellationToken);
                 var issueItem = await unitOfWork.Repository<GoodsIssueItem>()
                     .GetByIdAsync(issueId, cancellationToken);
-                issueItem?.SetReturnAtUtc(remaining.Count > 0 ? remaining.Max() : null);
+                var returnAtUtc = remaining.Count > 0 ? remaining.Max() : (DateTimeOffset?)null;
+                if (issueItem is not null && issueItem.ReturnAtUtc != returnAtUtc &&
+                    !await GoodsIssues.GoodsIssueEditGuard.CanChangeItemAsync(unitOfWork, issueItem, cancellationToken))
+                {
+                    await unitOfWork.RollBackTransaction(cancellationToken);
+                    return Result.Error(GoodsIssue.FinalizedMessage);
+                }
+                issueItem?.SetReturnAtUtc(returnAtUtc);
             }
             await repository.DeleteAsync(receipt, cancellationToken);
             await unitOfWork.SaveAsync(cancellationToken);

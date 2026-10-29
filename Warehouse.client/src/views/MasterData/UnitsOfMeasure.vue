@@ -507,7 +507,7 @@ onBeforeUnmount(() => {
                 </template>
 
                 <template #column-description="{ cellData }">
-                  <span class="unit-description">{{ cellData || '—' }}</span>
+                  <span class="unit-description">{{ cellData ?? '' }}</span>
                 </template>
 
                 <template v-if="canManage" #column-actions="{ cellData }">

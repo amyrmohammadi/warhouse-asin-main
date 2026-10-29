@@ -92,6 +92,7 @@ const columns: Record<TableMode, ColumnsConfig[]> = {
   invoices: [
     { ...createRowNumberColumn(), className: 'min-tablet-p text-center data-table-row-number' },
     { data: 'invoiceNumber', name: 'invoiceNumber', title: 'شماره فاکتور', className: 'all text-center' },
+    { data: 'financeDeliveryDate', name: 'financeDeliveryDate', title: 'تاریخ تحویل به مالی', className: 'min-tablet-l text-center' },
     { data: 'invoiceDate', name: 'invoiceDate', title: 'تاریخ فاکتور', className: 'min-tablet-l text-center' },
     { data: 'counterparty', name: 'counterparty', title: 'طرف حساب', className: 'all' },
     { data: 'price', name: 'price', title: 'قیمت', className: 'min-tablet-l text-center' },
@@ -253,17 +254,18 @@ onBeforeUnmount(() => {
             <template #column-invoiceNumber="{ cellData }">
               <strong class="invoice-number" dir="ltr">{{ cellData }}</strong>
             </template>
-            <template #column-counterparty="{ cellData }">{{ cellData || '—' }}</template>
-            <template #column-price="{ cellData }">{{ cellData == null ? '—' : formatPersianNumber(cellData) }}</template>
+            <template #column-counterparty="{ cellData }">{{ cellData ?? '' }}</template>
+            <template #column-financeDeliveryDate="{ cellData }">{{ formatPersianDate(cellData) }}</template>
+            <template #column-price="{ cellData }">{{ cellData == null ? '' : formatPersianNumber(cellData) }}</template>
             <template #column-invoiceDate="{ cellData }">{{ formatPersianDate(cellData) }}</template>
-            <template #column-processingStatus="{ cellData }">{{ statusLabel[cellData as keyof typeof statusLabel] ?? '—' }}</template>
-            <template #column-description="{ cellData }">{{ cellData || '—' }}</template>
+            <template #column-processingStatus="{ cellData }">{{ statusLabel[cellData as keyof typeof statusLabel] ?? '' }}</template>
+            <template #column-description="{ cellData }">{{ cellData ?? '' }}</template>
             <template #column-receiptNumbers="{ cellData }">
               <div v-if="(cellData as string[]).length" class="invoice-receipt-numbers">
                 <span v-for="receiptNumber in (cellData as string[])" :key="receiptNumber"
                       class="badge light badge-info" dir="ltr">{{ receiptNumber }}</span>
               </div>
-              <span v-else>—</span>
+              <span v-else></span>
             </template>
             <template #column-itemsWithoutReceiptCount="{ cellData }">
               <span class="badge light" :class="cellData > 0 ? 'badge-warning' : 'badge-success'">
@@ -294,4 +296,6 @@ onBeforeUnmount(() => {
   color: var(--text-primary, #212529);
   font-weight: 700;
 }
+
+
 </style>

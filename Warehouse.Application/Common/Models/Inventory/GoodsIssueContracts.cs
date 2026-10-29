@@ -5,6 +5,7 @@ namespace Warehouse.Application.Common.Models.Inventory;
 
 public sealed class GoodsIssueSummary
 {
+    public bool IsFinalized { get; init; }
     public Guid Id { get; init; }
     public Guid ConcurrencyStamp { get; init; }
     public string IssueNumber { get; init; } = string.Empty;
@@ -39,6 +40,8 @@ public class GoodsIssueItemSummary
 
 public sealed class GoodsIssueItemRowSummary : GoodsIssueItemSummary
 {
+    public bool IsFinalized { get; init; }
+    public Guid ConcurrencyStamp { get; init; }
     public Guid GoodsIssueId { get; init; }
     public string IssueNumber { get; init; } = string.Empty;
     public DateTimeOffset IssuedAtUtc { get; init; }

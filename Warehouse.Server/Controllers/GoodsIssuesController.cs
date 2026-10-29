@@ -11,6 +11,7 @@ using Warehouse.Application.Common.Models.Inventory;
 using Warehouse.Application.Features.Inventory.GoodsIssues.Commands.DeleteGoodsIssue;
 using Warehouse.Application.Features.Inventory.GoodsIssues.Commands.ImportGoodsIssues;
 using Warehouse.Application.Features.Inventory.GoodsIssues.Commands.SaveGoodsIssue;
+using Warehouse.Application.Features.Inventory.GoodsIssues.Commands.SetGoodsIssueFinalization;
 using Warehouse.Application.Features.Inventory.GoodsIssues.Queries.GetGoodsIssueById;
 using Warehouse.Application.Features.Inventory.GoodsIssues.Queries.GetGoodsIssueItems;
 using Warehouse.Application.Features.Inventory.GoodsIssues.Queries.GetGoodsIssueOptions;
@@ -27,6 +28,28 @@ public sealed class GoodsIssuesController(
     IAuthorizationService authorizationService) : ControllerBase
 {
     private const int ExportBatchSize = 100;
+
+    [Authorize(Policy = PermissionPolicyNames.Inventory.GoodsIssuesFinalize)]
+    [HttpPost("finalize")]
+    public Task<ActionResult<Result<int>>> FinalizeDocuments(
+        [FromBody] GoodsIssueFinalizationRequest request, CancellationToken cancellationToken) =>
+        SetFinalization(request, true, cancellationToken);
+
+    [Authorize(Policy = PermissionPolicyNames.Inventory.GoodsIssuesReopen)]
+    [HttpPost("reopen")]
+    public Task<ActionResult<Result<int>>> ReopenDocuments(
+        [FromBody] GoodsIssueFinalizationRequest request, CancellationToken cancellationToken) =>
+        SetFinalization(request, false, cancellationToken);
+
+    private async Task<ActionResult<Result<int>>> SetFinalization(
+        GoodsIssueFinalizationRequest request, bool finalized, CancellationToken token)
+    {
+        var result = await sender.Send(new SetGoodsIssueFinalizationCommand(
+            finalized, request.Id, request.Day, request.ConcurrencyStamp), token);
+        return result.IsSuccess ? Ok(result)
+            : result.Messages.Contains(ConcurrencyMessages.Conflict, StringComparer.Ordinal)
+                ? Conflict(result) : BadRequest(result);
+    }
 
     [Authorize(Policy = PermissionPolicyNames.Inventory.GoodsIssuesRead)]
     [Authorize(Policy = PermissionPolicyNames.Inventory.GoodsIssuesExport)]

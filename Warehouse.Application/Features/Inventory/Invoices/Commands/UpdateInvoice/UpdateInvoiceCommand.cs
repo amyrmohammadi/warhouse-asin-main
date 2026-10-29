@@ -25,7 +25,8 @@ public sealed record UpdateInvoiceCommand(
     IReadOnlyCollection<UpdateInvoiceReceiptItem> Items,
     bool CanEditInvoice = true,
     bool CanEditReceipt = true,
-    decimal? Price = null) : IRequest<Result<InvoiceDetails>>;
+    decimal? Price = null,
+    DateOnly? FinanceDeliveryDate = null) : IRequest<Result<InvoiceDetails>>;
 
 internal sealed class UpdateInvoiceCommandValidator : AbstractValidator<UpdateInvoiceCommand>
 {
@@ -85,11 +86,12 @@ internal sealed class UpdateInvoiceCommandHandler(IUnitOfWork<Guid> unitOfWork)
                 if (await invoiceRepository.CountAsync(invoiceRepository.Entities.Where(value =>
                         value.Id != request.InvoiceId &&
                         value.InvoiceNumber == normalizedNumber &&
-                        value.SupplierId == request.SupplierId), cancellationToken) > 0)
+                        value.SupplierId == request.SupplierId &&
+                        value.ReceiptDate == invoice.ReceiptDate), cancellationToken) > 0)
                 {
                     await unitOfWork.RollBackTransaction(cancellationToken);
                     return Result<InvoiceDetails>.Error(
-                        "این شماره فاکتور برای تأمین‌کننده انتخاب‌شده قبلاً ثبت شده است.");
+                        "این شماره فاکتور برای طرف حساب و روز ورود انتخاب‌شده قبلاً ثبت شده است.");
                 }
                 if (request.SupplierId.HasValue &&
                     await unitOfWork.Repository<Supplier>().GetByIdAsync(request.SupplierId.Value, cancellationToken) is null)
@@ -149,6 +151,7 @@ internal sealed class UpdateInvoiceCommandHandler(IUnitOfWork<Guid> unitOfWork)
             {
                 invoice.UpdateHeader(normalizedNumber!, request.SupplierId);
                 invoice.UpdateDetails(request.Description, request.InvoiceDate, request.ProcessingStatus);
+                invoice.UpdateFinanceDeliveryDate(request.FinanceDeliveryDate);
                 var price = request.Price ?? calculatedPrice;
                 if (price >= 10000000000000000m)
                 {

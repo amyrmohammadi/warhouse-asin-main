@@ -167,6 +167,10 @@ export function useGoodsIssueForm(deps: Dependencies) {
     const controller = channel.begin()
     try {
       const issue = await getGoodsIssue(id, controller.signal)
+      if (issue.isFinalized) {
+        toast.error('سند خروج تأیید نهایی شده است؛ ابتدا از تأیید نهایی خارج کنید.')
+        return
+      }
       reset()
       editingId.value = id
       concurrencyStamp.value = issue.concurrencyStamp

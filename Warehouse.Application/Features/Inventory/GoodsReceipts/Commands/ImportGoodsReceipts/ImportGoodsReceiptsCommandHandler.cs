@@ -98,7 +98,7 @@ internal sealed class ImportGoodsReceiptsCommandHandler(
             if (trackedInvoice is not null)
             {
                 invoicesByNumberAndSupplier.TryAdd(
-                    CreateInvoiceKey(trackedInvoice.InvoiceNumber, trackedInvoice.SupplierId),
+                    CreateInvoiceKey(trackedInvoice.InvoiceNumber, trackedInvoice.SupplierId, trackedInvoice.ReceiptDate),
                     trackedInvoice);
             }
         }
@@ -169,10 +169,11 @@ internal sealed class ImportGoodsReceiptsCommandHandler(
                 if (row.InvoiceStatus == Domain.Enums.InvoiceStatus.HasInvoice)
                 {
                     var invoiceNumber = Invoice.NormalizeNumber(row.Source.InvoiceNumber);
-                    var invoiceKey = CreateInvoiceKey(invoiceNumber, row.SupplierId);
+                    var receiptDate = Invoice.GetReceiptDate(row.Source.Date!.Value);
+                    var invoiceKey = CreateInvoiceKey(invoiceNumber, row.SupplierId, receiptDate);
                     if (!invoicesByNumberAndSupplier.TryGetValue(invoiceKey, out invoice))
                     {
-                        invoice = new Invoice(invoiceNumber, row.SupplierId);
+                        invoice = new Invoice(invoiceNumber, row.SupplierId, receiptDate);
                         await invoiceRepository.AddAsync(invoice, token);
                         invoicesByNumberAndSupplier.Add(invoiceKey, invoice);
                     }
@@ -220,6 +221,6 @@ internal sealed class ImportGoodsReceiptsCommandHandler(
             });
     }
 
-    private static string CreateInvoiceKey(string invoiceNumber, Guid? supplierId) =>
-        $"{invoiceNumber.ToUpperInvariant()}\u001F{supplierId?.ToString("D") ?? "-"}";
+    private static string CreateInvoiceKey(string invoiceNumber, Guid? supplierId, DateOnly? receiptDate) =>
+        $"{invoiceNumber.ToUpperInvariant()}\u001F{supplierId?.ToString("D") ?? "-"}\u001F{receiptDate:yyyy-MM-dd}";
 }

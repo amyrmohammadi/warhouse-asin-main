@@ -71,6 +71,7 @@ internal sealed class GetInvoicesQueryHandler(IUnitOfWork<Guid> unitOfWork)
             InvoiceNumber = summary.InvoiceNumber,
             Description = summary.Description,
             InvoiceDate = summary.InvoiceDate,
+            FinanceDeliveryDate = summary.FinanceDeliveryDate,
             ProcessingStatus = summary.ProcessingStatus,
             Counterparty = summary.Counterparty,
             ReceiptNumbers = summary.ReceiptNumbers
@@ -94,6 +95,8 @@ internal sealed class GetInvoicesQueryHandler(IUnitOfWork<Guid> unitOfWork)
         bool descending) =>
         (sortBy?.Trim().ToLowerInvariant(), descending) switch
         {
+            ("financedeliverydate", false) => query.OrderBy(invoice => invoice.FinanceDeliveryDate).ThenBy(invoice => invoice.Id),
+            ("financedeliverydate", true) => query.OrderByDescending(invoice => invoice.FinanceDeliveryDate).ThenBy(invoice => invoice.Id),
             ("price", false) => query.OrderBy(invoice => invoice.Price).ThenBy(invoice => invoice.Id),
             ("price", true) => query.OrderByDescending(invoice => invoice.Price).ThenByDescending(invoice => invoice.Id),
             ("invoicenumber", false) => query.OrderBy(invoice => invoice.InvoiceNumber).ThenBy(invoice => invoice.Id),

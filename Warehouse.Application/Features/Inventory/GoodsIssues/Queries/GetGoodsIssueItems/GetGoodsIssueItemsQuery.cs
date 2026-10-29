@@ -89,6 +89,8 @@ internal sealed class GetGoodsIssueItemsQueryHandler(IUnitOfWork<Guid> unitOfWor
             Id = item.Id,
             GoodsReceiptItemIds = item.GoodsReceiptItems.Select(receiptItem => receiptItem.Id).ToArray(),
             GoodsIssueId = item.GoodsIssueId,
+            IsFinalized = item.GoodsIssue.IsFinalized,
+            ConcurrencyStamp = item.GoodsIssue.ConcurrencyStamp,
             IssueNumber = item.GoodsIssue.IssueNumber,
             IssuedAtUtc = item.GoodsIssue.IssuedAtUtc,
             IssueDescription = item.GoodsIssue.Description,

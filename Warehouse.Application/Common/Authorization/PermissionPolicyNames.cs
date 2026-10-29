@@ -47,6 +47,8 @@ public static class PermissionPolicyNames
         public const string GoodsIssuesDelete = nameof(AppPermission.GoodsIssuesDelete);
         public const string GoodsIssuesImport = nameof(AppPermission.GoodsIssuesImport);
         public const string GoodsIssuesExport = nameof(AppPermission.GoodsIssuesExport);
+        public const string GoodsIssuesFinalize = nameof(AppPermission.GoodsIssuesFinalize);
+        public const string GoodsIssuesReopen = nameof(AppPermission.GoodsIssuesReopen);
         public const string InvoicesRead = nameof(AppPermission.InvoicesRead);
         public const string InvoicesMissingReceiptCountRead = nameof(AppPermission.InvoicesMissingReceiptCountRead);
     }
@@ -99,6 +101,8 @@ public static class PermissionPolicyNames
                 new(Inventory.GoodsIssuesCreate, "ثبت خروج کالا"),
                 new(Inventory.GoodsIssuesUpdate, "ویرایش خروج کالا"),
                 new(Inventory.GoodsIssuesDelete, "حذف خروج کالا"),
+                new(Inventory.GoodsIssuesFinalize, "تأیید نهایی اسناد خروج"),
+                new(Inventory.GoodsIssuesReopen, "برگشت اسناد خروج از تأیید نهایی"),
                 new(Inventory.GoodsIssuesImport, "ایمپورت خروج کالا"),
                 new(Inventory.GoodsIssuesExport, "اکسپورت خروج کالا")
             ]),
