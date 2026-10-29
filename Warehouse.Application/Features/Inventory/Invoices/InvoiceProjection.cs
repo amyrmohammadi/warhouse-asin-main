@@ -9,6 +9,7 @@ internal static class InvoiceProjection
         query.Select(invoice => new InvoiceSummary
         {
             Id = invoice.Id,
+            Price = invoice.Price,
             InvoiceNumber = invoice.InvoiceNumber,
             Description = invoice.Description,
             InvoiceDate = invoice.InvoiceDate,
@@ -26,6 +27,7 @@ internal static class InvoiceProjection
         query.Select(invoice => new InvoiceDetails
         {
             Id = invoice.Id,
+            Price = invoice.Price,
             InvoiceNumber = invoice.InvoiceNumber,
             Description = invoice.Description,
             InvoiceDate = invoice.InvoiceDate,
@@ -39,6 +41,7 @@ internal static class InvoiceProjection
                 .Select(item => new InvoiceItemSummary
                 {
                     Id = item.Id,
+                    Price = item.Price,
                     GoodsReceiptId = item.GoodsReceiptId,
                     GoodsIssueItemId = item.GoodsIssueItemId,
                     GoodsReceiptConcurrencyStamp = item.GoodsReceipt.ConcurrencyStamp,

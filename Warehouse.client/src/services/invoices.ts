@@ -3,6 +3,7 @@ import { expireSession, getSession } from '@/services/auth'
 import type { TextFilterValue } from '@/types/dataTableFilters'
 
 export interface InvoiceSummary {
+  price: number | null
   id: string
   invoiceNumber: string
   description: string | null
@@ -16,6 +17,7 @@ export interface InvoiceSummary {
 export type InvoiceProcessingStatus = 'UnderReview' | 'SentToFinance' | 'FinanceApproved'
 
 export interface InvoiceItem {
+  price: number | null
   id: string
   goodsReceiptId: string
   goodsReceiptConcurrencyStamp: string
@@ -41,12 +43,14 @@ export interface UpdateInvoiceItemRequest {
 }
 
 export interface UpdateInvoiceRequest {
+  price: number | null
   invoiceNumber: string
   supplierId: string | null
   description: string | null
   invoiceDate: string | null
   processingStatus: InvoiceProcessingStatus
   items: Array<{
+    price: number | null
     id: string
     receiptNumber: string | null
     goodsReceiptConcurrencyStamp: string

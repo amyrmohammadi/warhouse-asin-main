@@ -8,12 +8,14 @@ public sealed record UpdateInvoiceRequest(
     string? Description,
     DateOnly? InvoiceDate,
     InvoiceProcessingStatus ProcessingStatus,
-    IReadOnlyCollection<UpdateInvoiceReceiptItemRequest> Items);
+    IReadOnlyCollection<UpdateInvoiceReceiptItemRequest> Items,
+    decimal? Price = null);
 
 public sealed record UpdateInvoiceReceiptItemRequest(
     Guid Id,
     string? ReceiptNumber,
-    Guid GoodsReceiptConcurrencyStamp);
+    Guid GoodsReceiptConcurrencyStamp,
+    decimal? Price = null);
 
 public sealed record UpdateInvoiceItemRequest(
     string? ReceiptNumber,

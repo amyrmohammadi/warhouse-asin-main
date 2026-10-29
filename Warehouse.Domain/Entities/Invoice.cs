@@ -21,6 +21,14 @@ public sealed class Invoice : Entity<Guid>
 
     public string? Description { get; private set; }
 
+    public decimal? Price { get; private set; }
+
+    public void UpdatePrice(decimal? price)
+    {
+        if (price < 0) throw new ArgumentOutOfRangeException(nameof(price));
+        Price = price;
+    }
+
     public DateOnly? InvoiceDate { get; private set; }
 
     public InvoiceProcessingStatus ProcessingStatus { get; private set; } = InvoiceProcessingStatus.UnderReview;

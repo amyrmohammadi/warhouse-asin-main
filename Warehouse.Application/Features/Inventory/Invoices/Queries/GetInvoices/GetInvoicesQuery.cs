@@ -67,6 +67,7 @@ internal sealed class GetInvoicesQueryHandler(IUnitOfWork<Guid> unitOfWork)
         var data = projectedData.Select(summary => new InvoiceSummary
         {
             Id = summary.Id,
+            Price = summary.Price,
             InvoiceNumber = summary.InvoiceNumber,
             Description = summary.Description,
             InvoiceDate = summary.InvoiceDate,
@@ -93,6 +94,8 @@ internal sealed class GetInvoicesQueryHandler(IUnitOfWork<Guid> unitOfWork)
         bool descending) =>
         (sortBy?.Trim().ToLowerInvariant(), descending) switch
         {
+            ("price", false) => query.OrderBy(invoice => invoice.Price).ThenBy(invoice => invoice.Id),
+            ("price", true) => query.OrderByDescending(invoice => invoice.Price).ThenByDescending(invoice => invoice.Id),
             ("invoicenumber", false) => query.OrderBy(invoice => invoice.InvoiceNumber).ThenBy(invoice => invoice.Id),
             ("counterparty", false) => query.OrderBy(invoice => invoice.Supplier == null ? null : invoice.Supplier.Title)
                 .ThenBy(invoice => invoice.InvoiceNumber),

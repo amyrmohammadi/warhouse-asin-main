@@ -165,6 +165,21 @@ export function getGoodsIssue(id: string, signal?: AbortSignal): Promise<GoodsIs
   return request(`/endpoint/inventory/goods-issues/${encodeURIComponent(id)}`, { signal }, 'دریافت سند خروج انجام نشد.')
 }
 
+export async function getGoodsIssuePdf(id: string, signal?: AbortSignal): Promise<Blob> {
+  const response = await authorizedFetch(`/endpoint/inventory/goods-issues/${encodeURIComponent(id)}/pdf`, { signal })
+  if (!response.ok) {
+    let message = 'دریافت PDF سند خروج انجام نشد.'
+    try {
+      const payload = await response.json() as { title?: string; messages?: string[] }
+      message = payload.messages?.find(Boolean) ?? payload.title ?? message
+    } catch { /* پاسخ بدون بدنه */ }
+    throw new GoodsIssuesApiError(message, response.status)
+  }
+  if (!response.headers.get('Content-Type')?.toLowerCase().startsWith('application/pdf'))
+    throw new GoodsIssuesApiError('پاسخ سرویس چاپ یک فایل PDF معتبر نیست.', response.status)
+  return response.blob()
+}
+
 export function getGoodsIssueOptions(signal?: AbortSignal): Promise<GoodsIssueOptions> {
   return request('/endpoint/inventory/goods-issues/options', { signal }, 'دریافت اطلاعات فرم انجام نشد.')
 }

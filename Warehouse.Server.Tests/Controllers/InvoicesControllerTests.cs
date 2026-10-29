@@ -62,7 +62,7 @@ public sealed class InvoicesControllerTests
         var supplierId = Guid.NewGuid();
         var request = new UpdateInvoiceRequest("INV-2", supplierId, "شرح", new DateOnly(2026, 10, 27),
             InvoiceProcessingStatus.FinanceApproved,
-            [new UpdateInvoiceReceiptItemRequest(itemId, "REC-1", stamp)]);
+            [new UpdateInvoiceReceiptItemRequest(itemId, "REC-1", stamp, 125)], Price: 500);
 
         var response = await controller.Update(invoiceId, request, default);
 
@@ -75,6 +75,7 @@ public sealed class InvoicesControllerTests
             command.Items.Count == 1 && command.Items.Single().Id == itemId &&
             command.Items.Single().ReceiptNumber == "REC-1" &&
             command.Items.Single().GoodsReceiptConcurrencyStamp == stamp &&
+            command.Items.Single().Price == 125 && command.Price == 500 &&
             command.CanEditInvoice && command.CanEditReceipt),
             Arg.Any<CancellationToken>());
     }
@@ -179,6 +180,7 @@ public sealed class InvoicesControllerTests
             Description = "شرح",
             InvoiceDate = new DateOnly(2026, 10, 20),
             ProcessingStatus = InvoiceProcessingStatus.SentToFinance,
+            Price = 500,
             ReceiptNumbers = ["REC-1"],
             ItemsWithoutReceiptCount = 2
         };
@@ -195,6 +197,7 @@ public sealed class InvoicesControllerTests
         Assert.Equal(canViewCount ? 2 : null, item.ItemsWithoutReceiptCount);
         Assert.Equal(summary.InvoiceNumber, item.InvoiceNumber);
         Assert.Equal(summary.Description, item.Description);
+        Assert.Equal(summary.Price, item.Price);
         Assert.Equal(summary.InvoiceDate, item.InvoiceDate);
         Assert.Equal(summary.ProcessingStatus, item.ProcessingStatus);
         Assert.Equal(summary.ReceiptNumbers, item.ReceiptNumbers);

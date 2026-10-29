@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Warehouse.Application.Common.Authorization;
 using Warehouse.Application.Common.Concurrency;
+using Warehouse.Application.Common.Interfaces;
 using Warehouse.Application.Common.Models;
 using Warehouse.Application.Common.Models.Inventory;
 using Warehouse.Application.Features.Inventory.GoodsIssues.Commands.DeleteGoodsIssue;
@@ -26,6 +27,33 @@ public sealed class GoodsIssuesController(
     IAuthorizationService authorizationService) : ControllerBase
 {
     private const int ExportBatchSize = 100;
+
+    [Authorize(Policy = PermissionPolicyNames.Inventory.GoodsIssuesRead)]
+    [Authorize(Policy = PermissionPolicyNames.Inventory.GoodsIssuesExport)]
+    [HttpGet("{id:guid}/pdf")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> Print(Guid id,
+        [FromServices] IGoodsIssuePdfService pdfService, CancellationToken cancellationToken)
+    {
+        var result = await sender.Send(new GetGoodsIssueByIdQuery(id), cancellationToken);
+        if (!result.IsSuccess || result.Data is null) return NotFound(result);
+        try
+        {
+            var pdf = await pdfService.GenerateAsync(result.Data, cancellationToken);
+            Response.Headers.CacheControl = "no-store";
+            return File(pdf, "application/pdf");
+        }
+        catch (TimeoutException)
+        {
+            return Problem(statusCode: StatusCodes.Status504GatewayTimeout,
+                title: "تولید PDF بیشتر از زمان مجاز طول کشید. دوباره تلاش کنید.");
+        }
+        catch (ExcelToPdfConversionException)
+        {
+            return Problem(statusCode: StatusCodes.Status503ServiceUnavailable,
+                title: "تولید PDF سند خروج انجام نشد. وضعیت سرویس چاپ را با مدیر سیستم بررسی کنید.");
+        }
+    }
 
     [Authorize(Policy = PermissionPolicyNames.Inventory.GoodsIssuesImport)]
     [HttpPost("import")]

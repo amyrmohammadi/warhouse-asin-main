@@ -5,6 +5,8 @@ namespace Warehouse.Application.Common.Models.Inventory;
 
 public sealed class InvoiceSummary
 {
+    public decimal? Price { get; init; }
+
     public Guid Id { get; init; }
 
     public string InvoiceNumber { get; init; } = string.Empty;
@@ -25,6 +27,8 @@ public sealed class InvoiceSummary
 
 public sealed class InvoiceItemSummary
 {
+    public decimal? Price { get; init; }
+
     public Guid Id { get; init; }
 
     public Guid GoodsReceiptId { get; init; }
@@ -54,6 +58,8 @@ public sealed class InvoiceItemSummary
 
 public sealed class InvoiceDetails
 {
+    public decimal? Price { get; init; }
+
     public Guid Id { get; init; }
 
     public string InvoiceNumber { get; init; } = string.Empty;

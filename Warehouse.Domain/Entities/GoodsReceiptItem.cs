@@ -59,6 +59,14 @@ public sealed class GoodsReceiptItem : Entity<Guid>
 
     public decimal Quantity { get; private set; }
 
+    public decimal? Price { get; private set; }
+
+    public void UpdatePrice(decimal? price)
+    {
+        if (price < 0) throw new ArgumentOutOfRangeException(nameof(price));
+        Price = price;
+    }
+
     public string? RequestNumber { get; private set; }
 
     public string? Description { get; private set; }

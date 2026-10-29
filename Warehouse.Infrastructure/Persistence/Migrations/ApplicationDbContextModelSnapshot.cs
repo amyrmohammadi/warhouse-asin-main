@@ -247,8 +247,20 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
+                    b.Property<string>("ExitReasonType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)")
+                        .HasDefaultValue("Other");
+
                     b.Property<Guid>("GoodsIssueId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("IsReturnable")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
 
                     b.Property<string>("ProductCode")
                         .IsRequired()
@@ -265,6 +277,9 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("ReturnAtUtc")
                         .HasColumnType("datetimeoffset");
 
+                    b.Property<Guid?>("ShippingLocationId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<int>("SortOrder")
                         .HasColumnType("int");
 
@@ -275,6 +290,8 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                     b.HasIndex("GoodsIssueId");
 
                     b.HasIndex("ProductId");
+
+                    b.HasIndex("ShippingLocationId");
 
                     b.ToTable("GoodsIssueItems", "Business");
                 });
@@ -340,6 +357,10 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("nvarchar(32)");
 
+                    b.Property<decimal?>("Price")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<Guid>("ProductId")
                         .HasColumnType("uniqueidentifier");
 
@@ -394,6 +415,10 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<decimal?>("Price")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<string>("ProcessingStatus")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -409,7 +434,8 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                     b.HasIndex("SupplierId");
 
                     b.HasIndex("InvoiceNumber", "SupplierId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[SupplierId] IS NOT NULL");
 
                     b.ToTable("Invoices", "Business");
                 });
@@ -852,11 +878,18 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                         .HasForeignKey("ProductId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("Warehouse.Domain.Entities.Supplier", "ShippingLocation")
+                        .WithMany("GoodsIssueShippingItems")
+                        .HasForeignKey("ShippingLocationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("Destination");
 
                     b.Navigation("GoodsIssue");
 
                     b.Navigation("Product");
+
+                    b.Navigation("ShippingLocation");
                 });
 
             modelBuilder.Entity("Warehouse.Domain.Entities.GoodsReceipt", b =>
@@ -989,6 +1022,8 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Warehouse.Domain.Entities.Supplier", b =>
                 {
+                    b.Navigation("GoodsIssueShippingItems");
+
                     b.Navigation("Invoices");
                 });
 #pragma warning restore 612, 618

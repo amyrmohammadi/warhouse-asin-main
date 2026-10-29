@@ -12,7 +12,8 @@ namespace Warehouse.Application.Features.Inventory.Invoices.Commands.UpdateInvoi
 public sealed record UpdateInvoiceReceiptItem(
     Guid Id,
     string? ReceiptNumber,
-    Guid GoodsReceiptConcurrencyStamp);
+    Guid GoodsReceiptConcurrencyStamp,
+    decimal? Price = null);
 
 public sealed record UpdateInvoiceCommand(
     Guid InvoiceId,
@@ -23,7 +24,8 @@ public sealed record UpdateInvoiceCommand(
     InvoiceProcessingStatus ProcessingStatus,
     IReadOnlyCollection<UpdateInvoiceReceiptItem> Items,
     bool CanEditInvoice = true,
-    bool CanEditReceipt = true) : IRequest<Result<InvoiceDetails>>;
+    bool CanEditReceipt = true,
+    decimal? Price = null) : IRequest<Result<InvoiceDetails>>;
 
 internal sealed class UpdateInvoiceCommandValidator : AbstractValidator<UpdateInvoiceCommand>
 {
@@ -36,8 +38,11 @@ internal sealed class UpdateInvoiceCommandValidator : AbstractValidator<UpdateIn
                 .MaximumLength(100).WithMessage("شماره فاکتور نباید بیشتر از ۱۰۰ نویسه باشد.");
             RuleFor(command => command.Description).MaximumLength(1000);
             RuleFor(command => command.ProcessingStatus).IsInEnum();
+            RuleFor(command => command.Price).GreaterThanOrEqualTo(0).PrecisionScale(18, 2, true);
+            RuleForEach(command => command.Items).ChildRules(item =>
+                item.RuleFor(value => value.Price).GreaterThanOrEqualTo(0).PrecisionScale(18, 2, true));
         });
-        When(command => command.CanEditReceipt, () =>
+        When(command => command.CanEditReceipt || command.CanEditInvoice, () =>
         {
             RuleFor(command => command.Items).NotNull();
             RuleForEach(command => command.Items).ChildRules(item =>
@@ -94,7 +99,8 @@ internal sealed class UpdateInvoiceCommandHandler(IUnitOfWork<Guid> unitOfWork)
                 }
             }
 
-            if (request.CanEditReceipt)
+            decimal? calculatedPrice = null;
+            if (request.CanEditReceipt || request.CanEditInvoice)
             {
                 var itemRepository = unitOfWork.Repository<GoodsReceiptItem>();
                 var storedItems = await itemRepository.ToListAsync(itemRepository.Entities
@@ -132,14 +138,24 @@ internal sealed class UpdateInvoiceCommandHandler(IUnitOfWork<Guid> unitOfWork)
                 foreach (var value in request.Items)
                 {
                     var item = await itemRepository.GetByIdAsync(value.Id, cancellationToken);
-                    item!.UpdateReceiptNumber(value.ReceiptNumber);
+                    if (request.CanEditReceipt) item!.UpdateReceiptNumber(value.ReceiptNumber);
+                    if (request.CanEditInvoice) item!.UpdatePrice(value.Price);
                 }
+                if (request.CanEditInvoice && request.Items.Any(item => item.Price.HasValue))
+                    calculatedPrice = request.Items.Sum(item => item.Price ?? 0);
             }
 
             if (request.CanEditInvoice)
             {
                 invoice.UpdateHeader(normalizedNumber!, request.SupplierId);
                 invoice.UpdateDetails(request.Description, request.InvoiceDate, request.ProcessingStatus);
+                var price = request.Price ?? calculatedPrice;
+                if (price >= 10000000000000000m)
+                {
+                    await unitOfWork.RollBackTransaction(cancellationToken);
+                    return Result<InvoiceDetails>.Error("جمع قیمت فاکتور بیش از حد مجاز است.");
+                }
+                invoice.UpdatePrice(price);
             }
             await unitOfWork.SaveAsync(cancellationToken);
             await unitOfWork.CommitTransaction(cancellationToken);

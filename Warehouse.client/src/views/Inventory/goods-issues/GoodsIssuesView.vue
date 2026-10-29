@@ -11,7 +11,6 @@ import GoodsIssueDestinationSelect from '@/components/selectors/GoodsIssueDestin
 import PersonSelect, { type PersonSelectOption } from '@/components/selectors/PersonSelect.vue'
 import ProductSelect from '@/components/selectors/ProductSelect.vue'
 import { useColumnVisibility } from '@/composables/useColumnVisibility'
-import { useCompactScrollbar } from '@/composables/useCompactScrollbar'
 import { useDataTableList } from '@/composables/useDataTableList'
 import { useFilterState, type SetFilterValue } from '@/composables/useFilterState'
 import { usePermissions } from '@/composables/usePermissions'
@@ -21,6 +20,7 @@ import type { GoodsIssueDestinationOption } from '@/services/goodsIssueDestinati
 import {
   exportGoodsIssueItems,
   getGoodsIssues,
+  getGoodsIssuePdf,
   GOODS_ISSUE_EXIT_REASON_OPTIONS,
   type GoodsIssueImportSummary,
   type GoodsIssueExitReason,
@@ -34,6 +34,7 @@ import type { DataTableFilterDefinition, DataTableFilterValue } from '@/types/da
 import { createRowNumberColumn } from '@/utils/dataTable'
 import { formatPersianDate, formatPersianNumber } from '@/utils/dateTime'
 import { downloadBlob } from '@/utils/download'
+import { printPdf } from '@/utils/pdfPrint'
 import { createInventoryTableOptions } from '@/utils/inventoryTable'
 import '@/styles/inventory-list.css'
 
@@ -52,6 +53,16 @@ const VIEW_MODES = [
 const exitReasonLabels = new Map<GoodsIssueExitReason, string>(
   GOODS_ISSUE_EXIT_REASON_OPTIONS.map(option => [option.value, option.label]),
 )
+const exitReasonBadges: Record<GoodsIssueExitReason, string> = {
+  Maintenance: 'badge-warning',
+  Sample: 'badge-info',
+  Purchase: 'badge-success',
+  Sale: 'badge-danger',
+  Services: 'badge-primary',
+  Consignment: 'badge-secondary',
+  Repair: 'badge-warning',
+  Other: 'badge-dark',
+}
 
 function exitReasonText(reason: GoodsIssueExitReason, legacyReason?: string | null): string {
   return legacyReason?.trim() || exitReasonLabels.get(reason) || 'سایر'
@@ -71,6 +82,7 @@ const formModal = ref<InstanceType<typeof GoodsIssueFormModal> | null>(null)
 const editLoading = ref(false)
 const deletingId = ref<string | null>(null)
 const exporting = ref(false)
+const printingId = ref<string | null>(null)
 const importOpen = ref(false)
 const importFile = ref<File | null>(null)
 const importSummary = ref<GoodsIssueImportSummary | null>(null)
@@ -169,7 +181,7 @@ const columns: Record<TableMode, ColumnsConfig[]> = {
     { data: 'issuerFullName', name: 'issuerFullName', title: 'خارج‌کننده', className: 'min-tablet-l' },
     { data: 'description', name: 'description', title: 'توضیحات کلی', className: 'min-tablet-p inventory-wide-column', orderable: false },
     { data: 'items', name: 'itemCount', title: 'تعداد اقلام', className: 'min-tablet-l text-bold', orderable: false },
-    ...(canChange ? [actions('id')] : []),
+    ...(canChange || canExport ? [actions('id')] : []),
   ],
   items: [
     rowNumber,
@@ -185,14 +197,13 @@ const columns: Record<TableMode, ColumnsConfig[]> = {
     { data: 'exitReason', name: 'exitReason', title: 'علت خروج', className: 'min-tablet-p inventory-wide-column', orderable: false },
     { data: 'description', name: 'description', title: 'توضیحات', className: 'min-tablet-p inventory-wide-column', orderable: false },
     { data: 'deliveringUnit', name: 'deliveringUnit', title: 'واحد تحویل‌دهنده', className: 'min-desktop' },
-    { data: 'isReturnable', name: 'isReturnable', title: 'برگشت داده می‌شود', className: 'min-desktop text-center' },
+    { data: 'isReturnable', name: 'isReturnable', title: 'برگشت دارد', className: 'min-desktop text-center' },
     { data: 'returnAtUtc', name: 'returnAtUtc', title: 'تاریخ عودت', className: 'min-desktop' },
     { data: 'issuerFullName', name: 'issuerFullName', title: 'خارج‌کننده', className: 'min-desktop' },
-    ...(canChange ? [actions('goodsIssueId')] : []),
+    ...(canChange || canExport ? [actions('goodsIssueId')] : []),
   ],
 }
 
-const compact = useCompactScrollbar(tableContainer)
 const visibility = useColumnVisibility<TableMode>({
   storageKey: 'warehouse.goods-issues.hidden-columns.v2',
   mode: tableMode,
@@ -229,8 +240,7 @@ function tableOptions(mode: TableMode): Config {
     emptyText: mode === 'items' ? 'هنوز کالایی از انبار خارج نشده است.' : 'هنوز خروج کالایی ثبت نشده است.',
     loadingText: 'در حال دریافت تاریخچه خروج کالا...',
     zeroText: 'خروج کالایی پیدا نشد.',
-    onDraw: () => { compact.schedule(); refreshHighlight() },
-    onInit: compact.schedule,
+    onDraw: refreshHighlight,
   })
 }
 
@@ -241,8 +251,6 @@ const tableOptionsByMode: Record<TableMode, Config> = {
 
 watch(tableMode, () => {
   closeMenu()
-  compact.disconnect()
-  compact.schedule()
 })
 
 async function openCreate(): Promise<void> {
@@ -275,6 +283,27 @@ async function removeDocument(row: GoodsIssue | GoodsIssueItemRow): Promise<void
 function onSaved(reason: 'saved' | 'deleted'): void {
   void options.reload()
   list.reload(reason === 'saved')
+}
+
+const printChannel = useRequestChannel()
+async function printDocument(row: GoodsIssue | GoodsIssueItemRow): Promise<void> {
+  if (!canExport || printingId.value) return
+  const controller = printChannel.begin()
+  const id = 'goodsIssueId' in row ? row.goodsIssueId : row.id
+  printingId.value = id
+  try {
+    const pdf = await getGoodsIssuePdf(id, controller.signal)
+    await printPdf(pdf, `چاپ سند خروج ${row.issueNumber}`, controller.signal)
+  } catch (error) {
+    if (isAbortError(error)) return
+    if (await handleUnauthorized(error)) return
+    toast.error(error instanceof Error ? error.message : 'چاپ سند خروج انجام نشد.')
+  } finally {
+    if (printChannel.isCurrent(controller)) {
+      printChannel.end(controller)
+      printingId.value = null
+    }
+  }
 }
 
 const exportChannel = useRequestChannel()
@@ -326,6 +355,14 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
+  <Teleport to="body">
+    <div v-if="printingId !== null" class="goods-issue-print-loading" role="status" aria-live="polite" aria-busy="true" dir="rtl">
+      <div class="goods-issue-print-loading__content">
+        <span class="spinner-border text-primary" aria-hidden="true"></span>
+        <span>در حال آماده‌سازی چاپ سند خروج…</span>
+      </div>
+    </div>
+  </Teleport>
   <GoodsIssueFormModal ref="formModal" :people="people" :units="units" @saved="onSaved" />
   <GoodsIssueImportModal :model-value="importOpen" :file="importFile" @update:model-value="onImportOpenChange"
                          @imported="onImported" />
@@ -400,7 +437,7 @@ onBeforeUnmount(() => {
         </DataTableFilters>
 
         <div ref="tableContainer" class="users-table-container inventory-table-container"
-             :class="`inventory-table-container--${tableMode}`" @wheel="compact.onWheel">
+             :class="`inventory-table-container--${tableMode}`">
           <DataTable :key="tableMode" ref="table" :options="tableOptionsByMode[tableMode]"
                      class="display responsive nowrap table-striped table table-sm users-table inventory-data-table">
             <template #column-issuedAtUtc="{ cellData }"><strong class="text-black">{{ formatPersianDate(cellData) }}</strong></template>
@@ -412,7 +449,8 @@ onBeforeUnmount(() => {
             <template #column-quantity="{ cellData }"><span class="inventory-quantity-cell">{{ formatPersianNumber(cellData) }}</span></template>
             <template #column-assetNumber="{ cellData }"><span dir="ltr">{{ cellData || '—' }}</span></template>
             <template #column-exitReason="{ cellData, rowData }">
-              <span class="inventory-description-cell"
+              <span class="badge light badge-pill goods-issue-exit-reason-chip"
+                    :class="exitReasonBadges[cellData as GoodsIssueExitReason] || 'badge-dark'"
                     :title="exitReasonText(cellData as GoodsIssueExitReason, (rowData as GoodsIssueItemRow).legacyExitReason)">
                 {{ exitReasonText(cellData as GoodsIssueExitReason, (rowData as GoodsIssueItemRow).legacyExitReason) }}
               </span>
@@ -424,8 +462,15 @@ onBeforeUnmount(() => {
               <span class="badge" :class="cellData ? 'light badge-success' : 'light badge-secondary'">{{ cellData ? 'بله' : 'خیر' }}</span>
             </template>
             <template #column-itemCount="{ cellData }"><span class="badge light badge-info">{{ (cellData as GoodsIssue['items']).length }} کالا</span></template>
-            <template v-if="canChange" #column-actions="{ rowData }">
+            <template v-if="canChange || canExport" #column-actions="{ rowData }">
               <div class="d-flex justify-content-center">
+                <button v-if="canExport" class="btn users-table__role-action" type="button" title="چاپ سند خروج"
+                        aria-label="چاپ سند خروج" :disabled="printingId !== null"
+                        @click="printDocument(rowData)">
+                  <span v-if="printingId === ('goodsIssueId' in rowData ? rowData.goodsIssueId : rowData.id)"
+                        class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                  <i v-else class="las la-print" aria-hidden="true"></i>
+                </button>
                 <button v-if="canUpdate" class="btn users-table__role-action" type="button" title="ویرایش سند"
                         aria-label="ویرایش سند" :disabled="editLoading || deletingId !== null"
                         @click="openEdit(rowData)"><i class="las la-edit" aria-hidden="true"></i></button>
@@ -443,6 +488,44 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.goods-issue-exit-reason-chip {
+  max-width: 100%;
+  padding: .25rem .4rem;
+  font-size: .75rem;
+  line-height: 1.5;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.goods-issue-print-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 100100;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, .35);
+  cursor: wait;
+}
+.goods-issue-print-loading__content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.75rem 2rem;
+  margin: 1rem;
+  border-radius: .75rem;
+  background: var(--surface, #fff);
+  color: var(--text-primary, #222);
+  box-shadow: 0 .5rem 2rem rgba(0, 0, 0, .15);
+  text-align: center;
+}
+@media print {
+  .goods-issue-print-loading { display: none; }
+}
+.goods-issues-page :deep(.inventory-table-container table.dataTable > thead > tr > th),
+.goods-issues-page :deep(.inventory-table-container table.dataTable > tbody > tr > td) {
+  padding-left: 2px !important;
+  padding-right: 2px !important;
+}
 .goods-issues-page :deep(.dt-layout-table > div) {
   max-height: 50vh;
   overflow: auto !important;

@@ -10,6 +10,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Warehouse.Application.Common.Interfaces;
 using Warehouse.Application.Common.Interfaces.Repositories;
+using Warehouse.Infrastructure.Documents;
 using Warehouse.Infrastructure.Identity;
 using Warehouse.Infrastructure.Persistence;
 using Warehouse.Infrastructure.Persistence.Auditing;
@@ -102,6 +103,18 @@ public static class DependencyInjection
         services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
         services.AddScoped<IIdentityService, IdentityService>();
         services.AddScoped<IIdentitySeeder, IdentitySeeder>();
+
+        services.AddOptions<LibreOfficeOptions>()
+            .BindConfiguration(LibreOfficeOptions.SectionName)
+            .ValidateDataAnnotations()
+            .Validate(options => Path.IsPathFullyQualified(options.ExecutablePath) &&
+                                 Path.IsPathFullyQualified(options.TempRootPath),
+                "LibreOffice executable and temporary root must be absolute paths.")
+            .ValidateOnStart();
+        services.AddSingleton<LibreOfficeExcelToPdfService>();
+        services.AddSingleton<IExcelToPdfService>(provider => provider.GetRequiredService<LibreOfficeExcelToPdfService>());
+        services.AddSingleton<IGoodsIssuePdfService, GoodsIssuePdfService>();
+        services.AddHostedService<ExcelToPdfTempCleanupService>();
 
         return services;
     }

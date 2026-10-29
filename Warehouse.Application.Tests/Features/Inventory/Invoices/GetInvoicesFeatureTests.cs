@@ -42,6 +42,7 @@ public sealed class GetInvoicesFeatureTests
         var invoice = new Invoice("INV-1", null);
         invoice.UpdateDetails("  توضیحات فاکتور  ", new DateOnly(2026, 10, 20),
             InvoiceProcessingStatus.SentToFinance);
+        invoice.UpdatePrice(1250);
         var repository = CreateRepository(invoice);
         context.UnitOfWork.Repository<Invoice>().Returns(repository);
 
@@ -51,6 +52,7 @@ public sealed class GetInvoicesFeatureTests
         Assert.NotNull(result.Data);
         Assert.Equal(invoice.Id, result.Data.Id);
         Assert.Equal("INV-1", result.Data.InvoiceNumber);
+        Assert.Equal(1250, result.Data.Price);
         Assert.Equal("توضیحات فاکتور", result.Data.Description);
         Assert.Equal(new DateOnly(2026, 10, 20), result.Data.InvoiceDate);
         Assert.Equal(InvoiceProcessingStatus.SentToFinance, result.Data.ProcessingStatus);
@@ -65,6 +67,7 @@ public sealed class GetInvoicesFeatureTests
         Assert.Equal(InvoiceProcessingStatus.UnderReview, invoice.ProcessingStatus);
         invoice.UpdateDetails("شرح", new DateOnly(2026, 10, 20),
             InvoiceProcessingStatus.FinanceApproved);
+        invoice.UpdatePrice(900);
         var receipt = new GoodsReceipt(DateTimeOffset.UtcNow, null, Guid.NewGuid(), "1");
         AddInvoiceItem(receipt, invoice, "REC-2", 0);
         AddInvoiceItem(receipt, invoice, "REC-1", 1);
@@ -80,6 +83,7 @@ public sealed class GetInvoicesFeatureTests
         Assert.Equal(["REC-1", "REC-2"], summary.ReceiptNumbers);
         Assert.Equal(1, summary.ItemsWithoutReceiptCount);
         Assert.Equal("شرح", summary.Description);
+        Assert.Equal(900, summary.Price);
         Assert.Equal(new DateOnly(2026, 10, 20), summary.InvoiceDate);
         Assert.Equal(InvoiceProcessingStatus.FinanceApproved, summary.ProcessingStatus);
     }

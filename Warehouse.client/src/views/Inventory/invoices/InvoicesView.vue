@@ -94,6 +94,7 @@ const columns: Record<TableMode, ColumnsConfig[]> = {
     { data: 'invoiceNumber', name: 'invoiceNumber', title: 'شماره فاکتور', className: 'all text-center' },
     { data: 'invoiceDate', name: 'invoiceDate', title: 'تاریخ فاکتور', className: 'min-tablet-l text-center' },
     { data: 'counterparty', name: 'counterparty', title: 'طرف حساب', className: 'all' },
+    { data: 'price', name: 'price', title: 'قیمت', className: 'min-tablet-l text-center' },
     { data: 'processingStatus', name: 'processingStatus', title: 'وضعیت', className: 'min-tablet-l text-center' },
     { data: 'description', name: 'description', title: 'توضیحات', className: 'min-desktop', orderable: false },
     {
@@ -253,6 +254,7 @@ onBeforeUnmount(() => {
               <strong class="invoice-number" dir="ltr">{{ cellData }}</strong>
             </template>
             <template #column-counterparty="{ cellData }">{{ cellData || '—' }}</template>
+            <template #column-price="{ cellData }">{{ cellData == null ? '—' : formatPersianNumber(cellData) }}</template>
             <template #column-invoiceDate="{ cellData }">{{ formatPersianDate(cellData) }}</template>
             <template #column-processingStatus="{ cellData }">{{ statusLabel[cellData as keyof typeof statusLabel] ?? '—' }}</template>
             <template #column-description="{ cellData }">{{ cellData || '—' }}</template>

@@ -37,6 +37,7 @@ public sealed class InvoicesController(
         var redactedItems = result.Data.Items.Select(item => new InvoiceSummary
         {
             Id = item.Id,
+            Price = item.Price,
             InvoiceNumber = item.InvoiceNumber,
             Description = item.Description,
             InvoiceDate = item.InvoiceDate,
@@ -77,8 +78,8 @@ public sealed class InvoicesController(
             request.SupplierId, request.Description,
             request.InvoiceDate, request.ProcessingStatus,
             (request.Items ?? []).Select(item => new UpdateInvoiceReceiptItem(item.Id,
-                item.ReceiptNumber, item.GoodsReceiptConcurrencyStamp)).ToArray(),
-            canEditInvoice, canEditReceipt), cancellationToken);
+                item.ReceiptNumber, item.GoodsReceiptConcurrencyStamp, item.Price)).ToArray(),
+            canEditInvoice, canEditReceipt, request.Price), cancellationToken);
         if (result.IsSuccess) return Ok(result);
         return result.Messages.Contains(ConcurrencyMessages.Conflict, StringComparer.Ordinal)
             ? Conflict(result)

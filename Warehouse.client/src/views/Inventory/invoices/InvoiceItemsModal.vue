@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import DatePicker from 'vue3-persian-datetime-picker'
 
 import BaseModal from '@/components/BaseModal.vue'
@@ -38,9 +38,33 @@ const form = reactive({
   description: '',
   invoiceDate: '',
   processingStatus: 'UnderReview' as InvoiceProcessingStatus,
-  items: [] as Array<{ id: string; receiptNumber: string; goodsReceiptConcurrencyStamp: string }>,
+  price: null as number | null,
+  items: [] as Array<{ id: string; receiptNumber: string; price: number | null; goodsReceiptConcurrencyStamp: string }>,
 })
 const formError = ref('')
+const manualPrice = ref(false)
+const calculatedPrice = computed(() => {
+  if (!form.items.some(item => item.price != null)) return null
+  const total = form.items.reduce((sum, item) => sum + (item.price ?? 0), 0)
+  return Math.round((total + Number.EPSILON) * 100) / 100
+})
+
+function setItemPrice(index: number, event: Event): void {
+  const input = event.target as HTMLInputElement
+  form.items[index].price = input.value === '' ? null : input.valueAsNumber
+  if (!manualPrice.value) form.price = calculatedPrice.value
+}
+
+function setInvoicePrice(event: Event): void {
+  const input = event.target as HTMLInputElement
+  manualPrice.value = input.value !== ''
+  form.price = manualPrice.value ? input.valueAsNumber : calculatedPrice.value
+}
+
+function useCalculatedPrice(): void {
+  manualPrice.value = false
+  form.price = calculatedPrice.value
+}
 
 watch([() => props.editMode, () => props.details], ([editing, details]) => {
   if (!editing || !details) return
@@ -54,8 +78,11 @@ watch([() => props.editMode, () => props.details], ([editing, details]) => {
   form.items = details.items.map(item => ({
     id: item.id,
     receiptNumber: item.receiptNumber ?? '',
+    price: item.price,
     goodsReceiptConcurrencyStamp: item.goodsReceiptConcurrencyStamp,
   }))
+  form.price = details.price
+  manualPrice.value = details.price != null && details.price !== calculatedPrice.value
 })
 
 function submit(): void {
@@ -70,6 +97,7 @@ function submit(): void {
     return
   }
   emit('save', {
+    price: props.canEditInvoice ? form.price : props.details.price,
     invoiceNumber: props.canEditInvoice ? form.invoiceNumber.trim() : props.details.invoiceNumber,
     supplierId: props.canEditInvoice ? form.supplierId : props.details.supplierId,
     description: props.canEditInvoice ? (form.description.trim() || null) : props.details.description,
@@ -77,6 +105,7 @@ function submit(): void {
     processingStatus: props.canEditInvoice ? form.processingStatus : props.details.processingStatus,
     items: form.items.map(item => ({
       id: item.id,
+      price: props.canEditInvoice ? item.price : (props.details?.items.find(value => value.id === item.id)?.price ?? null),
       receiptNumber: props.canEditReceipt ? (item.receiptNumber.trim() || null) :
         (props.details?.items.find(value => value.id === item.id)?.receiptNumber ?? null),
       goodsReceiptConcurrencyStamp: item.goodsReceiptConcurrencyStamp,
@@ -127,6 +156,16 @@ function submit(): void {
             <option value="FinanceApproved">تأیید واحد مالی</option>
           </select>
         </div>
+        <div class="col-md-4 form-group">
+          <label for="invoice-price">قیمت فاکتور</label>
+          <input id="invoice-price" :value="form.price" class="form-control" type="number"
+                 min="0" max="9999999999999999.99" step="0.01" dir="ltr"
+                 :disabled="saving" :readonly="!canEditInvoice" @input="setInvoicePrice" />
+          <small class="text-muted d-block">قیمت فاکتور را می‌توانید دستی وارد یا تغییر دهید.</small>
+          <small class="text-muted d-block">جمع قیمت کل اقلام: {{ calculatedPrice == null ? '—' : formatPersianNumber(calculatedPrice) }}</small>
+          <button v-if="canEditInvoice" type="button" class="btn btn-link btn-sm p-0" :disabled="saving"
+                  @click="useCalculatedPrice">محاسبه از جمع اقلام</button>
+        </div>
         <div class="col-12 form-group">
           <label for="invoice-description">توضیحات</label>
           <textarea id="invoice-description" v-model="form.description" class="form-control"
@@ -138,6 +177,7 @@ function submit(): void {
         <div><span>طرف حساب</span><strong>{{ details.counterparty || '—' }}</strong></div>
         <div><span>تاریخ فاکتور</span><strong>{{ formatPersianDate(details.invoiceDate) }}</strong></div>
         <div><span>وضعیت فاکتور</span><strong>{{ statusLabel[details.processingStatus] ?? '—' }}</strong></div>
+        <div><span>قیمت فاکتور</span><strong>{{ details.price == null ? '—' : formatPersianNumber(details.price) }}</strong></div>
         <div class="invoice-items-modal__description"><span>توضیحات</span><strong>{{ details.description || '—' }}</strong></div>
       </div>
 
@@ -148,7 +188,7 @@ function submit(): void {
           <thead>
             <tr>
               <th class="text-center">ردیف</th><th>عنوان کالا</th><th>کد کالا</th><th>تعداد</th>
-              <th>واحد</th><th>انبار</th><th>تاریخ ورود</th><th>شماره صفحه</th><th>شماره رسید</th>
+              <th>واحد</th><th>قیمت کل قلم</th><th>انبار</th><th>تاریخ ورود</th><th>شماره صفحه</th><th>شماره رسید</th>
             </tr>
           </thead>
           <tbody>
@@ -158,6 +198,14 @@ function submit(): void {
               <td dir="ltr">{{ item.productCode }}</td>
               <td>{{ formatPersianNumber(item.quantity) }}</td>
               <td>{{ item.unitOfMeasureTitle }}</td>
+              <td>
+                <input v-if="editMode" :value="form.items[index].price"
+                       class="form-control form-control-sm invoice-items-table__price-input"
+                       type="number" min="0" max="9999999999999999.99" step="0.01" dir="ltr"
+                       :disabled="saving" :readonly="!canEditInvoice" :aria-label="`قیمت کل قلم ردیف ${index + 1}`"
+                       @input="setItemPrice(index, $event)" />
+                <span v-else>{{ item.price == null ? '—' : formatPersianNumber(item.price) }}</span>
+              </td>
               <td>{{ item.warehouseTitle }}</td>
               <td>{{ formatPersianDate(item.enteredAtUtc) }}</td>
               <td dir="ltr">{{ item.pageNumber }}</td>
@@ -203,6 +251,7 @@ function submit(): void {
 .invoice-items-table th { white-space: nowrap; }
 .invoice-items-table td { vertical-align: middle; }
 .invoice-items-table__receipt-input { min-width: 8rem; text-align: center; }
+.invoice-items-table__price-input { min-width: 9rem; }
 .invoice-items-modal__supplier :deep(.supplier-select__label) {
   color: inherit;
   font-size: inherit;

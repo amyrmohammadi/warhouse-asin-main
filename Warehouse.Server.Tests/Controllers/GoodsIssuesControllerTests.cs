@@ -43,7 +43,7 @@ public sealed class GoodsIssuesControllerTests
             "OUT-1", DateTimeOffset.UtcNow, null, Guid.NewGuid(), null,
             [new SaveGoodsIssueItemRequest(
                 Guid.NewGuid(), "P-1", 1, null, Guid.NewGuid(), null,
-                "علت خروج", null, "واحد", null)],
+                Domain.Enums.GoodsIssueExitReason.Consignment, null, "واحد", null)],
             Guid.NewGuid());
 
         var response = await controller.Update(Guid.NewGuid(), request, default);
@@ -102,7 +102,7 @@ public sealed class GoodsIssuesControllerTests
         "OUT-1", DateTimeOffset.UtcNow, null, Guid.NewGuid(), null,
         [new SaveGoodsIssueItemRequest(
             productId, "P-1", 1, null, Guid.NewGuid(), null,
-            "علت خروج", null, null, null, productTitle, unitOfMeasureId)]);
+            Domain.Enums.GoodsIssueExitReason.Consignment, null, null, null, productTitle, unitOfMeasureId)]);
 
     private static IAuthorizationService Authorize(params string[] grantedPolicies)
     {

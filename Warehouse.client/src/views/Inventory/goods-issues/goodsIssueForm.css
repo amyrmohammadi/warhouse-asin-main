@@ -32,13 +32,13 @@
   --code-width: 100px;
   --unit-width: 70px;
   --quantity-width: 70px;
-  --asset-width: 100px;
+  --asset-width: 90px;
   --destination-width: 100px;
   --shipping-location-width: 130px;
-  --reason-width: 11rem;
+  --reason-width: 70px;
   --description-width: 140px;
   --delivering-width: 110px;
-  --returnable-width: 86px;
+  --returnable-width: 70px;
   --return-width: 130px;
   border-collapse: separate;
   border-spacing: 0;

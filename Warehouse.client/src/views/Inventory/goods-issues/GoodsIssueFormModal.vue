@@ -105,7 +105,7 @@ defineExpose({ openCreate, openEdit, removeDocument })
                 <th class="goods-issue-list-reason-cell">علت خروج</th>
                 <th class="goods-issue-list-description-cell">توضیحات</th>
                 <th class="goods-issue-list-delivering-unit-cell">واحد تحویل‌دهنده</th>
-                <th class="goods-issue-list-returnable-cell">برگشت داده می‌شود</th>
+                <th class="goods-issue-list-returnable-cell">برگشت دارد</th>
                 <th class="goods-issue-list-return-cell">تاریخ عودت</th>
                 <th class="goods-issue-list-action-column" aria-label="عملیات"></th>
               </tr>
@@ -195,7 +195,7 @@ defineExpose({ openCreate, openEdit, removeDocument })
                 </td>
                 <td class="goods-issue-list-returnable-cell">
                   <input v-model="item.isReturnable" class="goods-issue-returnable-checkbox" type="checkbox"
-                         aria-label="برگشت داده می‌شود" :disabled="saving" @change="onReturnableChange(item)" />
+                         aria-label="برگشت دارد" :disabled="saving" @change="onReturnableChange(item)" />
                 </td>
                 <td class="goods-issue-list-return-cell">
                   <DatePicker v-if="item.productCode.trim() && item.isReturnable" v-model="item.returnAtLocal" type="date"
@@ -305,7 +305,7 @@ defineExpose({ openCreate, openEdit, removeDocument })
             <div class="form-group goods-issue-returnable-field">
               <label class="goods-issue-returnable-label">
                 <input v-model="item.isReturnable" type="checkbox" :disabled="saving" @change="onReturnableChange(item)" />
-                برگشت داده می‌شود
+                برگشت دارد
               </label>
             </div>
             <div v-if="item.isReturnable" class="form-group"><label>تاریخ عودت</label>
@@ -336,7 +336,7 @@ defineExpose({ openCreate, openEdit, removeDocument })
 .goods-issue-modal .modal-dialog
  { margin: 1.5rem auto;
    max-height: 85vh; 
-   max-width: 1450px; 
+   max-width: 1550px; 
    width: calc(100vw - 3rem);
    }
 @media (max-width: 575px) {

@@ -7,6 +7,7 @@
   </Project>
   <Project Path="Warehouse.Domain/Warehouse.Domain.csproj" />
   <Project Path="Warehouse.Infrastructure/Warehouse.Infrastructure.csproj" />
+  <Project Path="Warehouse.Infrastructure.Tests/Warehouse.Infrastructure.Tests.csproj" />
   <Project Path="Warehouse.IntegrationTests/Warehouse.IntegrationTests.csproj" />
   <Project Path="Warehouse.Server/Warehouse.Server.csproj" />
   <Project Path="Warehouse.Server.Tests/Warehouse.Server.Tests.csproj" />

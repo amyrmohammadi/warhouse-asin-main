@@ -178,6 +178,7 @@ public sealed class ApplicationDbContext
             entity.HasKey(invoice => invoice.Id);
             entity.Property(invoice => invoice.InvoiceNumber).HasMaxLength(100).IsRequired();
             entity.Property(invoice => invoice.Description).HasMaxLength(1000);
+            entity.Property(invoice => invoice.Price).HasPrecision(18, 2);
             entity.Property(invoice => invoice.InvoiceDate).HasColumnType("date");
             entity.Property(invoice => invoice.ProcessingStatus)
                 .HasConversion<string>()
@@ -266,6 +267,7 @@ public sealed class ApplicationDbContext
             entity.ToTable("GoodsReceiptItems", "Business");
             entity.HasKey(item => item.Id);
             entity.Property(item => item.Quantity).HasPrecision(18, 3).IsRequired();
+            entity.Property(item => item.Price).HasPrecision(18, 2);
             entity.Property(item => item.SortOrder).IsRequired();
             entity.Property(item => item.RequestNumber).HasMaxLength(100);
             entity.Property(item => item.Description).HasMaxLength(1000);
