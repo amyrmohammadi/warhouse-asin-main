@@ -177,6 +177,11 @@ internal sealed class ImportGoodsReceiptsCommandHandler(
                         await invoiceRepository.AddAsync(invoice, token);
                         invoicesByNumberAndSupplier.Add(invoiceKey, invoice);
                     }
+                    if (invoice.IsLocked)
+                    {
+                        await unitOfWork.RollBackTransaction(token);
+                        return Result<GoodsReceiptImportSummary>.Error($"فاکتور «{invoice.InvoiceNumber}»: {Invoice.LockedMessage}");
+                    }
                 }
 
                 // فقط یک آیتم برای هر سند
@@ -191,6 +196,9 @@ internal sealed class ImportGoodsReceiptsCommandHandler(
                     row.Source.Description,
                     0
                 );
+                if (row.InvoiceStatus != Domain.Enums.InvoiceStatus.HasInvoice && row.SupplierId.HasValue)
+                    receipt.Items.Last().SetSupplier(await unitOfWork.Repository<Supplier>()
+                        .GetByIdAsync(row.SupplierId.Value, token));
 
                 await unitOfWork
                     .Repository<GoodsReceipt>()

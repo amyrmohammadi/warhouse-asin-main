@@ -3,8 +3,9 @@ using Warehouse.Application.Common.Models.MasterData;
 
 namespace Warehouse.Application.Common.Models.Inventory;
 
-public sealed class GoodsReceiptSummary
+public sealed record GoodsReceiptSummary
 {
+    public bool IsLocked { get; init; }
     public Guid Id { get; init; }
 
     public Guid ConcurrencyStamp { get; init; }
@@ -22,7 +23,7 @@ public sealed class GoodsReceiptSummary
     public IReadOnlyCollection<GoodsReceiptItemSummary> Items { get; init; } = [];
 }
 
-public sealed class GoodsReceiptItemSummary
+public sealed record GoodsReceiptItemSummary
 {
     public Guid Id { get; init; }
 
@@ -68,8 +69,9 @@ public sealed record GoodsReceiptListResult(
     int PageNumber,
     int PageSize);
 
-public sealed class GoodsReceiptItemRowSummary
+public sealed record GoodsReceiptItemRowSummary
 {
+    public bool IsLocked { get; init; }
     public Guid Id { get; init; }
 
     public Guid? GoodsIssueItemId { get; init; }

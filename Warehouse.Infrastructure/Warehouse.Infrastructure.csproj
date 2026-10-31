@@ -29,6 +29,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Documents\Templates\GoodsIssuePermit.xlsx" />
+    <EmbeddedResource Include="Documents\Templates\InvoiceFinanceDelivery.xlsx" />
   </ItemGroup>
 
 </Project>

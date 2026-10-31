@@ -20,11 +20,16 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
     internal async Task<Result<GoodsReceiptSummary>> SaveAsync(
         CreateGoodsReceiptCommand request, CancellationToken cancellationToken,
         GoodsReceipt? existing = null, bool updateInitial = true, bool updateInvoice = true,
-        bool updateReceipt = true)
+        bool updateReceipt = true, bool updateWarehouse = false)
     {
         await unitOfWork.BeginSerializableTransaction(cancellationToken);
         try
         {
+            if (existing is not null && await Invoices.InvoiceEditGuard.IsReceiptLockedAsync(unitOfWork, existing.Id, cancellationToken))
+            {
+                await unitOfWork.RollBackTransaction(cancellationToken);
+                return Result<GoodsReceiptSummary>.Error(Invoice.LockedMessage);
+            }
             var receiptRepository = unitOfWork.Repository<GoodsReceipt>();
             var normalizedPageNumber = request.PageNumber.Trim();
             var duplicatePageNumberCount = await receiptRepository.CountAsync(
@@ -75,6 +80,18 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
             {
                 var source = pair.Second;
                 Invoice? invoice = null;
+                Supplier? supplier = null;
+                if (updateInvoice && source.InvoiceStatus != Domain.Enums.InvoiceStatus.HasInvoice)
+                {
+                    var resolvedSupplier = await ResolveSupplierAsync(
+                        source.SupplierId, source.SupplierTitle, cancellationToken);
+                    if (resolvedSupplier.Error is not null)
+                    {
+                        await unitOfWork.RollBackTransaction(cancellationToken);
+                        return Result<GoodsReceiptSummary>.Error(resolvedSupplier.Error);
+                    }
+                    supplier = resolvedSupplier.Supplier;
+                }
                 if (updateInvoice &&
                     source.InvoiceStatus == Domain.Enums.InvoiceStatus.HasInvoice)
                 {
@@ -94,13 +111,19 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                     }
 
                     invoice = resolvedInvoice.Invoice!;
+                    if (invoice.IsLocked)
+                    {
+                        await unitOfWork.RollBackTransaction(cancellationToken);
+                        return Result<GoodsReceiptSummary>.Error(Invoice.LockedMessage);
+                    }
                 }
                 preparedItems.Add(new PreparedItem(
                     pair.First,
                     warehousesById[source.WarehouseId],
                     source.InvoiceStatus,
                     invoice,
-                    source.ReceiptNumber));
+                    source.ReceiptNumber,
+                    supplier));
             }
 
             var receipt = existing ?? new GoodsReceipt(
@@ -206,6 +229,7 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                         item.Product.Quantity, item.Product.RequestNumber, item.Product.Description,
                         sortOrder);
                     receipt.Items.Last().SetGoodsIssueItem(linkedIssues[sortOrder]);
+                    receipt.Items.Last().SetSupplier(item.Supplier);
                     if (existing is not null)
                         await itemRepository.AddAsync(receipt.Items.Last(), cancellationToken);
                     continue;
@@ -213,7 +237,7 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
 
                 var tracked = await itemRepository.GetByIdAsync(old.Id, cancellationToken);
                 tracked!.Update(
-                    updateInitial ? item.Warehouse.Id : old.WarehouseId,
+                    updateWarehouse ? item.Warehouse.Id : old.WarehouseId,
                     updateInvoice ? item.InvoiceStatus : old.InvoiceStatus,
                     updateInvoice ? item.Invoice?.Id : old.InvoiceId,
                     updateInvoice ? item.Invoice : old.Invoice,
@@ -222,6 +246,8 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                     updateInitial ? item.Product.RequestNumber : old.RequestNumber,
                     updateInitial ? item.Product.Description : old.Description,
                     updateInitial ? sortOrder : old.SortOrder);
+                if (updateInvoice)
+                    tracked.SetSupplier(item.Supplier);
                 if (updateInitial)
                     tracked.SetGoodsIssueItem(linkedIssues[sortOrder]);
             }
@@ -553,5 +579,6 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
         StorageWarehouse Warehouse,
         Domain.Enums.InvoiceStatus? InvoiceStatus,
         Invoice? Invoice,
-        string? ReceiptNumber);
+        string? ReceiptNumber,
+        Supplier? Supplier);
 }

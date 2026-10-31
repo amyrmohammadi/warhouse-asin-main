@@ -30,6 +30,12 @@ public static class PermissionPolicyNames
 
     public static class Inventory
     {
+        public const string GoodsReceiptsWarehouseUpdate = nameof(AppPermission.GoodsReceiptsWarehouseUpdate);
+        public const string GoodsReceiptsWarehouseRead = nameof(AppPermission.GoodsReceiptsWarehouseRead);
+        public const string GoodsReceiptsInvoiceStatusRead = nameof(AppPermission.GoodsReceiptsInvoiceStatusRead);
+        public const string GoodsReceiptsCounterpartyRead = nameof(AppPermission.GoodsReceiptsCounterpartyRead);
+        public const string GoodsReceiptsInvoiceNumberRead = nameof(AppPermission.GoodsReceiptsInvoiceNumberRead);
+        public const string GoodsReceiptsReceiptNumberRead = nameof(AppPermission.GoodsReceiptsReceiptNumberRead);
         public const string GoodsReceiptsRead = nameof(AppPermission.GoodsReceiptsRead);
         public const string GoodsReceiptHistoryRead = nameof(AppPermission.GoodsReceiptHistoryRead);
         public const string GoodsReceiptsInitialEntry = nameof(AppPermission.GoodsReceiptsInitialEntry);
@@ -50,6 +56,8 @@ public static class PermissionPolicyNames
         public const string GoodsIssuesFinalize = nameof(AppPermission.GoodsIssuesFinalize);
         public const string GoodsIssuesReopen = nameof(AppPermission.GoodsIssuesReopen);
         public const string InvoicesRead = nameof(AppPermission.InvoicesRead);
+        public const string InvoicesPrint = nameof(AppPermission.InvoicesPrint);
+        public const string InvoicesReopen = nameof(AppPermission.InvoicesReopen);
         public const string InvoicesMissingReceiptCountRead = nameof(AppPermission.InvoicesMissingReceiptCountRead);
     }
 
@@ -82,6 +90,12 @@ public static class PermissionPolicyNames
             "ورود کالا",
             [
                 new(Inventory.GoodsReceiptsRead, "مشاهده تاریخچه ورود کالا"),
+                new(Inventory.GoodsReceiptsWarehouseUpdate, "تغییر انبار کالای ورودی"),
+                new(Inventory.GoodsReceiptsWarehouseRead, "مشاهده ستون انبار ورودی کالا"),
+                new(Inventory.GoodsReceiptsInvoiceStatusRead, "مشاهده ستون وضعیت فاکتور ورودی کالا"),
+                new(Inventory.GoodsReceiptsCounterpartyRead, "مشاهده ستون طرف حساب ورودی کالا"),
+                new(Inventory.GoodsReceiptsInvoiceNumberRead, "مشاهده ستون شماره فاکتور ورودی کالا"),
+                new(Inventory.GoodsReceiptsReceiptNumberRead, "مشاهده ستون شماره رسید ورودی کالا"),
                 new(Inventory.GoodsReceiptHistoryRead, "مشاهده تاریخچه تغییرات هر کالای ورودی"),
                 new(Inventory.GoodsReceiptsInitialEntry, "ورود اولیه کالا"),
                 new(Inventory.GoodsReceiptsReceiptInvoiceOperations, "ثبت و ویرایش فاکتور"),
@@ -111,6 +125,8 @@ public static class PermissionPolicyNames
             "فاکتورها",
             [
                 new(Inventory.InvoicesRead, "مشاهده فاکتورها و کالاهای آن‌ها"),
+                new(Inventory.InvoicesPrint, "چاپ گروهی فاکتورها"),
+                new(Inventory.InvoicesReopen, "برگشت فاکتور از ارسال یا تأیید مالی به در حال رسیدگی"),
                 new(Inventory.InvoicesMissingReceiptCountRead, "مشاهده تعداد اقلام بدون رسید فاکتورها")
             ]),
         new(

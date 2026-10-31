@@ -30,11 +30,30 @@ internal sealed class UpdateInvoiceDetailsCommandHandler(IUnitOfWork<Guid> unitO
         UpdateInvoiceDetailsCommand request,
         CancellationToken cancellationToken)
     {
+        await unitOfWork.BeginSerializableTransaction(cancellationToken);
+        try
+        {
+            var result = await ApplyAsync(request, cancellationToken);
+            if (result.IsSuccess) await unitOfWork.CommitTransaction(cancellationToken);
+            else await unitOfWork.RollBackTransaction(cancellationToken);
+            return result;
+        }
+        catch
+        {
+            await unitOfWork.RollBackTransaction(cancellationToken);
+            throw;
+        }
+    }
+
+    private async Task<Result> ApplyAsync(
+        UpdateInvoiceDetailsCommand request, CancellationToken cancellationToken)
+    {
         var invoice = await unitOfWork.Repository<Invoice>()
             .GetByIdAsync(request.InvoiceId, cancellationToken);
         if (invoice is null)
             return Result.Error("فاکتور پیدا نشد.");
 
+        if (invoice.IsLocked) return Result.Error(Invoice.LockedMessage);
         invoice.UpdateDetails(request.Description, request.InvoiceDate, request.ProcessingStatus);
         await unitOfWork.SaveAsync(cancellationToken);
         return Result.Success();

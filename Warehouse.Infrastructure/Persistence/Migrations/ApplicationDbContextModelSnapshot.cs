@@ -382,6 +382,9 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                     b.Property<int>("SortOrder")
                         .HasColumnType("int");
 
+                    b.Property<Guid?>("SupplierId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<Guid>("WarehouseId")
                         .HasColumnType("uniqueidentifier");
 
@@ -392,6 +395,8 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                     b.HasIndex("InvoiceId");
 
                     b.HasIndex("ProductId");
+
+                    b.HasIndex("SupplierId");
 
                     b.HasIndex("WarehouseId");
 
@@ -405,6 +410,11 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetimeoffset")
+                        .HasDefaultValueSql("SYSUTCDATETIME()");
 
                     b.Property<string>("Description")
                         .HasMaxLength(1000)
@@ -441,6 +451,8 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("SupplierId");
+
+                    b.HasIndex("CreatedAtUtc", "Id");
 
                     b.HasIndex("InvoiceNumber", "SupplierId", "ReceiptDate")
                         .IsUnique()
@@ -936,6 +948,11 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("Warehouse.Domain.Entities.Supplier", "Supplier")
+                        .WithMany()
+                        .HasForeignKey("SupplierId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Warehouse.Domain.Entities.StorageWarehouse", "Warehouse")
                         .WithMany("GoodsReceiptItems")
                         .HasForeignKey("WarehouseId")
@@ -949,6 +966,8 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                     b.Navigation("Invoice");
 
                     b.Navigation("Product");
+
+                    b.Navigation("Supplier");
 
                     b.Navigation("Warehouse");
                 });

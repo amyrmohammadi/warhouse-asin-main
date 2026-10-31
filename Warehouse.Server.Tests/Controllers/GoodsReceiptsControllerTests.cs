@@ -88,6 +88,8 @@ public sealed class GoodsReceiptsControllerTests
     {
         var sender = Substitute.For<ISender>();
         var auth = Substitute.For<IAuthorizationService>();
+        auth.AuthorizeAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<object?>(), Arg.Any<string>())
+            .Returns(AuthorizationResult.Success());
         var requests = new List<GetGoodsReceiptItemRowsQuery>();
         var firstBatch = Enumerable.Range(1, 500)
             .Select(index => ExportRow($"کالای {index}"))
@@ -178,8 +180,9 @@ public sealed class GoodsReceiptsControllerTests
         var sender = Substitute.For<ISender>();
         var auth = Substitute.For<IAuthorizationService>();
         auth.AuthorizeAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<object?>(), Arg.Any<string>())
-            .Returns(call => call.Arg<string>() == PermissionPolicyNames.Inventory.GoodsReceiptsReceiptRegistration &&
-                receiptPermission ? AuthorizationResult.Success() : AuthorizationResult.Failed());
+            .Returns(call => (call.Arg<string>() == PermissionPolicyNames.Inventory.GoodsReceiptsReceiptNumberRead ||
+                call.Arg<string>() == PermissionPolicyNames.Inventory.GoodsReceiptsReceiptRegistration && receiptPermission)
+                ? AuthorizationResult.Success() : AuthorizationResult.Failed());
         sender.Send(Arg.Any<CreateGoodsReceiptCommand>(), Arg.Any<CancellationToken>())
             .Returns(Result<GoodsReceiptSummary>.Success(new GoodsReceiptSummary()));
         var controller = new GoodsReceiptsController(sender, auth)
@@ -209,7 +212,12 @@ public sealed class GoodsReceiptsControllerTests
         var sender = Substitute.For<ISender>();
         var auth = Substitute.For<IAuthorizationService>();
         auth.AuthorizeAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<object?>(), Arg.Any<string>())
-            .Returns(call => (call.Arg<string>() == PermissionPolicyNames.Inventory.GoodsReceiptsInitialEntry ? initial :
+            .Returns(call => (call.Arg<string>() is
+                PermissionPolicyNames.Inventory.GoodsReceiptsInvoiceStatusRead or
+                PermissionPolicyNames.Inventory.GoodsReceiptsCounterpartyRead or
+                PermissionPolicyNames.Inventory.GoodsReceiptsInvoiceNumberRead or
+                PermissionPolicyNames.Inventory.GoodsReceiptsReceiptNumberRead ? true :
+                call.Arg<string>() == PermissionPolicyNames.Inventory.GoodsReceiptsInitialEntry ? initial :
                 call.Arg<string>() == PermissionPolicyNames.Inventory.GoodsReceiptsReceiptInvoiceOperations ? invoice :
                 call.Arg<string>() == PermissionPolicyNames.Inventory.GoodsReceiptsReceiptRegistration && receipt)
                 ? AuthorizationResult.Success() : AuthorizationResult.Failed());

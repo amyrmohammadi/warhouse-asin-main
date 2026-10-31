@@ -10,6 +10,50 @@ namespace Warehouse.Application.Tests.Features.Inventory.GoodsReceipts;
 
 public sealed class UpdateGoodsReceiptTests
 {
+    [Theory]
+    [InlineData(null)]
+    [InlineData(InvoiceStatus.DoesNotHave)]
+    [InlineData(InvoiceStatus.HasInvoice)]
+    public async Task Update_StoresCounterpartyOnItemOnlyWithoutInvoice(InvoiceStatus? status)
+    {
+        await using var context = new ApplicationTestContext();
+        var warehouse = new StorageWarehouse("انبار", null);
+        var person = new Person("تحویل‌دهنده", "");
+        var unit = new UnitOfMeasure("عدد", null);
+        var product = new Product("کالا", "P-1", unit.Id, null);
+        var supplier = new Supplier("طرف حساب", null);
+        typeof(Product).GetProperty(nameof(Product.UnitOfMeasure))!.SetValue(product, unit);
+        var receipt = new GoodsReceipt(DateTimeOffset.UtcNow, null, person.Id, "1");
+        typeof(GoodsReceipt).GetProperty(nameof(GoodsReceipt.Deliverer))!.SetValue(receipt, person);
+        receipt.AddItem(product.Id, warehouse.Id, null, null, null, 1, null, null, 0);
+        var item = receipt.Items.Single();
+        item.SetSupplier(new Supplier("طرف حساب قبلی", null));
+        typeof(GoodsReceiptItem).GetProperty(nameof(GoodsReceiptItem.Product))!.SetValue(item, product);
+        typeof(GoodsReceiptItem).GetProperty(nameof(GoodsReceiptItem.Warehouse))!.SetValue(item, warehouse);
+        var invoice = new Invoice("INV-1", supplier.Id, Invoice.GetReceiptDate(receipt.EnteredAtUtc));
+        typeof(Invoice).GetProperty(nameof(Invoice.Supplier))!.SetValue(invoice, supplier);
+        Register(context, new MemoryRepository<StorageWarehouse>([warehouse]));
+        Register(context, new MemoryRepository<Person>([person]));
+        Register(context, new MemoryRepository<Product>([product]));
+        Register(context, new MemoryRepository<UnitOfMeasure>([unit]));
+        Register(context, new MemoryRepository<Supplier>([supplier]));
+        Register(context, new MemoryRepository<Invoice>([invoice]));
+        Register(context, new MemoryRepository<GoodsReceipt>([receipt]));
+        Register(context, new MemoryRepository<GoodsReceiptItem>([item]));
+        var values = new CreateGoodsReceiptCommand(receipt.EnteredAtUtc, null, person.Id, null, "1",
+            [new CreateGoodsReceiptItem(product.Id, null, null, null, warehouse.Id, status,
+                status == InvoiceStatus.HasInvoice ? "INV-1" : null, supplier.Id, null, null, 1, null, null)]);
+
+        var result = await context.Sender.Send(new UpdateGoodsReceiptCommand(
+            receipt.Id, values, false, true, false, receipt.ConcurrencyStamp));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(status == InvoiceStatus.HasInvoice ? null : supplier.Id, item.SupplierId);
+        Assert.Equal(status == InvoiceStatus.HasInvoice ? invoice.Id : null, item.InvoiceId);
+        Assert.Equal(supplier.Id, result.Data!.Items.Single().SupplierId);
+        Assert.Equal(supplier.Title, result.Data.Items.Single().Counterparty);
+    }
+
     [Fact]
     public async Task Create_WithDuplicatePageNumber_IsRejectedWithMergeGuidance()
     {
@@ -105,17 +149,20 @@ public sealed class UpdateGoodsReceiptTests
     }
 
     [Theory]
-    [InlineData(true, false, false, InvoiceStatus.HasInvoice)]
-    [InlineData(false, true, false, InvoiceStatus.HasInvoice)]
-    [InlineData(false, false, true, InvoiceStatus.HasInvoice)]
-    [InlineData(true, true, true, InvoiceStatus.HasInvoice)]
-    [InlineData(false, true, true, null)]
-    [InlineData(true, false, true, null)]
+    [InlineData(true, false, false, InvoiceStatus.HasInvoice, false)]
+    [InlineData(false, true, false, InvoiceStatus.HasInvoice, false)]
+    [InlineData(false, false, true, InvoiceStatus.HasInvoice, false)]
+    [InlineData(true, true, true, InvoiceStatus.HasInvoice, false)]
+    [InlineData(false, true, true, null, false)]
+    [InlineData(true, false, true, null, false)]
+    [InlineData(false, false, false, InvoiceStatus.HasInvoice, true)]
+    [InlineData(true, false, false, InvoiceStatus.HasInvoice, true)]
     public async Task Update_OnlyChangesAuthorizedSections_AndPreservesIds(
-        bool initial, bool invoice, bool receiptPermission, InvoiceStatus? status)
+        bool initial, bool invoice, bool receiptPermission, InvoiceStatus? status, bool warehousePermission)
     {
         await using var context = new ApplicationTestContext();
         var warehouse = new StorageWarehouse("انبار", null);
+        var requestedWarehouse = new StorageWarehouse("انبار جدید", null);
         var person = new Person("تحویل دهنده", "");
         var unit = new UnitOfMeasure("عدد", null);
         var product = new Product("کالا", "001", unit.Id, null);
@@ -131,7 +178,7 @@ public sealed class UpdateGoodsReceiptTests
         typeof(GoodsReceiptItem).GetProperty(nameof(GoodsReceiptItem.Warehouse))!.SetValue(item, warehouse);
         var itemId = item.Id;
 
-        Register(context, new MemoryRepository<StorageWarehouse>([warehouse]));
+        Register(context, new MemoryRepository<StorageWarehouse>([warehouse, requestedWarehouse]));
         Register(context, new MemoryRepository<Person>([person]));
         Register(context, new MemoryRepository<Product>([product]));
         Register(context, new MemoryRepository<UnitOfMeasure>([unit]));
@@ -143,14 +190,14 @@ public sealed class UpdateGoodsReceiptTests
         var values = new CreateGoodsReceiptCommand(
             receipt.EnteredAtUtc.AddDays(1), "new", person.Id, null, "2",
             [new CreateGoodsReceiptItem(
-                product.Id, null, null, null, warehouse.Id, status,
+                product.Id, null, null, null, requestedWarehouse.Id, status,
                 status.HasValue ? "NEW-INVOICE" : null, null, null, "NEW-RECEIPT",
                 7, "new-request", "new-description")]);
         var originalStamp = receipt.ConcurrencyStamp;
 
         var result = await context.Sender.Send(
             new UpdateGoodsReceiptCommand(
-                receipt.Id, values, initial, invoice, receiptPermission, originalStamp));
+                receipt.Id, values, initial, invoice, receiptPermission, originalStamp, warehousePermission));
 
         Assert.True(result.IsSuccess);
         Assert.NotEqual(originalStamp, receipt.ConcurrencyStamp);
@@ -160,6 +207,7 @@ public sealed class UpdateGoodsReceiptTests
         Assert.Equal(initial ? "2" : "1", receipt.PageNumber);
         Assert.Equal(initial ? 7 : 2, item.Quantity);
         Assert.Equal(itemId, item.Id);
+        Assert.Equal(warehousePermission ? requestedWarehouse.Id : warehouse.Id, item.WarehouseId);
         Assert.Equal(invoice ? status : InvoiceStatus.HasInvoice, item.InvoiceStatus);
         Assert.Equal(invoice ? (status.HasValue ? "NEW-INVOICE" : null) : "OLD-INVOICE",
             invoice ? item.Invoice?.InvoiceNumber : oldInvoice.InvoiceNumber);

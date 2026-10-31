@@ -5,6 +5,7 @@ namespace Warehouse.Application.Common.Models.Inventory;
 
 public sealed class InvoiceSummary
 {
+    public bool IsLocked => ProcessingStatus != InvoiceProcessingStatus.UnderReview;
     public decimal? Price { get; init; }
 
     public Guid Id { get; init; }
@@ -59,6 +60,7 @@ public sealed class InvoiceItemSummary
 
 public sealed class InvoiceDetails
 {
+    public bool IsLocked => ProcessingStatus != InvoiceProcessingStatus.UnderReview;
     public decimal? Price { get; init; }
 
     public Guid Id { get; init; }

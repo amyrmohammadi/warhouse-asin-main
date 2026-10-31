@@ -11,7 +11,7 @@ namespace Warehouse.Application.Features.Inventory.GoodsReceipts.Commands.Update
 
 public sealed record UpdateGoodsReceiptCommand(Guid Id, CreateGoodsReceiptCommand Values,
     bool CanEditInitialEntry, bool CanEditInvoice, bool CanEditReceipt,
-    Guid ConcurrencyStamp = default)
+    Guid ConcurrencyStamp = default, bool CanEditWarehouse = false)
     : IRequest<Result<GoodsReceiptSummary>>;
 
 internal sealed class UpdateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfWork)
@@ -19,12 +19,14 @@ internal sealed class UpdateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
 {
     public async Task<Result<GoodsReceiptSummary>> Handle(UpdateGoodsReceiptCommand request, CancellationToken cancellationToken)
     {
-        if (!request.CanEditInitialEntry && !request.CanEditInvoice && !request.CanEditReceipt)
+        if (!request.CanEditInitialEntry && !request.CanEditInvoice && !request.CanEditReceipt && !request.CanEditWarehouse)
             return Result<GoodsReceiptSummary>.Error("مجوز ویرایش سند را ندارید.");
         var receipt = await unitOfWork.Repository<GoodsReceipt>()
                       .GetByIdAsync(request.Id, cancellationToken);
         if (receipt is null) return Result<GoodsReceiptSummary>
                       .Error("سند ورود کالا پیدا نشد.");
+        if (await Invoices.InvoiceEditGuard.IsReceiptLockedAsync(unitOfWork, receipt.Id, cancellationToken))
+            return Result<GoodsReceiptSummary>.Error(Invoice.LockedMessage);
         if (!receipt.TryAdvanceConcurrencyStamp(request.ConcurrencyStamp))
             return Result<GoodsReceiptSummary>.Error(ConcurrencyMessages.Conflict);
 
@@ -69,12 +71,13 @@ internal sealed class UpdateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                         requested = candidates.Dequeue();
                     }
                     return new CreateGoodsReceiptItem(
-                        item.ProductId, null, null, null, item.WarehouseId,
+                        item.ProductId, null, null, null,
+                        request.CanEditWarehouse ? requested?.WarehouseId ?? item.WarehouseId : item.WarehouseId,
                         request.CanEditInvoice ? requested?.InvoiceStatus : item.InvoiceStatus,
                         request.CanEditInvoice ? requested?.InvoiceNumber :
                             item.InvoiceId.HasValue ? invoicesById[item.InvoiceId.Value].InvoiceNumber : null,
                         request.CanEditInvoice ? requested?.SupplierId :
-                            item.InvoiceId.HasValue ? invoicesById[item.InvoiceId.Value].SupplierId : null,
+                            item.InvoiceId.HasValue ? invoicesById[item.InvoiceId.Value].SupplierId : item.SupplierId,
                         request.CanEditInvoice ? requested?.SupplierTitle : null,
                         request.CanEditReceipt ? requested?.ReceiptNumber : item.ReceiptNumber,
                         item.Quantity, item.RequestNumber, item.Description);
@@ -105,15 +108,30 @@ internal sealed class UpdateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                             : null,
                         SupplierId = request.CanEditInvoice ? item.SupplierId : stored?.InvoiceId is Guid supplierInvoiceId
                             ? invoicesById[supplierInvoiceId].SupplierId
-                            : null,
+                            : stored?.SupplierId,
                         SupplierTitle = request.CanEditInvoice ? item.SupplierTitle : null,
                         ReceiptNumber = request.CanEditReceipt ? item.ReceiptNumber : stored?.ReceiptNumber
                     };
                 }).ToArray()
             };
         }
+        // Preserve warehouses on existing rows even when the caller can edit initial-entry details.
+        if (!request.CanEditWarehouse)
+        {
+            var warehousesByProduct = storedItems.GroupBy(item => item.ProductId)
+                .ToDictionary(group => group.Key, group => new Queue<GoodsReceiptItem>(group));
+            values = values with
+            {
+                Items = values.Items.Select(item =>
+                {
+                    if (item.ProductId is Guid productId && warehousesByProduct.TryGetValue(productId, out var stored) && stored.Count > 0)
+                        return item with { WarehouseId = stored.Dequeue().WarehouseId };
+                    return item;
+                }).ToArray()
+            };
+        }
         await new CreateGoodsReceiptCommandValidator().ValidateAndThrowAsync(values, cancellationToken);
         return await new CreateGoodsReceiptCommandHandler(unitOfWork).SaveAsync(values, cancellationToken,
-            receipt, request.CanEditInitialEntry, request.CanEditInvoice, request.CanEditReceipt);
+            receipt, request.CanEditInitialEntry, request.CanEditInvoice, request.CanEditReceipt, request.CanEditWarehouse);
     }
 }

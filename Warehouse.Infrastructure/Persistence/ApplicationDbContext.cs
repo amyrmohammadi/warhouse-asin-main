@@ -177,6 +177,8 @@ public sealed class ApplicationDbContext
             entity.ToTable("Invoices", "Business");
             entity.HasKey(invoice => invoice.Id);
             entity.Property(invoice => invoice.InvoiceNumber).HasMaxLength(100).IsRequired();
+            entity.Property(invoice => invoice.CreatedAtUtc).HasDefaultValueSql("SYSUTCDATETIME()").IsRequired();
+            entity.HasIndex(invoice => new { invoice.CreatedAtUtc, invoice.Id });
             entity.Property(invoice => invoice.Description).HasMaxLength(1000);
             entity.Property(invoice => invoice.Price).HasPrecision(18, 2);
             entity.Property(invoice => invoice.InvoiceDate).HasColumnType("date");
@@ -298,6 +300,10 @@ public sealed class ApplicationDbContext
             entity.HasOne(item => item.Invoice)
                 .WithMany(invoice => invoice.GoodsReceiptItems)
                 .HasForeignKey(item => item.InvoiceId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(item => item.Supplier)
+                .WithMany()
+                .HasForeignKey(item => item.SupplierId)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.GoodsIssueItem)
                 .WithMany(issueItem => issueItem.GoodsReceiptItems)

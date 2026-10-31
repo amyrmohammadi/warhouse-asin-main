@@ -3,6 +3,7 @@ import { expireSession, getSession } from '@/services/auth'
 import type { TextFilterValue } from '@/types/dataTableFilters'
 
 export interface InvoiceSummary {
+  isLocked: boolean
   price: number | null
   id: string
   invoiceNumber: string
@@ -153,6 +154,21 @@ export function updateInvoice(
   )
 }
 
+export function printInvoices(invoiceIds: string[], sendToFinance: boolean, signal?: AbortSignal): Promise<Blob> {
+  return request('/endpoint/inventory/invoices/print', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ invoiceIds, sendToFinance }), signal,
+  }, 'آماده‌سازی چاپ فاکتورها انجام نشد.', true)
+}
+
+export function changeInvoiceStatus(invoiceId: string, status: InvoiceProcessingStatus,
+  expectedStatus: InvoiceProcessingStatus, signal?: AbortSignal): Promise<InvoiceDetails> {
+  return request(`/endpoint/inventory/invoices/${encodeURIComponent(invoiceId)}/status`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status, expectedStatus }), signal,
+  }, 'تغییر وضعیت فاکتور انجام نشد.')
+}
+
 function appendTextFilter(
   query: URLSearchParams,
   key: string,
@@ -163,7 +179,7 @@ function appendTextFilter(
   query.set(`${key}.value`, filter.value.trim())
 }
 
-async function request<T>(path: string, init: RequestInit, fallback: string): Promise<T> {
+async function request<T>(path: string, init: RequestInit, fallback: string, pdf = false): Promise<T> {
   const session = getSession()
   if (!session?.accessToken) throw new InvoicesApiError('نشست شما منقضی شده است.', 401)
 
@@ -179,6 +195,8 @@ async function request<T>(path: string, init: RequestInit, fallback: string): Pr
   }
 
   if (response.status === 401) expireSession()
+  if (pdf && response.ok && response.headers.get('Content-Type')?.includes('application/pdf'))
+    return await response.blob() as T
   let payload: ApiResult<T> | { title?: string; detail?: string; errors?: Record<string, string[]> } | null = null
   try { payload = await response.json() as typeof payload } catch { /* پاسخ بدون بدنه */ }
   const result = payload as ApiResult<T> | null
@@ -187,7 +205,7 @@ async function request<T>(path: string, init: RequestInit, fallback: string): Pr
   const problem = payload as { title?: string; detail?: string; errors?: Record<string, string[]> } | null
   const validationMessage = Object.values(problem?.errors ?? {}).flat().find(Boolean)
   throw new InvoicesApiError(
-    result?.messages?.find(Boolean)
+    (pdf ? result?.messages?.filter(Boolean).join('\n') : result?.messages?.find(Boolean))
       ?? validationMessage
       ?? problem?.detail
       ?? problem?.title

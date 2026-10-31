@@ -8,6 +8,7 @@ namespace Warehouse.Application.Features.Inventory.GoodsReceipts.Queries.GetGood
 public sealed record GetGoodsReceiptsQuery
     : DataTableParameters, IRequest<Result<GoodsReceiptListResult>>
 {
+    public GoodsReceiptColumnAccess ColumnAccess { get; init; } = GoodsReceiptColumnAccess.All;
     public DateFilter? EnteredAt { get; init; }
 
     public TextFilter? PageNumberFilter { get; init; }

@@ -17,11 +17,91 @@ using Warehouse.Application.Features.Inventory.Invoices.Queries.GetInvoices;
 using Warehouse.Server.Controllers;
 using Warehouse.Server.Contracts.Inventory;
 using Warehouse.Domain.Enums;
+using Warehouse.Application.Features.Inventory.Invoices.Commands.PrintInvoices;
+using Warehouse.Application.Features.Inventory.Invoices.Commands.ChangeInvoiceStatus;
 
 namespace Warehouse.Server.Tests.Controllers;
 
 public sealed class InvoicesControllerTests
 {
+    [Theory]
+    [InlineData(InvoiceProcessingStatus.UnderReview, PermissionPolicyNames.Inventory.GoodsReceiptsReceiptInvoiceOperations, false)]
+    [InlineData(InvoiceProcessingStatus.UnderReview, PermissionPolicyNames.Inventory.InvoicesReopen, true)]
+    [InlineData(InvoiceProcessingStatus.FinanceApproved, PermissionPolicyNames.Inventory.InvoicesReopen, false)]
+    [InlineData(InvoiceProcessingStatus.FinanceApproved, PermissionPolicyNames.Inventory.GoodsReceiptsReceiptInvoiceOperations, true)]
+    public async Task ChangeStatus_EnforcesDedicatedReopenPermission(InvoiceProcessingStatus target, string granted, bool allowed)
+    {
+        var sender = Substitute.For<ISender>();
+        var auth = Substitute.For<IAuthorizationService>();
+        auth.AuthorizeAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<object?>(), Arg.Any<string>())
+            .Returns(call => call.ArgAt<string>(2) == granted ? AuthorizationResult.Success() : AuthorizationResult.Failed());
+        sender.Send(Arg.Any<ChangeInvoiceStatusCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result<InvoiceDetails>.Success(new() { ProcessingStatus = target }));
+        var controller = new InvoicesController(sender, auth)
+        { ControllerContext = new() { HttpContext = new DefaultHttpContext() } };
+        var id = Guid.NewGuid();
+        var response = await controller.ChangeStatus(id, new(target, InvoiceProcessingStatus.SentToFinance), default);
+        if (allowed)
+        {
+            Assert.IsType<OkObjectResult>(response.Result);
+            await sender.Received(1).Send(Arg.Is<ChangeInvoiceStatusCommand>(command =>
+                command.InvoiceId == id && command.Status == target && command.ExpectedStatus == InvoiceProcessingStatus.SentToFinance &&
+                command.CanReopen == (target == InvoiceProcessingStatus.UnderReview) && command.CanApprove == (target == InvoiceProcessingStatus.FinanceApproved)),
+                Arg.Any<CancellationToken>());
+        }
+        else
+        {
+            Assert.IsType<ForbidResult>(response.Result);
+            await sender.DidNotReceive().Send(Arg.Any<ChangeInvoiceStatusCommand>(), Arg.Any<CancellationToken>());
+        }
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task Print_RequiresEditPermissionOnlyWhenSendingToFinance(bool sendToFinance, bool canEdit)
+    {
+        Assert.Equal(PermissionPolicyNames.Inventory.InvoicesPrint,
+            typeof(InvoicesController).GetMethod(nameof(InvoicesController.Print))!.GetCustomAttribute<AuthorizeAttribute>()!.Policy);
+        var sender = Substitute.For<ISender>();
+        var auth = Substitute.For<IAuthorizationService>();
+        auth.AuthorizeAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<object?>(), Arg.Any<string>())
+            .Returns(canEdit ? AuthorizationResult.Success() : AuthorizationResult.Failed());
+        sender.Send(Arg.Any<PrintInvoicesCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result<byte[]>.Success([1, 2, 3]));
+        var controller = new InvoicesController(sender, auth)
+        { ControllerContext = new() { HttpContext = new DefaultHttpContext() } };
+        var ids = new[] { Guid.NewGuid(), Guid.NewGuid() };
+        var response = await controller.Print(new(ids, sendToFinance), default);
+        if (sendToFinance && !canEdit)
+        {
+            Assert.IsType<ForbidResult>(response);
+            await sender.DidNotReceive().Send(Arg.Any<PrintInvoicesCommand>(), Arg.Any<CancellationToken>());
+        }
+        else
+        {
+            Assert.Equal("application/pdf", Assert.IsType<FileContentResult>(response).ContentType);
+            Assert.Equal("no-store", controller.Response.Headers.CacheControl);
+            await sender.Received(1).Send(Arg.Is<PrintInvoicesCommand>(command => command.InvoiceIds.SequenceEqual(ids) &&
+                command.SendToFinance == sendToFinance), Arg.Any<CancellationToken>());
+        }
+    }
+
+    [Fact]
+    public async Task Print_MissingFieldsReturnsAllValidationMessagesInsteadOfPdf()
+    {
+        var sender = Substitute.For<ISender>();
+        sender.Send(Arg.Any<PrintInvoicesCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result<byte[]>.Error("مبلغ فاکتور ۱ وارد نشده", "طرف حساب فاکتور ۲ مشخص نیست"));
+        var controller = new InvoicesController(sender, Substitute.For<IAuthorizationService>())
+        { ControllerContext = new() { HttpContext = new DefaultHttpContext() } };
+        var response = await controller.Print(new([Guid.NewGuid()], false), default);
+        var error = Assert.IsType<Result<byte[]>>(Assert.IsType<BadRequestObjectResult>(response).Value);
+        Assert.Equal(2, error.Messages.Count);
+    }
+
     [Fact]
     public void Controller_UsesDedicatedInvoiceReadPolicy()
     {

@@ -23,12 +23,23 @@ using Warehouse.Domain.Enums;
 namespace Warehouse.Server.Controllers;
 
 [ApiController]
+[TypeFilter(typeof(Warehouse.Server.Filters.GoodsReceiptColumnAccessFilter))]
 [Route("endpoint/inventory/goods-receipts")]
 public sealed class GoodsReceiptsController(
     ISender sender,
     IAuthorizationService authorizationService) : ControllerBase
 {
     private const int ExportBatchSize = 500;
+
+    private async Task<bool> CanManageInvoiceAsync() =>
+        (await authorizationService.AuthorizeAsync(User, PermissionPolicyNames.Inventory.GoodsReceiptsReceiptInvoiceOperations)).Succeeded &&
+        (await authorizationService.AuthorizeAsync(User, PermissionPolicyNames.Inventory.GoodsReceiptsInvoiceStatusRead)).Succeeded &&
+        (await authorizationService.AuthorizeAsync(User, PermissionPolicyNames.Inventory.GoodsReceiptsInvoiceNumberRead)).Succeeded &&
+        (await authorizationService.AuthorizeAsync(User, PermissionPolicyNames.Inventory.GoodsReceiptsCounterpartyRead)).Succeeded;
+
+    private async Task<bool> CanManageReceiptAsync() =>
+        (await authorizationService.AuthorizeAsync(User, PermissionPolicyNames.Inventory.GoodsReceiptsReceiptRegistration)).Succeeded &&
+        (await authorizationService.AuthorizeAsync(User, PermissionPolicyNames.Inventory.GoodsReceiptsReceiptNumberRead)).Succeeded;
 
     [Authorize(Policy = PermissionPolicyNames.Inventory.GoodsReceiptsImport)]
     [HttpPost("import")]
@@ -41,10 +52,8 @@ public sealed class GoodsReceiptsController(
             return BadRequest(Result<GoodsReceiptImportSummary>.Error("فایل Excel را انتخاب کنید."));
         if (request.File.Length > ImportGoodsReceiptsCommand.MaxFileSizeBytes)
             return BadRequest(Result<GoodsReceiptImportSummary>.Error("حجم فایل نباید بیشتر از ۵۰ مگابایت باشد."));
-        var canManageInvoice = (await authorizationService.AuthorizeAsync(User,
-            PermissionPolicyNames.Inventory.GoodsReceiptsReceiptInvoiceOperations)).Succeeded;
-        var canManageReceipt = (await authorizationService.AuthorizeAsync(User,
-            PermissionPolicyNames.Inventory.GoodsReceiptsReceiptRegistration)).Succeeded;
+        var canManageInvoice = await CanManageInvoiceAsync();
+        var canManageReceipt = await CanManageReceiptAsync();
         await using var stream = new MemoryStream();
         await request.File.CopyToAsync(stream, cancellationToken);
         var result = await sender.Send(new ImportGoodsReceiptsCommand(request.File.FileName,
@@ -118,6 +127,8 @@ public sealed class GoodsReceiptsController(
         [FromQuery] GetGoodsReceiptItemRowsQuery query,
         CancellationToken cancellationToken)
     {
+        var access = await Warehouse.Server.Filters.GoodsReceiptColumnAccessFilter.GetAccessAsync(authorizationService, User);
+        query = query with { ColumnAccess = access };
         using var workbook = new XLWorkbook();
         var worksheet = workbook.Worksheets.Add("ورودی کالا");
         worksheet.RightToLeft = true;
@@ -151,6 +162,14 @@ public sealed class GoodsReceiptsController(
         }
 
         FormatExportWorksheet(worksheet, excelRow - 1);
+        foreach (var (column, allowed) in new[]
+        {
+            (13, access.Warehouse), (12, access.ReceiptNumber), (11, access.Counterparty),
+            (10, access.InvoiceNumber), (9, access.InvoiceStatus)
+        })
+        {
+            if (!allowed) worksheet.Column(column).Delete();
+        }
 
         var stream = new MemoryStream();
         workbook.SaveAs(stream);
@@ -291,14 +310,8 @@ public sealed class GoodsReceiptsController(
         [FromBody] CreateGoodsReceiptRequest request,
         CancellationToken cancellationToken)
     {
-        var canManageInvoice =
-            (await authorizationService.AuthorizeAsync(
-                User,
-                PermissionPolicyNames.Inventory.GoodsReceiptsReceiptInvoiceOperations)).Succeeded;
-        var canManageReceipt =
-            (await authorizationService.AuthorizeAsync(
-                User,
-                PermissionPolicyNames.Inventory.GoodsReceiptsReceiptRegistration)).Succeeded;
+        var canManageInvoice = await CanManageInvoiceAsync();
+        var canManageReceipt = await CanManageReceiptAsync();
         var createsOtherMasterData =
             (!request.DelivererId.HasValue && !string.IsNullOrWhiteSpace(request.DelivererFullName)) ||
             (canManageInvoice && request.Items.Any(item =>
@@ -356,17 +369,14 @@ public sealed class GoodsReceiptsController(
         [FromBody] CreateGoodsReceiptRequest request,
         CancellationToken cancellationToken)
     {
-        var canManageInvoice =
-            (await authorizationService.AuthorizeAsync(
-                User,
-                PermissionPolicyNames.Inventory.GoodsReceiptsReceiptInvoiceOperations)).Succeeded;
-        var canManageReceipt =
-            (await authorizationService.AuthorizeAsync(
-                User,
-                PermissionPolicyNames.Inventory.GoodsReceiptsReceiptRegistration)).Succeeded;
+        var canManageInvoice = await CanManageInvoiceAsync();
+        var canManageReceipt = await CanManageReceiptAsync();
         var canInitialEntry = (await authorizationService.AuthorizeAsync(
             User, PermissionPolicyNames.Inventory.GoodsReceiptsInitialEntry)).Succeeded;
-        if (!canInitialEntry && !canManageInvoice && !canManageReceipt) return Forbid();
+        var canEditWarehouse =
+            (await authorizationService.AuthorizeAsync(User, PermissionPolicyNames.Inventory.GoodsReceiptsWarehouseUpdate)).Succeeded &&
+            (await authorizationService.AuthorizeAsync(User, PermissionPolicyNames.Inventory.GoodsReceiptsWarehouseRead)).Succeeded;
+        if (!canInitialEntry && !canManageInvoice && !canManageReceipt && !canEditWarehouse) return Forbid();
         var createsOtherMasterData =
             (canInitialEntry && !request.DelivererId.HasValue && !string.IsNullOrWhiteSpace(request.DelivererFullName)) ||
             (canManageInvoice && request.Items.Any(item =>
@@ -409,7 +419,7 @@ public sealed class GoodsReceiptsController(
                 canInitialEntry ? item.IssueNumber : null)).ToArray());
         var result = await sender.Send(new UpdateGoodsReceiptCommand(
             id, command, canInitialEntry, canManageInvoice, canManageReceipt,
-            request.ConcurrencyStamp ?? Guid.Empty), cancellationToken);
+            request.ConcurrencyStamp ?? Guid.Empty, canEditWarehouse), cancellationToken);
         return result.IsSuccess
             ? Ok(result)
             : result.Messages.Contains(ConcurrencyMessages.Conflict, StringComparer.Ordinal)

@@ -16,6 +16,23 @@ internal sealed class GetGoodsReceiptItemRowsQueryHandler(IUnitOfWork<Guid> unit
         GetGoodsReceiptItemRowsQuery request,
         CancellationToken cancellationToken)
     {
+        var access = request.ColumnAccess;
+        request = request with
+        {
+            WarehouseId = access.Warehouse ? request.WarehouseId : null,
+            SupplierId = access.Counterparty ? request.SupplierId : null,
+            InvoiceStatus = access.InvoiceStatus ? request.InvoiceStatus : null,
+            InvoiceNumber = access.InvoiceNumber ? request.InvoiceNumber : null,
+            ReceiptNumber = access.ReceiptNumber ? request.ReceiptNumber : null,
+            ReceiptNumberIsEmpty = access.ReceiptNumber && request.ReceiptNumberIsEmpty,
+            SortBy = access.CanRead(request.SortBy) ? request.SortBy : null,
+            QuickFilter = request.QuickFilter switch
+            {
+                GoodsReceiptQuickFilter.MissingReceipt when !access.ReceiptNumber => null,
+                GoodsReceiptQuickFilter.MissingInvoice when !access.InvoiceStatus => null,
+                _ => request.QuickFilter
+            }
+        };
         var repository = unitOfWork.Repository<GoodsReceiptItem>();
         var query = repository.Entities;
         var totalCount = await repository.CountAsync(query, cancellationToken);
@@ -45,11 +62,12 @@ internal sealed class GetGoodsReceiptItemRowsQueryHandler(IUnitOfWork<Guid> unit
                     item.GoodsReceipt.Description.Contains(search)) ||
                 item.Product.Title.Contains(search) ||
                 item.Product.Code.Contains(search) ||
-                (item.Invoice != null && item.Invoice.InvoiceNumber.Contains(search)) ||
-                (item.Invoice != null && item.Invoice.Supplier != null &&
+                (access.InvoiceNumber && item.Invoice != null && item.Invoice.InvoiceNumber.Contains(search)) ||
+                (access.Counterparty && item.Invoice != null && item.Invoice.Supplier != null &&
                     item.Invoice.Supplier.Title.Contains(search)) ||
+                (access.Counterparty && item.Invoice == null && item.Supplier != null && item.Supplier.Title.Contains(search)) ||
                 (item.Description != null && item.Description.Contains(search)) ||
-                (item.ReceiptNumber != null && item.ReceiptNumber.Contains(search)));
+                (access.ReceiptNumber && item.ReceiptNumber != null && item.ReceiptNumber.Contains(search)));
         }
 
         query = query
@@ -73,8 +91,8 @@ internal sealed class GetGoodsReceiptItemRowsQueryHandler(IUnitOfWork<Guid> unit
 
         if (request.SupplierId.HasValue)
         {
-            query = query.Where(item => item.Invoice != null &&
-                item.Invoice.SupplierId == request.SupplierId.Value);
+            query = query.Where(item => (item.Invoice == null ? item.SupplierId : item.Invoice.SupplierId)
+                == request.SupplierId.Value);
         }
 
         if (request.InvoiceStatus.HasValue)
@@ -100,6 +118,8 @@ internal sealed class GetGoodsReceiptItemRowsQueryHandler(IUnitOfWork<Guid> unit
             query.Select(item => new GoodsReceiptItemRowSummary
             {
                 Id = item.Id,
+                IsLocked = item.GoodsReceipt.Items.Any(row => row.Invoice != null &&
+                    row.Invoice.ProcessingStatus != InvoiceProcessingStatus.UnderReview),
                 GoodsIssueItemId = item.GoodsIssueItemId,
                 IssueNumber = item.GoodsIssueItem == null ? null : item.GoodsIssueItem.GoodsIssue.IssueNumber,
                 GoodsReceiptId = item.GoodsReceiptId,
@@ -116,10 +136,10 @@ internal sealed class GetGoodsReceiptItemRowsQueryHandler(IUnitOfWork<Guid> unit
                 WarehouseTitle = item.Warehouse.Title,
                 InvoiceStatus = item.InvoiceStatus,
                 InvoiceNumber = item.Invoice == null ? null : item.Invoice.InvoiceNumber,
-                SupplierId = item.Invoice == null ? null : item.Invoice.SupplierId,
-                Counterparty = item.Invoice == null || item.Invoice.Supplier == null
-                    ? null
-                    : item.Invoice.Supplier.Title,
+                SupplierId = item.Invoice == null ? item.SupplierId : item.Invoice.SupplierId,
+                Counterparty = item.Invoice == null
+                    ? item.Supplier == null ? null : item.Supplier.Title
+                    : item.Invoice.Supplier == null ? null : item.Invoice.Supplier.Title,
                 ReceiptNumber = item.ReceiptNumber,
                 PageNumber = item.GoodsReceipt.PageNumber
             }),
@@ -149,10 +169,8 @@ internal sealed class GetGoodsReceiptItemRowsQueryHandler(IUnitOfWork<Guid> unit
             ("unitofmeasuretitle", true) => query.OrderByDescending(item => item.Product.UnitOfMeasure.Title).ThenByDescending(item => item.Id),
             ("requestnumber", false) => query.OrderBy(item => item.RequestNumber).ThenBy(item => item.Id),
             ("requestnumber", true) => query.OrderByDescending(item => item.RequestNumber).ThenByDescending(item => item.Id),
-            ("pagenumber", false) => query.OrderBy(item => item.GoodsReceipt.PageNumber)
-                .ThenBy(item => item.GoodsReceiptId).ThenBy(item => item.SortOrder).ThenBy(item => item.Id),
-            ("pagenumber", true) => query.OrderByDescending(item => item.GoodsReceipt.PageNumber)
-                .ThenBy(item => item.GoodsReceiptId).ThenBy(item => item.SortOrder).ThenBy(item => item.Id),
+            ("pagenumber", false) => OrderByPage(query, false),
+            ("pagenumber", true) => OrderByPage(query, true),
             ("delivererfullname", false) => query.OrderBy(item => item.GoodsReceipt.Deliverer.FullName).ThenBy(item => item.Id),
             ("delivererfullname", true) => query.OrderByDescending(item => item.GoodsReceipt.Deliverer.FullName).ThenByDescending(item => item.Id),
             ("warehousetitle", false) => query.OrderBy(item => item.Warehouse.Title).ThenBy(item => item.Id),
@@ -162,7 +180,23 @@ internal sealed class GetGoodsReceiptItemRowsQueryHandler(IUnitOfWork<Guid> unit
             ("enteredatutc", false) => query.OrderBy(item => item.GoodsReceipt.EnteredAtUtc).ThenBy(item => item.Id),
             ("enteredatutc", true) => query.OrderByDescending(item => item.GoodsReceipt.EnteredAtUtc)
                 .ThenBy(item => item.GoodsReceiptId).ThenBy(item => item.SortOrder).ThenBy(item => item.Id),
-            _ => query.OrderBy(item => item.GoodsReceipt.PageNumber)
-                .ThenBy(item => item.GoodsReceiptId).ThenBy(item => item.SortOrder).ThenBy(item => item.Id)
+            _ => OrderByPage(query, true)
         };
+
+    private static IOrderedQueryable<GoodsReceiptItem> OrderByPage(
+        IQueryable<GoodsReceiptItem> query,
+        bool descending)
+    {
+        // Compare digit counts first so page 10 follows page 9 in ascending order.
+        var ordered = descending
+            ? query.OrderByDescending(item => item.GoodsReceipt.PageNumber.Length)
+                .ThenByDescending(item => item.GoodsReceipt.PageNumber)
+            : query.OrderBy(item => item.GoodsReceipt.PageNumber.Length)
+                .ThenBy(item => item.GoodsReceipt.PageNumber);
+
+        return ordered.ThenBy(item => item.GoodsReceipt.EnteredAtUtc)
+            .ThenBy(item => item.GoodsReceiptId)
+            .ThenBy(item => item.SortOrder)
+            .ThenBy(item => item.Id);
+    }
 }

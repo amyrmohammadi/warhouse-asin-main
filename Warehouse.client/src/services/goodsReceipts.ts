@@ -28,6 +28,7 @@ export interface GoodsReceiptItem {
 }
 
 export interface GoodsReceipt {
+  isLocked: boolean
   id: string
   concurrencyStamp: string
   enteredAtUtc: string
@@ -47,6 +48,7 @@ export interface GoodsReceiptListResponse {
 }
 
 export interface GoodsReceiptItemRow {
+  isLocked: boolean
   id: string
   issueNumber: string | null
   goodsReceiptId: string

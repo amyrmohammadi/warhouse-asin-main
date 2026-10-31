@@ -22,6 +22,11 @@ internal sealed class DeleteGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
         await unitOfWork.BeginSerializableTransaction(cancellationToken);
         try
         {
+            if (await Invoices.InvoiceEditGuard.IsReceiptLockedAsync(unitOfWork, receipt.Id, cancellationToken))
+            {
+                await unitOfWork.RollBackTransaction(cancellationToken);
+                return Result.Error(Invoice.LockedMessage);
+            }
             var itemRepository = unitOfWork.Repository<GoodsReceiptItem>();
             var linkedItems = await itemRepository.ToListAsync(itemRepository.Entities
                 .Where(item => item.GoodsReceiptId == receipt.Id && item.GoodsIssueItemId.HasValue),

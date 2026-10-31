@@ -6,6 +6,7 @@ import BaseModal from '@/components/BaseModal.vue'
 import SupplierSelect from '@/components/selectors/SupplierSelect.vue'
 import type { InvoiceDetails, InvoiceProcessingStatus, UpdateInvoiceRequest } from '@/services/invoices'
 import { formatPersianDate, formatPersianNumber } from '@/utils/dateTime'
+import InvoiceStatusChip from './InvoiceStatusChip.vue'
 
 const props = defineProps<{
   modelValue: boolean
@@ -15,6 +16,8 @@ const props = defineProps<{
   canEdit: boolean
   canEditInvoice: boolean
   canEditReceipt: boolean
+  canReopen: boolean
+  canApprove: boolean
   editMode: boolean
   saving: boolean
 }>()
@@ -23,13 +26,8 @@ const emit = defineEmits<{
   'update:modelValue': [value: boolean]
   'update:editMode': [value: boolean]
   save: [values: UpdateInvoiceRequest]
+  'change-status': [status: InvoiceProcessingStatus]
 }>()
-
-const statusLabel: Record<InvoiceProcessingStatus, string> = {
-  UnderReview: 'در حال رسیدگی',
-  SentToFinance: 'ارسال به واحد مالی',
-  FinanceApproved: 'تأیید واحد مالی',
-}
 
 const form = reactive({
   invoiceNumber: '',
@@ -89,7 +87,7 @@ watch([() => props.editMode, () => props.details], ([editing, details]) => {
 })
 
 function submit(): void {
-  if (!props.details || !props.editMode || props.saving) return
+  if (!props.details || props.details.isLocked || !props.editMode || props.saving) return
   formError.value = ''
   if (props.canEditInvoice && !form.invoiceNumber.trim()) {
     formError.value = 'شماره فاکتور الزامی است.'
@@ -130,6 +128,10 @@ function submit(): void {
     <form v-else id="invoice-details-form" @submit.prevent="submit">
       <div v-if="error" class="alert alert-danger py-2" role="alert">{{ error }}</div>
       <div v-if="formError" class="alert alert-danger py-2" role="alert">{{ formError }}</div>
+      <div v-if="details.isLocked" class="alert alert-info py-2" role="status">
+        <i class="las la-lock" aria-hidden="true"></i>
+        فاکتور و ورودی‌های مرتبط قفل هستند. برای ویرایش، ابتدا با مجوز برگشت وضعیت، فاکتور را به «در حال رسیدگی» برگردانید.
+      </div>
 
       <div v-if="editMode" class="row">
         <div class="col-md-3 form-group">
@@ -188,7 +190,7 @@ function submit(): void {
         <div><span>طرف حساب</span><strong>{{ details.counterparty || '' }}</strong></div>
         <div><span>تاریخ تحویل به مالی</span><strong>{{ formatPersianDate(details.financeDeliveryDate) }}</strong></div>
         <div><span>تاریخ فاکتور</span><strong>{{ formatPersianDate(details.invoiceDate) }}</strong></div>
-        <div><span>وضعیت فاکتور</span><strong>{{ statusLabel[details.processingStatus] ?? '' }}</strong></div>
+        <div><span>وضعیت فاکتور</span><InvoiceStatusChip :status="details.processingStatus" /></div>
         <div><span>قیمت فاکتور</span><strong>{{ details.price == null ? '' : formatPersianNumber(details.price) }}</strong></div>
         <div class="invoice-items-modal__description"><span>توضیحات</span><strong>{{ details.description || '' }}</strong></div>
       </div>
@@ -242,7 +244,11 @@ function submit(): void {
         <span v-if="saving" class="spinner-border spinner-border-sm mr-1" aria-hidden="true"></span>
         ذخیره تغییرات
       </button>
-      <button v-else-if="canEdit && details" class="btn btn-primary" type="button"
+      <button v-if="!editMode && details?.isLocked && canReopen" class="btn btn-outline-warning" type="button" :disabled="saving"
+              @click="$emit('change-status', 'UnderReview')">برگشت به در حال رسیدگی</button>
+      <button v-if="!editMode && details?.processingStatus === 'SentToFinance' && canApprove" class="btn btn-success" type="button" :disabled="saving"
+              @click="$emit('change-status', 'FinanceApproved')">تأیید واحد مالی</button>
+      <button v-if="!editMode && canEdit && details && !details.isLocked" class="btn btn-primary" type="button"
               @click="$emit('update:editMode', true)">ویرایش</button>
     </template>
   </BaseModal>

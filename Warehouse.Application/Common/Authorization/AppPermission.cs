@@ -32,5 +32,13 @@ public enum AppPermission
     InvoicesMissingReceiptCountRead,
     GoodsReceiptsReceiptRegistration,
     GoodsIssuesFinalize,
-    GoodsIssuesReopen
+    GoodsIssuesReopen,
+    GoodsReceiptsWarehouseUpdate,
+    GoodsReceiptsWarehouseRead,
+    GoodsReceiptsInvoiceStatusRead,
+    GoodsReceiptsCounterpartyRead,
+    GoodsReceiptsInvoiceNumberRead,
+    GoodsReceiptsReceiptNumberRead,
+    InvoicesPrint,
+    InvoicesReopen
 }

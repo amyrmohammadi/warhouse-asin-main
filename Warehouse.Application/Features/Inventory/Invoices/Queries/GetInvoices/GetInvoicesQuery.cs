@@ -95,11 +95,14 @@ internal sealed class GetInvoicesQueryHandler(IUnitOfWork<Guid> unitOfWork)
         bool descending) =>
         (sortBy?.Trim().ToLowerInvariant(), descending) switch
         {
+            ("createdatutc", false) => query.OrderBy(invoice => invoice.CreatedAtUtc).ThenBy(invoice => invoice.Id),
+            ("createdatutc", true) => query.OrderByDescending(invoice => invoice.CreatedAtUtc).ThenByDescending(invoice => invoice.Id),
             ("financedeliverydate", false) => query.OrderBy(invoice => invoice.FinanceDeliveryDate).ThenBy(invoice => invoice.Id),
             ("financedeliverydate", true) => query.OrderByDescending(invoice => invoice.FinanceDeliveryDate).ThenBy(invoice => invoice.Id),
             ("price", false) => query.OrderBy(invoice => invoice.Price).ThenBy(invoice => invoice.Id),
             ("price", true) => query.OrderByDescending(invoice => invoice.Price).ThenByDescending(invoice => invoice.Id),
             ("invoicenumber", false) => query.OrderBy(invoice => invoice.InvoiceNumber).ThenBy(invoice => invoice.Id),
+            ("invoicenumber", true) => query.OrderByDescending(invoice => invoice.InvoiceNumber).ThenByDescending(invoice => invoice.Id),
             ("counterparty", false) => query.OrderBy(invoice => invoice.Supplier == null ? null : invoice.Supplier.Title)
                 .ThenBy(invoice => invoice.InvoiceNumber),
             ("counterparty", true) => query.OrderByDescending(invoice => invoice.Supplier == null ? null : invoice.Supplier.Title)
@@ -112,6 +115,6 @@ internal sealed class GetInvoicesQueryHandler(IUnitOfWork<Guid> unitOfWork)
                 .ThenBy(invoice => invoice.InvoiceNumber),
             ("processingstatus", true) => query.OrderByDescending(invoice => invoice.ProcessingStatus)
                 .ThenByDescending(invoice => invoice.InvoiceNumber),
-            _ => query.OrderByDescending(invoice => invoice.InvoiceNumber).ThenByDescending(invoice => invoice.Id)
+            _ => query.OrderByDescending(invoice => invoice.CreatedAtUtc).ThenByDescending(invoice => invoice.Id)
         };
 }

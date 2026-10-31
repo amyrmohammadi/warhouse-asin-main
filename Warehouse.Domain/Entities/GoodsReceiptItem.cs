@@ -51,6 +51,16 @@ public sealed class GoodsReceiptItem : Entity<Guid>
 
     public Invoice? Invoice { get; private set; }
 
+    public Guid? SupplierId { get; private set; }
+
+    public Supplier? Supplier { get; private set; }
+
+    public void SetSupplier(Supplier? supplier)
+    {
+        Supplier = InvoiceStatus == InvoiceStatusValue.HasInvoice ? null : supplier;
+        SupplierId = Supplier?.Id;
+    }
+
     public Guid? GoodsIssueItemId { get; private set; }
 
     public GoodsIssueItem? GoodsIssueItem { get; private set; }
@@ -103,6 +113,8 @@ public sealed class GoodsReceiptItem : Entity<Guid>
         InvoiceStatus = status;
         Invoice = status == InvoiceStatusValue.HasInvoice ? invoice : null;
         InvoiceId = status == InvoiceStatusValue.HasInvoice ? invoiceId : null;
+        if (status == InvoiceStatusValue.HasInvoice)
+            SetSupplier(null);
         ReceiptNumber = Normalize(receiptNumber);
     }
 

@@ -20,8 +20,10 @@ import type { Product } from '@/services/products'
 import { toast } from '@/services/toast'
 import { localDateTimeToIso, nowLocalDateTime, toLocalDateTime } from '@/utils/dateTime'
 import { focusEntryField } from '@/utils/entryFocus'
+import { useGoodsReceiptColumnPermissions } from './useGoodsReceiptColumnPermissions'
 
 export interface FormItem {
+  persisted: boolean
   key: number
   productText: string
   productId: string | null
@@ -78,7 +80,7 @@ const textKey = (value: string): string =>
 
 function newItem(key: number): FormItem {
   return {
-    key, productText: '', productId: null, productCode: '', unitOfMeasureId: null, unitOfMeasureTitle: '',
+    key, persisted: false, productText: '', productId: null, productCode: '', unitOfMeasureId: null, unitOfMeasureTitle: '',
     warehouseId: '', invoiceStatus: null, invoiceNumber: '', supplierId: '', supplierText: '',
     receiptNumber: '', issueNumber: '', quantity: null, requestNumber: '', description: '',
   }
@@ -95,8 +97,7 @@ export function useGoodsReceiptForm(deps: Dependencies) {
   const { has } = usePermissions()
   const permissions = {
     canInitialEntry: has('GoodsReceiptsInitialEntry'),
-    canManageInvoice: has('GoodsReceiptsReceiptInvoiceOperations'),
-    canManageReceipt: has('GoodsReceiptsReceiptRegistration'),
+    ...useGoodsReceiptColumnPermissions(),
     canManageMasterData: has('MasterDataManage'),
     canCreateProducts: has('ProductsCreate'),
   }
@@ -148,6 +149,10 @@ export function useGoodsReceiptForm(deps: Dependencies) {
       toast.error(error instanceof Error ? error.message : 'دریافت سند انجام نشد.')
       return
     }
+    if (receipt.isLocked) {
+      toast.error('فاکتور این ورودی به واحد مالی ارسال یا تأیید شده است؛ ابتدا فاکتور را به در حال رسیدگی برگردانید.')
+      return
+    }
     reset()
     editingId.value = id,
       concurrencyStamp.value = receipt.concurrencyStamp
@@ -159,6 +164,7 @@ export function useGoodsReceiptForm(deps: Dependencies) {
       pageNumber: receipt.pageNumber,
     })
     entry.reset(receipt.items.map(item => Object.assign(entry.newRow(), {
+      persisted: true,
       productId: item.productId, productText: item.productTitle, productCode: item.productCode,
       unitOfMeasureId: item.unitOfMeasureId, unitOfMeasureTitle: item.unitOfMeasureTitle,
       warehouseId: item.warehouseId, invoiceStatus: item.invoiceStatus, invoiceNumber: item.invoiceNumber ?? '',
@@ -239,7 +245,7 @@ export function useGoodsReceiptForm(deps: Dependencies) {
 
     for (const item of items) {
       const set = (field: ItemField, message: string) => errors.setRow(item.key, field, message)
-      if (!item.warehouseId) set('warehouse', 'انبار را انتخاب کنید.')
+      if (!item.warehouseId && (!item.persisted || permissions.canEditWarehouse)) set('warehouse', 'انبار را انتخاب کنید.')
       if (canManageInvoice && hasInvoiceNumber(item) && !item.invoiceNumber.trim())
         set('invoiceNumber', 'شماره فاکتور را وارد کنید.')
       if (canManageInvoice && isNewSupplier(item) && !canManageMasterData)

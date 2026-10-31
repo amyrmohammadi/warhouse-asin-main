@@ -1,10 +1,16 @@
 using Warehouse.Domain.Common;
 using Warehouse.Domain.Enums;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Warehouse.Domain.Entities;
 
 public sealed class Invoice : Entity<Guid>
 {
+    public const string LockedMessage = "این فاکتور به واحد مالی ارسال یا تأیید شده است؛ برای ویرایش فاکتور و ورودی مرتبط، ابتدا با مجوز مربوطه آن را به «در حال رسیدگی» برگردانید.";
+
+    [NotMapped]
+    public bool IsLocked => ProcessingStatus != InvoiceProcessingStatus.UnderReview;
+
     private Invoice()
     {
     }
@@ -13,12 +19,15 @@ public sealed class Invoice : Entity<Guid>
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(invoiceNumber);
         Id = Guid.NewGuid();
+        CreatedAtUtc = DateTimeOffset.UtcNow;
         InvoiceNumber = NormalizeNumber(invoiceNumber);
         SupplierId = supplierId;
         ReceiptDate = receiptDate;
     }
 
     public string InvoiceNumber { get; private set; } = string.Empty;
+
+    public DateTimeOffset CreatedAtUtc { get; private set; }
 
     public string? Description { get; private set; }
 

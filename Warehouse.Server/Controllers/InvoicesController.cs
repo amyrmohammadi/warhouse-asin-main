@@ -10,6 +10,10 @@ using Warehouse.Application.Features.Inventory.Invoices.Commands.UpdateInvoice;
 using Warehouse.Application.Features.Inventory.Invoices.Queries.GetInvoiceById;
 using Warehouse.Application.Features.Inventory.Invoices.Queries.GetInvoices;
 using Warehouse.Server.Contracts.Inventory;
+using Warehouse.Application.Common.Interfaces;
+using Warehouse.Application.Features.Inventory.Invoices.Commands.PrintInvoices;
+using Warehouse.Application.Features.Inventory.Invoices.Commands.ChangeInvoiceStatus;
+using Warehouse.Domain.Enums;
 
 namespace Warehouse.Server.Controllers;
 
@@ -20,6 +24,50 @@ public sealed class InvoicesController(
     ISender sender,
     IAuthorizationService authorizationService) : ControllerBase
 {
+    [HttpPost("{id:guid}/status")]
+    public async Task<ActionResult<Result<InvoiceDetails>>> ChangeStatus(Guid id,
+        [FromBody] ChangeInvoiceStatusRequest request, CancellationToken cancellationToken)
+    {
+        var reopen = request.Status == InvoiceProcessingStatus.UnderReview;
+        if (request.Status != InvoiceProcessingStatus.UnderReview && request.Status != InvoiceProcessingStatus.FinanceApproved)
+            return BadRequest(Result<InvoiceDetails>.Error("این تغییر وضعیت مجاز نیست."));
+        var allowed = (await authorizationService.AuthorizeAsync(User, reopen
+            ? PermissionPolicyNames.Inventory.InvoicesReopen
+            : PermissionPolicyNames.Inventory.GoodsReceiptsReceiptInvoiceOperations)).Succeeded;
+        if (!allowed) return Forbid();
+        var result = await sender.Send(new ChangeInvoiceStatusCommand(id, request.Status,
+            request.ExpectedStatus, CanReopen: reopen, CanApprove: !reopen), cancellationToken);
+        if (result.IsSuccess) return Ok(result);
+        return result.Messages.Contains(ConcurrencyMessages.Conflict, StringComparer.Ordinal)
+            ? Conflict(result) : BadRequest(result);
+    }
+
+    [Authorize(Policy = PermissionPolicyNames.Inventory.InvoicesPrint)]
+    [HttpPost("print")]
+    public async Task<IActionResult> Print([FromBody] PrintInvoicesRequest request, CancellationToken cancellationToken)
+    {
+        if (request.SendToFinance && !(await authorizationService.AuthorizeAsync(User,
+                PermissionPolicyNames.Inventory.GoodsReceiptsReceiptInvoiceOperations)).Succeeded)
+            return Forbid();
+        try
+        {
+            var result = await sender.Send(new PrintInvoicesCommand(request.InvoiceIds, request.SendToFinance), cancellationToken);
+            if (!result.IsSuccess || result.Data is null) return BadRequest(result);
+            Response.Headers.CacheControl = "no-store";
+            return File(result.Data, "application/pdf");
+        }
+        catch (TimeoutException)
+        {
+            return Problem(statusCode: StatusCodes.Status504GatewayTimeout,
+                title: "آماده‌سازی چاپ بیش از زمان مجاز طول کشید. وضعیت فاکتورها تغییر نکرد؛ دوباره تلاش کنید.");
+        }
+        catch (ExcelToPdfConversionException)
+        {
+            return Problem(statusCode: StatusCodes.Status503ServiceUnavailable,
+                title: "تولید فایل چاپ انجام نشد و وضعیت فاکتورها تغییر نکرد. سرویس چاپ را بررسی کنید.");
+        }
+    }
+
     [HttpGet]
     public async Task<ActionResult<Result<InvoiceListResult>>> GetAll(
         [FromQuery] GetInvoicesQuery query,

@@ -2,6 +2,10 @@ using Warehouse.Domain.Enums;
 
 namespace Warehouse.Server.Contracts.Inventory;
 
+public sealed record PrintInvoicesRequest(IReadOnlyCollection<Guid> InvoiceIds, bool SendToFinance);
+
+public sealed record ChangeInvoiceStatusRequest(InvoiceProcessingStatus Status, InvoiceProcessingStatus ExpectedStatus);
+
 public sealed record UpdateInvoiceRequest(
     string InvoiceNumber,
     Guid? SupplierId,

@@ -15,6 +15,31 @@ public sealed class LibreOfficeIntegrationTests
     [LibreOfficeTheory]
     [Trait("Category", "LibreOfficeIntegration")]
     [InlineData(1)]
+    [InlineData(26)]
+    public async Task Generate_RealInvoiceFinanceDeliveryFromProvidedTemplate(int count)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "WarehouseInvoicePdfIntegration", Guid.NewGuid().ToString("N"));
+        using var converter = new LibreOfficeExcelToPdfService(Options.Create(new LibreOfficeOptions
+        {
+            ExecutablePath = Environment.GetEnvironmentVariable("EXCEL_TO_PDF_LIBREOFFICE_PATH")!, TempRootPath = root
+        }), NullLoggerFactory.Instance);
+        var entries = Enumerable.Range(1, count).Select(index => new Warehouse.Application.Common.Interfaces.InvoicePrintEntry(
+            "INV-" + index.ToString("000"), index == 1 ? "شرکت تأمین تجهیزات صنعتی و خدمات بازرگانی ایران" : "طرف حساب " + index,
+            new DateOnly(2026, 10, 31))).ToArray();
+        var pdf = await new InvoicePdfService(converter).GenerateAsync(entries);
+        Assert.True(pdf.AsSpan().StartsWith("%PDF-"u8));
+        Assert.Equal((count + 24) / 25, Regex.Matches(Encoding.Latin1.GetString(pdf), @"/Type\s*/Page\b").Count);
+        var preview = Environment.GetEnvironmentVariable("INVOICE_PRINT_PREVIEW_DIR");
+        if (!string.IsNullOrWhiteSpace(preview))
+        {
+            Directory.CreateDirectory(preview);
+            await File.WriteAllBytesAsync(Path.Combine(preview, $"invoices-{count}.pdf"), pdf);
+        }
+    }
+
+    [LibreOfficeTheory]
+    [Trait("Category", "LibreOfficeIntegration")]
+    [InlineData(1)]
     [InlineData(12)]
     public async Task Generate_RealGoodsIssuePermitFromTheProvidedTemplate(int itemCount)
     {

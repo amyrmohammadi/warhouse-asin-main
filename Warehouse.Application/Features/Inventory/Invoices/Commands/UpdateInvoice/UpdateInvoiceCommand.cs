@@ -80,6 +80,11 @@ internal sealed class UpdateInvoiceCommandHandler(IUnitOfWork<Guid> unitOfWork)
             }
 
             string? normalizedNumber = null;
+            if (invoice.IsLocked)
+            {
+                await unitOfWork.RollBackTransaction(cancellationToken);
+                return Result<InvoiceDetails>.Error(Invoice.LockedMessage);
+            }
             if (request.CanEditInvoice)
             {
                 normalizedNumber = Invoice.NormalizeNumber(request.InvoiceNumber);
@@ -116,6 +121,14 @@ internal sealed class UpdateInvoiceCommandHandler(IUnitOfWork<Guid> unitOfWork)
                 }
 
                 var receiptRepository = unitOfWork.Repository<GoodsReceipt>();
+                foreach (var receiptId in storedItems.Select(item => item.GoodsReceiptId).Distinct())
+                {
+                    if (await InvoiceEditGuard.IsReceiptLockedAsync(unitOfWork, receiptId, cancellationToken))
+                    {
+                        await unitOfWork.RollBackTransaction(cancellationToken);
+                        return Result<InvoiceDetails>.Error(Invoice.LockedMessage);
+                    }
+                }
                 var receipts = new Dictionary<Guid, GoodsReceipt>();
                 foreach (var item in storedItems)
                 {

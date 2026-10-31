@@ -38,6 +38,24 @@ internal sealed class UpdateInvoiceItemCommandHandler(IUnitOfWork<Guid> unitOfWo
         UpdateInvoiceItemCommand request,
         CancellationToken cancellationToken)
     {
+        await unitOfWork.BeginSerializableTransaction(cancellationToken);
+        try
+        {
+            var result = await ApplyAsync(request, cancellationToken);
+            if (result.IsSuccess) await unitOfWork.CommitTransaction(cancellationToken);
+            else await unitOfWork.RollBackTransaction(cancellationToken);
+            return result;
+        }
+        catch
+        {
+            await unitOfWork.RollBackTransaction(cancellationToken);
+            throw;
+        }
+    }
+
+    private async Task<Result<UpdateInvoiceItemResult>> ApplyAsync(
+        UpdateInvoiceItemCommand request, CancellationToken cancellationToken)
+    {
         var item = await unitOfWork.Repository<GoodsReceiptItem>()
             .GetByIdAsync(request.ItemId, cancellationToken);
         if (item is null ||
@@ -54,6 +72,8 @@ internal sealed class UpdateInvoiceItemCommandHandler(IUnitOfWork<Guid> unitOfWo
             return Result<UpdateInvoiceItemResult>.Error("سند ورود مرتبط با ردیف فاکتور پیدا نشد.");
         }
 
+        if (await InvoiceEditGuard.IsReceiptLockedAsync(unitOfWork, receipt.Id, cancellationToken))
+            return Result<UpdateInvoiceItemResult>.Error(Invoice.LockedMessage);
         if (!receipt.TryAdvanceConcurrencyStamp(request.ConcurrencyStamp))
         {
             return Result<UpdateInvoiceItemResult>.Error(ConcurrencyMessages.Conflict);

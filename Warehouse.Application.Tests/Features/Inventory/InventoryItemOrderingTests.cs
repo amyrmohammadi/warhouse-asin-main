@@ -10,7 +10,7 @@ namespace Warehouse.Application.Tests.Features.Inventory;
 public sealed class InventoryItemOrderingTests
 {
     [Fact]
-    public async Task ReceiptItems_OrderByPageThenFormRowOrder()
+    public async Task ReceiptItems_OrderByPageDescendingThenEntryTimeAndFormRowOrder()
     {
         await using var context = new ApplicationTestContext();
         var person = new Person("تحویل‌دهنده", "");
@@ -18,17 +18,24 @@ public sealed class InventoryItemOrderingTests
         var product = new Product("کالا", "P-1", unit.Id, null);
         var warehouse = new StorageWarehouse("انبار", null);
         Set(product, nameof(Product.UnitOfMeasure), unit);
-        var page2 = new GoodsReceipt(DateTimeOffset.UtcNow.AddDays(-1), null, person.Id, "2");
-        var page1 = new GoodsReceipt(DateTimeOffset.UtcNow, null, person.Id, "1");
+        var page2 = new GoodsReceipt(DateTimeOffset.UtcNow.AddDays(-1), null, person.Id, "10");
+        var page1 = new GoodsReceipt(DateTimeOffset.UtcNow, null, person.Id, "9");
+        var laterPage10 = new GoodsReceipt(DateTimeOffset.UtcNow, null, person.Id, "10");
+        // Receipt IDs must not determine the entry order within a page.
+        Set(page2, nameof(GoodsReceipt.Id), Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff"));
+        Set(laterPage10, nameof(GoodsReceipt.Id), Guid.Parse("00000000-0000-0000-0000-000000000001"));
         Set(page2, nameof(GoodsReceipt.Deliverer), person);
         Set(page1, nameof(GoodsReceipt.Deliverer), person);
+        Set(laterPage10, nameof(GoodsReceipt.Deliverer), person);
         page2.AddItem(product.Id, warehouse.Id, null, null, null, 1, null, "دوم", 1);
         page2.AddItem(product.Id, warehouse.Id, null, null, null, 1, null, "اول", 0);
         page1.AddItem(product.Id, warehouse.Id, null, null, null, 1, null, "صفحه اول", 0);
-        var rows = page2.Items.Concat(page1.Items).ToArray();
+        laterPage10.AddItem(product.Id, warehouse.Id, null, null, null, 1, null, "ثبت بعدی", 0);
+        var rows = laterPage10.Items.Concat(page1.Items).Concat(page2.Items).ToArray();
         foreach (var row in rows)
         {
-            Set(row, nameof(GoodsReceiptItem.GoodsReceipt), row.GoodsReceiptId == page1.Id ? page1 : page2);
+            Set(row, nameof(GoodsReceiptItem.GoodsReceipt),
+                row.GoodsReceiptId == page1.Id ? page1 : row.GoodsReceiptId == page2.Id ? page2 : laterPage10);
             Set(row, nameof(GoodsReceiptItem.Product), product);
             Set(row, nameof(GoodsReceiptItem.Warehouse), warehouse);
         }
@@ -46,15 +53,29 @@ public sealed class InventoryItemOrderingTests
         });
 
         Assert.True(result.IsSuccess);
-        Assert.Equal(["صفحه اول", "اول", "دوم"],
+        Assert.Equal(["اول", "دوم", "ثبت بعدی", "صفحه اول"],
             result.Data!.Items.Select(row => row.ItemDescription));
 
         var descending = await context.Sender.Send(new GetGoodsReceiptItemRowsQuery
         {
             PageNumber = 1, PageSize = 10, SortBy = "pageNumber", SortDescending = true
         });
-        Assert.Equal(["اول", "دوم", "صفحه اول"],
+        Assert.Equal(["اول", "دوم", "ثبت بعدی", "صفحه اول"],
             descending.Data!.Items.Select(row => row.ItemDescription));
+
+        var ascending = await context.Sender.Send(new GetGoodsReceiptItemRowsQuery
+        {
+            PageNumber = 1, PageSize = 10, SortBy = "pageNumber", SortDescending = false
+        });
+        Assert.Equal(["صفحه اول", "اول", "دوم", "ثبت بعدی"],
+            ascending.Data!.Items.Select(row => row.ItemDescription));
+
+        var secondPage = await context.Sender.Send(new GetGoodsReceiptItemRowsQuery
+        {
+            PageNumber = 2, PageSize = 2
+        });
+        Assert.Equal(["ثبت بعدی", "صفحه اول"],
+            secondPage.Data!.Items.Select(row => row.ItemDescription));
     }
 
     [Fact]

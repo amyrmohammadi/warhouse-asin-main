@@ -45,6 +45,7 @@ import '@/styles/inventory-list.css'
 import GoodsReceiptFormModal from './GoodsReceiptFormModal.vue'
 import GoodsReceiptImportModal from './GoodsReceiptImportModal.vue'
 import { useGoodsReceiptOptions } from './useGoodsReceiptOptions'
+import { useGoodsReceiptColumnPermissions } from './useGoodsReceiptColumnPermissions'
 
 defineOptions({ name: 'GoodsReceiptsView' })
 DataTable.use(DataTablesCore)
@@ -58,12 +59,11 @@ const VIEW_MODES = [
 // ── دسترسی‌ها ──────────────────────────────────────────────────────
 const { has } = usePermissions()
 const canInitialEntry = has('GoodsReceiptsInitialEntry')
-const canManageInvoice = has('GoodsReceiptsReceiptInvoiceOperations')
-const canManageReceipt = has('GoodsReceiptsReceiptRegistration')
+const { canManageInvoice, canManageReceipt, canEditWarehouse, canReadColumn } = useGoodsReceiptColumnPermissions()
 const canReadItemHistory = has('GoodsReceiptHistoryRead')
 const canImport = has('GoodsReceiptsImport')
 const canExport = has('GoodsReceiptsExport')
-const canEdit = canInitialEntry || canManageInvoice || canManageReceipt
+const canEdit = canInitialEntry || canManageInvoice || canManageReceipt || canEditWarehouse
 
 const metricCards = [
   { key: 'itemsWithoutReceiptCount', permission: 'GoodsReceiptsMissingReceiptCountRead', title: 'کالاهای بدون رسید', tone: 'blue', mode: 'items' },
@@ -155,7 +155,8 @@ watch(appliedFilters, value => {
   }
 }, { deep: true })
 
-const filterDefinitions = computed<DataTableFilterDefinition[]>(() => [
+const filterDefinitions = computed<DataTableFilterDefinition[]>(() => {
+  const definitions: DataTableFilterDefinition[] = [
   { key: 'enteredAt', label: 'تاریخ ورود', type: 'date-comparison' },
   { key: 'productTitle', label: 'کالا', type: 'text-comparison', placeholder: 'جستجو و انتخاب کالا', maxlength: 256 },
   { key: 'productCode', label: 'کد کالا', type: 'text-comparison', placeholder: 'بخشی از کد کالا', maxlength: 100 },
@@ -183,7 +184,9 @@ const filterDefinitions = computed<DataTableFilterDefinition[]>(() => [
     key: 'supplierId', label: 'طرف حساب', type: 'select', placeholder: 'همه طرف حساب‌ها',
     options: filters.selectedOption('supplierId'),
   },
-])
+  ]
+  return definitions.filter(definition => canReadColumn(definition.key))
+})
 
 function currentFilterParameters(): GoodsReceiptListParameters {
   return {
@@ -283,6 +286,7 @@ const columns: Record<TableMode, ColumnsConfig[]> = {
     ...(canEdit || canReadItemHistory ? [actions('goodsReceiptId')] : []),
   ],
 }
+columns.items = columns.items.filter(column => canReadColumn(String(column.name)))
 
 const compact = useCompactScrollbar(tableContainer)
 function onTableWheel(event: WheelEvent): void {
@@ -327,7 +331,7 @@ function tableOptions(mode: TableMode): Config {
   return createInventoryTableOptions({
     ajax: list.ajax,
     columns: visibility.resolvedColumns[mode],
-    order: { name: 'pageNumber', dir: 'asc' },
+    order: { name: 'pageNumber', dir: mode === 'items' ? 'desc' : 'asc' },
     emptyText: mode === 'items' ? 'هنوز کالایی وارد انبار نشده است.' : 'هنوز ورودی کالایی ثبت نشده است.',
     loadingText: 'در حال دریافت تاریخچه ورود کالا...',
     zeroText: 'ورودی کالایی پیدا نشد.',
@@ -584,9 +588,10 @@ onBeforeUnmount(() => {
             </template>
             <template v-if="canEdit || canReadItemHistory" #column-actions="{ rowData }">
               <div class="d-flex">
-                <button v-if="canEdit" class="btn users-table__role-action" type="button" title="ویرایش سند"
-                        aria-label="ویرایش سند" :disabled="editLoading" @click="openEdit(rowData)">
-                  <i class="las la-edit" aria-hidden="true"></i>
+                <button v-if="canEdit" class="btn users-table__role-action" type="button"
+                        :title="rowData.isLocked ? 'ورودی به‌دلیل ارسال یا تأیید فاکتور در مالی قفل است' : 'ویرایش سند'"
+                        aria-label="ویرایش سند" :disabled="editLoading || rowData.isLocked" @click="openEdit(rowData)">
+                  <i class="las" :class="rowData.isLocked ? 'la-lock' : 'la-edit'" aria-hidden="true"></i>
                 </button>
                 <button v-if="canReadItemHistory && tableMode === 'items'" class="btn users-table__role-action"
                         type="button" title="مشاهده تاریخچه تغییرات" aria-label="مشاهده تاریخچه تغییرات کالا"

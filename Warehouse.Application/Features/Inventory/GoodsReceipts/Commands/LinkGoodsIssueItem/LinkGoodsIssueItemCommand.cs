@@ -35,6 +35,24 @@ internal sealed class LinkGoodsIssueItemCommandHandler(IUnitOfWork<Guid> unitOfW
         LinkGoodsIssueItemCommand request,
         CancellationToken cancellationToken)
     {
+        await unitOfWork.BeginSerializableTransaction(cancellationToken);
+        try
+        {
+            var result = await ApplyAsync(request, cancellationToken);
+            if (result.IsSuccess) await unitOfWork.CommitTransaction(cancellationToken);
+            else await unitOfWork.RollBackTransaction(cancellationToken);
+            return result;
+        }
+        catch
+        {
+            await unitOfWork.RollBackTransaction(cancellationToken);
+            throw;
+        }
+    }
+
+    private async Task<Result<LinkGoodsIssueItemResult>> ApplyAsync(
+        LinkGoodsIssueItemCommand request, CancellationToken cancellationToken)
+    {
         var receiptItem = await unitOfWork.Repository<GoodsReceiptItem>()
             .GetByIdAsync(request.GoodsReceiptItemId, cancellationToken);
         if (receiptItem is null)
@@ -53,6 +71,8 @@ internal sealed class LinkGoodsIssueItemCommandHandler(IUnitOfWork<Guid> unitOfW
             .GetByIdAsync(receiptItem.GoodsReceiptId, cancellationToken);
         if (receipt is null)
             return Result<LinkGoodsIssueItemResult>.Error("سند ورود کالا پیدا نشد.");
+        if (await Invoices.InvoiceEditGuard.IsReceiptLockedAsync(unitOfWork, receipt.Id, cancellationToken))
+            return Result<LinkGoodsIssueItemResult>.Error(Invoice.LockedMessage);
         if (!receipt.TryAdvanceConcurrencyStamp(request.ConcurrencyStamp))
             return Result<LinkGoodsIssueItemResult>.Error(ConcurrencyMessages.Conflict);
 

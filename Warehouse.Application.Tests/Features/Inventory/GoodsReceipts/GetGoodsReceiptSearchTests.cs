@@ -10,17 +10,20 @@ namespace Warehouse.Application.Tests.Features.Inventory.GoodsReceipts;
 public sealed class GetGoodsReceiptSearchTests
 {
     [Theory]
-    [InlineData("شرح سند ویژه")]
-    [InlineData("شرح ردیف ویژه")]
-    [InlineData("تأمین‌کننده ویژه")]
-    public async Task Search_MatchesDescriptionsAndSupplierTitle_InBothTableModes(string search)
+    [InlineData("شرح سند ویژه", true, true)]
+    [InlineData("شرح ردیف ویژه", true, true)]
+    [InlineData("تأمین‌کننده ویژه", true, true)]
+    [InlineData("تأمین‌کننده ویژه", false, true)]
+    [InlineData("تأمین‌کننده ویژه", true, false)]
+    [InlineData("تأمین‌کننده ویژه", false, false)]
+    public async Task Search_MatchesDescriptionsAndSupplierTitle_InBothTableModes(string search, bool hasInvoice, bool canReadCounterparty)
     {
         await using var context = new ApplicationTestContext();
         var matching = CreateReceipt(
             "شرح سند ویژه",
             "شرح ردیف ویژه",
             "تأمین‌کننده ویژه",
-            "MATCH");
+            "MATCH", hasInvoice);
         var unrelated = CreateReceipt(
             "شرح سند دیگر",
             "شرح ردیف دیگر",
@@ -32,18 +35,26 @@ public sealed class GetGoodsReceiptSearchTests
         context.UnitOfWork.Repository<GoodsReceipt>().Returns(receiptRepository);
         context.UnitOfWork.Repository<GoodsReceiptItem>().Returns(itemRepository);
 
-        var documents = await context.Sender.Send(new GetGoodsReceiptsQuery { Search = search });
-        var items = await context.Sender.Send(new GetGoodsReceiptItemRowsQuery { Search = search });
+        var access = GoodsReceiptColumnAccess.All with { Counterparty = canReadCounterparty };
+        var documents = await context.Sender.Send(new GetGoodsReceiptsQuery { Search = search, ColumnAccess = access });
+        var items = await context.Sender.Send(new GetGoodsReceiptItemRowsQuery { Search = search, ColumnAccess = access });
 
-        Assert.Equal(1, documents.Data!.FilteredCount);
-        Assert.Equal(1, items.Data!.FilteredCount);
+        Assert.Equal(canReadCounterparty ? 1 : 0, documents.Data!.FilteredCount);
+        Assert.Equal(canReadCounterparty ? 1 : 0, items.Data!.FilteredCount);
+
+        var matchingItem = matching.Items.Single();
+        var supplierId = matchingItem.Invoice?.SupplierId ?? matchingItem.SupplierId;
+        documents = await context.Sender.Send(new GetGoodsReceiptsQuery { SupplierId = supplierId, ColumnAccess = access });
+        items = await context.Sender.Send(new GetGoodsReceiptItemRowsQuery { SupplierId = supplierId, ColumnAccess = access });
+        Assert.Equal(canReadCounterparty ? 1 : 2, documents.Data!.FilteredCount);
+        Assert.Equal(canReadCounterparty ? 1 : 2, items.Data!.FilteredCount);
     }
 
     private static GoodsReceipt CreateReceipt(
         string receiptDescription,
         string itemDescription,
         string supplierTitle,
-        string suffix)
+        string suffix, bool hasInvoice = true)
     {
         var deliverer = new Person($"تحویل‌دهنده {suffix}", string.Empty);
         var receipt = new GoodsReceipt(
@@ -62,14 +73,15 @@ public sealed class GetGoodsReceiptSearchTests
         receipt.AddItem(
             product.Id,
             warehouse.Id,
-            InvoiceStatus.HasInvoice,
-            invoice,
+            hasInvoice ? InvoiceStatus.HasInvoice : InvoiceStatus.DoesNotHave,
+            hasInvoice ? invoice : null,
             $"R-{suffix}",
             1,
             null,
             itemDescription,
             0);
         var item = receipt.Items.Single();
+        item.SetSupplier(supplier);
         Set(item, nameof(GoodsReceiptItem.GoodsReceipt), receipt);
         Set(item, nameof(GoodsReceiptItem.Product), product);
         Set(item, nameof(GoodsReceiptItem.Warehouse), warehouse);
