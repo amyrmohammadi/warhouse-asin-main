@@ -75,6 +75,8 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
             var warehousesById = warehouses.ToDictionary(item => item.Id);
 
             var preparedItems = new List<PreparedItem>(request.Items.Count);
+            // Track suppliers and invoices created during this transaction, before SaveAsync persists them.
+            var supplierCache = new Dictionary<string, Supplier>(StringComparer.Ordinal);
             var invoiceCache = new Dictionary<string, Invoice>(StringComparer.Ordinal);
             foreach (var pair in resolvedItems.Data!.Zip(request.Items))
             {
@@ -84,7 +86,7 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                 if (updateInvoice && source.InvoiceStatus != Domain.Enums.InvoiceStatus.HasInvoice)
                 {
                     var resolvedSupplier = await ResolveSupplierAsync(
-                        source.SupplierId, source.SupplierTitle, cancellationToken);
+                        source.SupplierId, source.SupplierTitle, supplierCache, cancellationToken);
                     if (resolvedSupplier.Error is not null)
                     {
                         await unitOfWork.RollBackTransaction(cancellationToken);
@@ -102,6 +104,7 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                         source.SupplierTitle,
                         Invoice.GetReceiptDate(existing is not null && !updateInitial
                             ? existing.EnteredAtUtc : request.EnteredAtUtc),
+                        supplierCache,
                         invoiceCache,
                         cancellationToken);
                     if (resolvedInvoice.Error is not null)
@@ -337,15 +340,19 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
     private async Task<(Supplier? Supplier, string? Error)> ResolveSupplierAsync(
         Guid? supplierId,
         string? supplierTitle,
+        IDictionary<string, Supplier> supplierCache,
         CancellationToken cancellationToken)
     {
         var repository = unitOfWork.Repository<Supplier>();
         if (supplierId.HasValue)
         {
             var supplier = await repository.GetByIdAsync(supplierId.Value, cancellationToken);
-            return supplier is null
-                ? (null, "تأمین‌کننده انتخاب‌شده پیدا نشد.")
-                : (supplier, null);
+            if (supplier is null)
+                return (null, "تأمین‌کننده انتخاب‌شده پیدا نشد.");
+
+            // Reuse the same supplier if another row specifies it by title.
+            supplierCache.TryAdd(NormalizeSupplierTitle(supplier.Title), supplier);
+            return (supplier, null);
         }
 
         if (string.IsNullOrWhiteSpace(supplierTitle))
@@ -354,16 +361,21 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
         }
 
         var normalizedTitle = NormalizeSupplierTitle(supplierTitle);
+        if (supplierCache.TryGetValue(normalizedTitle, out var cachedSupplier))
+            return (cachedSupplier, null);
+
         var suppliers = await repository.GetAllAsync(cancellationToken);
         var existingSupplier = suppliers.FirstOrDefault(
             supplier => NormalizeSupplierTitle(supplier.Title) == normalizedTitle);
         if (existingSupplier is not null)
         {
+            supplierCache[normalizedTitle] = existingSupplier;
             return (existingSupplier, null);
         }
 
-        var newSupplier = new Supplier(supplierTitle, null);
+        var newSupplier = new Supplier(supplierTitle.Trim(), null);
         await repository.AddAsync(newSupplier, cancellationToken);
+        supplierCache[normalizedTitle] = newSupplier;
         return (newSupplier, null);
     }
 
@@ -372,12 +384,14 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
         Guid? supplierId,
         string? supplierTitle,
         DateOnly receiptDate,
+        IDictionary<string, Supplier> supplierCache,
         IDictionary<string, Invoice> invoiceCache,
         CancellationToken cancellationToken)
     {
         var resolvedSupplier = await ResolveSupplierAsync(
             supplierId,
             supplierTitle,
+            supplierCache,
             cancellationToken);
         if (resolvedSupplier.Error is not null)
         {

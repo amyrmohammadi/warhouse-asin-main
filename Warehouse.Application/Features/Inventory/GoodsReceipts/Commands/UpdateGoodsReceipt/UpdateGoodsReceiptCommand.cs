@@ -30,7 +30,6 @@ internal sealed class UpdateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
         if (!receipt.TryAdvanceConcurrencyStamp(request.ConcurrencyStamp))
             return Result<GoodsReceiptSummary>.Error(ConcurrencyMessages.Conflict);
 
-            
         var values = request.Values;
         var repository = unitOfWork.Repository<GoodsReceiptItem>();
         var storedItems = await repository.ToListAsync(
@@ -131,7 +130,13 @@ internal sealed class UpdateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
             };
         }
         await new CreateGoodsReceiptCommandValidator().ValidateAndThrowAsync(values, cancellationToken);
-        return await new CreateGoodsReceiptCommandHandler(unitOfWork).SaveAsync(values, cancellationToken,
-            receipt, request.CanEditInitialEntry, request.CanEditInvoice, request.CanEditReceipt, request.CanEditWarehouse);
+        return await new CreateGoodsReceiptCommandHandler(unitOfWork).SaveAsync(
+            values,
+            cancellationToken,
+            existing: receipt,
+            updateInitial: request.CanEditInitialEntry,
+            updateInvoice: request.CanEditInvoice,
+            updateReceipt: request.CanEditReceipt,
+            updateWarehouse: request.CanEditWarehouse);
     }
 }
