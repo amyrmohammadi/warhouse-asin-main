@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Warehouse.Application.Common.Interfaces;
 using Warehouse.Domain.Entities;
 using Warehouse.Domain.Enums;
+using Warehouse.Domain.Common;
 using Warehouse.Infrastructure.Identity;
 using Warehouse.Infrastructure.Persistence.Auditing;
 
@@ -380,11 +381,58 @@ public sealed class ApplicationDbContext
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
+        foreach (var entityType in builder.Model.GetEntityTypes()
+                     .Where(entity => typeof(AuditableEntity).IsAssignableFrom(entity.ClrType) &&
+                         entity.GetSchema() != "Identity"))
+        {
+            var entity = builder.Entity(entityType.ClrType);
+            entity.Property<DateTimeOffset?>(nameof(AuditableEntity.CreatedOn)).HasColumnType("datetimeoffset");
+            entity.Property<string>(nameof(AuditableEntity.CreatedBy)).HasMaxLength(256);
+            entity.Property<DateTimeOffset?>(nameof(AuditableEntity.LastModifiedOn)).HasColumnType("datetimeoffset");
+            entity.Property<string>(nameof(AuditableEntity.LastModifiedBy)).HasMaxLength(256);
+        }
+    }
+
+    private void SetAuditProperties()
+    {
+        var now = _timeProvider.GetUtcNow();
+        var userId = _currentUserContext?.UserId?.ToString();
+        foreach (var entry in ChangeTracker.Entries<AuditableEntity>()
+                     .Where(entry => entry.Metadata.GetSchema() != "Identity" &&
+                         entry.State is EntityState.Added or EntityState.Modified))
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Property(entity => entity.CreatedOn).CurrentValue = now;
+                entry.Property(entity => entity.CreatedBy).CurrentValue = userId;
+            }
+            else
+            {
+                var createdOn = entry.Property(entity => entity.CreatedOn);
+                createdOn.CurrentValue = createdOn.OriginalValue;
+                createdOn.IsModified = false;
+                var createdBy = entry.Property(entity => entity.CreatedBy);
+                createdBy.CurrentValue = createdBy.OriginalValue;
+                createdBy.IsModified = false;
+            }
+            entry.Property(entity => entity.LastModifiedOn).CurrentValue = now;
+            entry.Property(entity => entity.LastModifiedBy).CurrentValue = userId;
+        }
+    }
+
+    private void AddAuditTrail(AuditEntry auditEntry)
+    {
+        var entry = AuditTrails.Add(auditEntry.ToAuditTrail());
+        entry.Property(entity => entity.CreatedOn).CurrentValue = _timeProvider.GetUtcNow();
+        entry.Property(entity => entity.CreatedBy).CurrentValue = _currentUserContext?.UserId?.ToString();
+        entry.Property(entity => entity.LastModifiedOn).CurrentValue = entry.Entity.CreatedOn;
+        entry.Property(entity => entity.LastModifiedBy).CurrentValue = entry.Entity.CreatedBy;
     }
 
     private List<AuditEntry> OnBeforeSaveChanges()
     {
         ChangeTracker.DetectChanges();
+        SetAuditProperties();
         var auditEntries = new List<AuditEntry>();
 
         foreach (var entry in ChangeTracker.Entries().ToArray())
@@ -414,7 +462,9 @@ public sealed class ApplicationDbContext
             foreach (var property in entry.Properties)
             {
                 var propertyName = property.Metadata.Name;
-                if (propertyName == "ConcurrencyStamp") continue;
+                if (propertyName is "ConcurrencyStamp" or nameof(AuditableEntity.CreatedOn) or
+                    nameof(AuditableEntity.CreatedBy) or nameof(AuditableEntity.LastModifiedOn) or
+                    nameof(AuditableEntity.LastModifiedBy)) continue;
 
                 if (property.IsTemporary)
                 {
@@ -461,7 +511,7 @@ public sealed class ApplicationDbContext
 
         foreach (var auditEntry in auditEntries.Where(entry => !entry.HasTemporaryProperties))
         {
-            AuditTrails.Add(auditEntry.ToAuditTrail());
+            AddAuditTrail(auditEntry);
         }
 
         return auditEntries.Where(entry => entry.HasTemporaryProperties).ToList();
@@ -484,7 +534,7 @@ public sealed class ApplicationDbContext
                         auditEntry.Sanitize(propertyName, property.CurrentValue);
                 }
             }
-            AuditTrails.Add(auditEntry.ToAuditTrail());
+            AddAuditTrail(auditEntry);
         }
     }
 }

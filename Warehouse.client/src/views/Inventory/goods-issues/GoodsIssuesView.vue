@@ -24,6 +24,8 @@ import {
   setGoodsIssueFinalization,
   exportGoodsIssueItems,
   getGoodsIssues,
+  getGoodsIssueMetrics,
+  type GoodsIssueMetrics,
   getGoodsIssuePdf,
   GOODS_ISSUE_EXIT_REASON_OPTIONS,
   type GoodsIssueImportSummary,
@@ -41,6 +43,7 @@ import { downloadBlob } from '@/utils/download'
 import { printPdf } from '@/utils/pdfPrint'
 import { createInventoryTableOptions } from '@/utils/inventoryTable'
 import '@/styles/inventory-list.css'
+import '@/styles/inventory-metrics.css'
 
 import GoodsIssueFormModal from './GoodsIssueFormModal.vue'
 import GoodsIssueImportModal from './GoodsIssueImportModal.vue'
@@ -106,6 +109,9 @@ const filters = useFilterState(() => list.reload(true))
 const { search: quickSearch, applied: appliedFilters } = filters
 
 const filterDefinitions = computed<DataTableFilterDefinition[]>(() => [
+  { key: 'quickFilter', label: 'فیلتر امروز', type: 'select', placeholder: 'همه روزها', options: [
+    { value: 'Today', label: 'تاریخ خروج امروز' }, { value: 'CreatedToday', label: 'ثبت‌شده امروز' },
+  ] },
   { key: 'issuedAt', label: 'تاریخ خروج', type: 'date-comparison' },
   { key: 'issueNumberFilter', label: 'کد خروج', type: 'text-comparison', placeholder: 'کد یا شماره خروج', maxlength: 100 },
   { key: 'productTitle', label: 'عنوان کالا', type: 'text-comparison', placeholder: 'جستجو و انتخاب کالا', maxlength: 256 },
@@ -126,6 +132,7 @@ const filterDefinitions = computed<DataTableFilterDefinition[]>(() => [
 function currentFilterParameters(): GoodsIssueListParameters {
   return {
     search: filters.searchQuery.value,
+    quickFilter: filters.id('quickFilter') as GoodsIssueListParameters['quickFilter'],
     issuedAt: filters.date('issuedAt'),
     issueNumberFilter: filters.text('issueNumberFilter'),
     productTitle: filters.text('productTitle'),
@@ -152,6 +159,46 @@ const list = useDataTableList<GoodsIssue | GoodsIssueItemRow>({
 })
 const { table, loading: listLoading } = list
 
+const metrics = ref<GoodsIssueMetrics | null>(null)
+const metricsLoading = ref(false)
+const metricsChannel = useRequestChannel()
+const metricCards = [
+  { key: 'todayItemCount', title: 'اقلام خروجی امروز', tone: 'blue', mode: 'items', filter: 'Today' },
+  { key: 'todayDocumentCount', title: 'اسناد خروجی امروز', tone: 'teal', mode: 'issues', filter: 'Today' },
+  { key: 'todayCreatedItemCount', title: 'اقلام خروجی ثبت‌شده امروز', tone: 'amber', mode: 'items', filter: 'CreatedToday' },
+  { key: 'todayCreatedDocumentCount', title: 'اسناد خروجی ثبت‌شده امروز', tone: 'violet', mode: 'issues', filter: 'CreatedToday' },
+] as const
+type MetricCard = typeof metricCards[number]
+
+async function loadMetrics(): Promise<void> {
+  const controller = metricsChannel.begin()
+  metricsLoading.value = true
+  try {
+    const result = await getGoodsIssueMetrics(controller.signal)
+    if (metricsChannel.isCurrent(controller)) metrics.value = result
+  } catch (error) {
+    if (isAbortError(error)) return
+    if (await handleUnauthorized(error)) return
+    toast.error(error instanceof Error ? error.message : 'دریافت آمار خروج کالا انجام نشد.')
+  } finally {
+    if (metricsChannel.isCurrent(controller)) { metricsChannel.end(controller); metricsLoading.value = false }
+  }
+}
+
+function isMetricActive(card: MetricCard): boolean {
+  return tableMode.value === card.mode && filters.id('quickFilter') === card.filter
+}
+
+function toggleMetric(card: MetricCard): void {
+  const active = isMetricActive(card)
+  quickSearch.value = ''
+  appliedFilters.value = active ? {} : { quickFilter: card.filter }
+  if (!active && tableMode.value !== card.mode) tableMode.value = card.mode
+  else list.reload(true)
+}
+
+void loadMetrics()
+
 const asId = (value: DataTableFilterValue | undefined): string | null =>
   typeof value === 'string' && value ? value : null
 
@@ -171,7 +218,7 @@ function selectDestinationFilter(destination: GoodsIssueDestinationOption, setVa
 }
 
 const rowNumber: ColumnsConfig = {
-  ...createRowNumberColumn(),
+  ...createRowNumberColumn('id'),
   className: 'min-tablet-p text-center data-table-row-number',
 }
 const actions = (data: string): ColumnsConfig => ({
@@ -203,8 +250,8 @@ const columns: Record<TableMode, ColumnsConfig[]> = {
     { data: 'quantity', name: 'quantity', title: 'تعداد', className: 'min-tablet-l text-bold' },
     { data: 'assetNumber', name: 'assetNumber', title: 'شماره اموال', className: 'min-tablet-l' },
     { data: 'destinationTitle', name: 'destinationTitle', title: 'مقصد', className: 'min-tablet-l' },
-    { data: 'shippingLocationTitle', name: 'shippingLocationTitle', title: 'مکان ارسال', className: 'min-tablet-l' },
-    { data: 'exitReason', name: 'exitReason', title: 'علت خروج', className: 'min-tablet-p inventory-wide-column', orderable: false },
+    { data: 'shippingLocationTitle', name: 'shippingLocationTitle', title: 'مکان ارسال', className: 'min-tablet-l goods-issue-location-column', width: '220px' },
+    { data: 'exitReason', name: 'exitReason', title: 'علت خروج', className: 'min-tablet-p goods-issue-exit-reason-column', width: '1%', orderable: false },
     { data: 'description', name: 'description', title: 'توضیحات', className: 'min-tablet-p inventory-wide-column', orderable: false },
     { data: 'deliveringUnit', name: 'deliveringUnit', title: 'واحد تحویل‌دهنده', className: 'min-desktop' },
     { data: 'isReturnable', name: 'isReturnable', title: 'برگشت دارد', className: 'min-desktop text-center' },
@@ -219,6 +266,7 @@ const visibility = useColumnVisibility<TableMode>({
   mode: tableMode,
   columns,
   getApi: () => table.value?.dt,
+  defaultHidden: { issues: ['description'], items: ['issueDescription'] },
 })
 const {
   menuOpen,
@@ -275,7 +323,7 @@ async function changeFinalization(finalized: boolean, row?: GoodsIssue | GoodsIs
   try {
     if (!await confirmation.value?.ask({
       title: title + ' ' + target,
-      text: finalized ? 'پس از تأیید، ویرایش و حذف سند و اقلام آن قفل می‌شود.' : 'پس از برگشت، ویرایش سند با مجوز مربوط امکان‌پذیر می‌شود.',
+      text: finalized ? 'وضعیت سند به تأیید نهایی تغییر می‌کند.' : 'وضعیت تأیید نهایی سند برداشته می‌شود.',
     })) return
     const count = await setGoodsIssueFinalization(finalized, row
       ? { id: 'goodsIssueId' in row ? row.goodsIssueId : row.id, concurrencyStamp: row.concurrencyStamp }
@@ -297,7 +345,7 @@ async function openCreate(): Promise<void> {
 }
 
 async function openEdit(row: GoodsIssue | GoodsIssueItemRow): Promise<void> {
-  if (!canUpdate || row.isFinalized || finalizationBusy.value || editLoading.value) return
+  if (!canUpdate || finalizationBusy.value || editLoading.value) return
   editLoading.value = true
   try {
     if (!await options.load()) return
@@ -308,7 +356,7 @@ async function openEdit(row: GoodsIssue | GoodsIssueItemRow): Promise<void> {
 }
 
 async function removeDocument(row: GoodsIssue | GoodsIssueItemRow): Promise<void> {
-  if (!canDelete || row.isFinalized || finalizationBusy.value || deletingId.value) return
+  if (!canDelete || finalizationBusy.value || deletingId.value) return
   const id = 'goodsIssueId' in row ? row.goodsIssueId : row.id
   deletingId.value = id
   try {
@@ -319,6 +367,7 @@ async function removeDocument(row: GoodsIssue | GoodsIssueItemRow): Promise<void
 }
 
 function onSaved(reason: 'saved' | 'deleted'): void {
+  void loadMetrics()
   void options.reload()
   list.reload(reason === 'saved')
 }
@@ -363,6 +412,7 @@ function onImportOpenChange(open: boolean): void {
 function onImported(summary: GoodsIssueImportSummary): void {
   importSummary.value = summary
   if (summary.importedIssueCount > 0) {
+    void loadMetrics()
     void options.reload()
     list.reload(true)
     toast.success(`${summary.importedIssueCount} سند خروج و ${summary.importedItemCount} قلم کالا ثبت شد.`)
@@ -397,6 +447,7 @@ onBeforeUnmount(() => {
   <BaseModal v-model="finalizationOpen" title="تأیید نهایی اسناد یک روز" :busy="finalizationBusy" initial-focus=".close">
     <label>روز خروج</label>
     <DatePicker v-model="finalizationDay" type="date" format="YYYY-MM-DD"
+                :auto-submit="true"
                 display-format="jYYYY/jMM/jDD" placeholder="روز خروج را انتخاب کنید"
                 :disabled="finalizationBusy" color="#2563eb" />
     <p class="text-muted small mt-3 mb-0">
@@ -459,6 +510,20 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="card-body">
+        <div class="row receipt-metrics" aria-label="آمار خروج کالا">
+          <div v-for="card in metricCards" :key="card.key" class="receipt-metrics__item">
+            <button type="button" class="receipt-metric-card"
+                    :class="[`receipt-metric-card--${card.tone}`, { 'receipt-metric-card--active': isMetricActive(card) }]"
+                    :aria-pressed="isMetricActive(card)" :title="card.title" @click="toggleMetric(card)">
+              <div class="receipt-metric-card__content">
+                <span class="receipt-metric-card__title">{{ card.title }}</span>
+                <strong class="receipt-metric-card__value" :aria-busy="metricsLoading">
+                  {{ metrics ? formatPersianNumber(metrics[card.key]) : '—' }}
+                </strong>
+              </div>
+            </button>
+          </div>
+        </div>
         <div v-if="importSummary" class="alert" :class="importSummary.invalidRows.length ? 'alert-danger' : 'alert-success'" role="status">
           <template v-if="importSummary.invalidRows.length">
             <p>هیچ سند یا خارج‌کننده‌ای ثبت نشد. خطاها را اصلاح و فایل را دوباره ارسال کنید.</p>
@@ -516,6 +581,9 @@ onBeforeUnmount(() => {
             </template>
             <template #column-quantity="{ cellData }"><span class="inventory-quantity-cell">{{ formatPersianNumber(cellData) }}</span></template>
             <template #column-assetNumber="{ cellData }"><span dir="ltr">{{ cellData ?? '' }}</span></template>
+            <template #column-shippingLocationTitle="{ cellData }">
+              <span class="goods-issue-location-text" :title="String(cellData ?? '')">{{ cellData ?? '' }}</span>
+            </template>
             <template #column-exitReason="{ cellData, rowData }">
               <span class="badge light badge-pill goods-issue-exit-reason-chip"
                     :class="exitReasonBadges[cellData as GoodsIssueExitReason] || 'badge-dark'"
@@ -553,10 +621,10 @@ onBeforeUnmount(() => {
                         class="spinner-border spinner-border-sm" aria-hidden="true"></span>
                   <i v-else class="las la-print" aria-hidden="true"></i>
                 </button>
-                <button v-if="canUpdate && !rowData.isFinalized" class="btn users-table__role-action" type="button" title="ویرایش سند"
+                <button v-if="canUpdate" class="btn users-table__role-action" type="button" title="ویرایش سند"
                         aria-label="ویرایش سند" :disabled="finalizationBusy || editLoading || deletingId !== null"
                         @click="openEdit(rowData)"><i class="las la-edit" aria-hidden="true"></i></button>
-                <button v-if="canDelete && !rowData.isFinalized" class="btn users-table__role-action text-danger" type="button" title="حذف سند"
+                <button v-if="canDelete" class="btn users-table__role-action text-danger" type="button" title="حذف سند"
                         aria-label="حذف سند" :disabled="finalizationBusy || editLoading || deletingId !== null"
                         @click="removeDocument(rowData)"><span v-if="deletingId === ('goodsIssueId' in rowData ? rowData.goodsIssueId : rowData.id)"
                         class="spinner-border spinner-border-sm" aria-hidden="true"></span><i v-else class="las la-trash" aria-hidden="true"></i></button>
@@ -593,12 +661,31 @@ onBeforeUnmount(() => {
   line-height: 1.5;
 }
 .goods-issue-exit-reason-chip {
-  max-width: 100%;
-  padding: .25rem .4rem;
+  display: inline-block;
+  max-width: 5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: .2rem .3rem;
   font-size: .75rem;
   line-height: 1.5;
-  white-space: normal;
+  white-space: nowrap;
+}
+.goods-issues-page :deep(.goods-issue-exit-reason-column) {
+  min-width: 0 !important;
+  width: 1% !important;
+  white-space: nowrap !important;
+}
+.goods-issues-page :deep(.goods-issue-location-column) {
+  min-width: 0 !important;
+  width: 220px !important;
+  max-width: 220px !important;
+  white-space: normal !important;
+}
+.goods-issue-location-text {
+  display: block;
+  max-width: 220px;
   overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 .goods-issue-print-loading {
   position: fixed;

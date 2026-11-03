@@ -25,6 +25,9 @@ public sealed record GetGoodsReceiptsQuery
     public TextFilter? InvoiceNumber { get; init; }
 
     public TextFilter? ReceiptNumber { get; init; }
+    public TextFilter? IssueNumber { get; init; }
+    public TextFilter? ItemDescription { get; init; }
+    public TextFilter? ReceiptDescription { get; init; }
     public bool ReceiptNumberIsEmpty { get; init; }
 
     public Guid? WarehouseId { get; init; }

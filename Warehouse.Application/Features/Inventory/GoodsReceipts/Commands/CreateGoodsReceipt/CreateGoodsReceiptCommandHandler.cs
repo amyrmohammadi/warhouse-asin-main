@@ -25,7 +25,26 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
         await unitOfWork.BeginSerializableTransaction(cancellationToken);
         try
         {
-            if (existing is not null && await Invoices.InvoiceEditGuard.IsReceiptLockedAsync(unitOfWork, existing.Id, cancellationToken))
+            var itemRepository = unitOfWork.Repository<GoodsReceiptItem>();
+            var oldItems = existing is null ? [] : await itemRepository.ToListAsync(
+                itemRepository.Entities.Where(item => item.GoodsReceiptId == existing.Id)
+                    .OrderBy(item => item.SortOrder).ThenBy(item => item.Id), cancellationToken);
+            var matchedItems = Invoices.InvoiceEditGuard.MatchItems(request.Items, oldItems);
+            if (updateInitial && request.Items.Zip(matchedItems).Any(pair =>
+                pair.Second?.GoodsIssueItemId.HasValue == true && pair.First.ProductId != pair.Second.ProductId))
+            {
+                await unitOfWork.RollBackTransaction(cancellationToken);
+                return Result<GoodsReceiptSummary>.Error(GoodsIssues.GoodsIssueLinkRules.ProductChangeMessage);
+            }
+            var requestedIds = request.Items.Where(item => item.Id.HasValue).Select(item => item.Id!.Value).ToArray();
+            if (requestedIds.Distinct().Count() != requestedIds.Length ||
+                requestedIds.Any(id => oldItems.All(item => item.Id != id)))
+            {
+                await unitOfWork.RollBackTransaction(cancellationToken);
+                return Result<GoodsReceiptSummary>.Error("شناسه ردیف‌های سند معتبر نیست.");
+            }
+            if (existing is not null && !await Invoices.InvoiceEditGuard.CanUpdateReceiptAsync(unitOfWork, existing,
+                    request, oldItems, updateInitial, updateInvoice, updateReceipt, updateWarehouse, cancellationToken))
             {
                 await unitOfWork.RollBackTransaction(cancellationToken);
                 return Result<GoodsReceiptSummary>.Error(Invoice.LockedMessage);
@@ -78,9 +97,11 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
             // Track suppliers and invoices created during this transaction, before SaveAsync persists them.
             var supplierCache = new Dictionary<string, Supplier>(StringComparer.Ordinal);
             var invoiceCache = new Dictionary<string, Invoice>(StringComparer.Ordinal);
+            var itemIndex = 0;
             foreach (var pair in resolvedItems.Data!.Zip(request.Items))
             {
                 var source = pair.Second;
+                var oldItem = matchedItems[itemIndex++];
                 Invoice? invoice = null;
                 Supplier? supplier = null;
                 if (updateInvoice && source.InvoiceStatus != Domain.Enums.InvoiceStatus.HasInvoice)
@@ -98,7 +119,14 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                     source.InvoiceStatus == Domain.Enums.InvoiceStatus.HasInvoice)
                 {
                     var invoiceNumber = Invoice.NormalizeNumber(source.InvoiceNumber!);
-                    var resolvedInvoice = await ResolveInvoiceAsync(
+                    var oldInvoice = oldItem?.InvoiceId is Guid oldInvoiceId
+                        ? await unitOfWork.Repository<Invoice>().GetByIdAsync(oldInvoiceId, cancellationToken) : null;
+                    // Unchanged rows keep their identity, including a closed invoice.
+                    var resolvedInvoice = oldInvoice is not null && oldInvoice.InvoiceNumber == invoiceNumber &&
+                        oldInvoice.SupplierId == source.SupplierId && string.IsNullOrWhiteSpace(source.SupplierTitle) &&
+                        Invoice.GetReceiptDate(existing!.EnteredAtUtc) == Invoice.GetReceiptDate(request.EnteredAtUtc)
+                        ? (Invoice: oldInvoice, Error: (string?)null)
+                        : await ResolveInvoiceAsync(
                         invoiceNumber,
                         source.SupplierId,
                         source.SupplierTitle,
@@ -114,7 +142,7 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                     }
 
                     invoice = resolvedInvoice.Invoice!;
-                    if (invoice.IsLocked)
+                    if (invoice.IsLocked && oldItem?.InvoiceId != invoice.Id)
                     {
                         await unitOfWork.RollBackTransaction(cancellationToken);
                         return Result<GoodsReceiptSummary>.Error(Invoice.LockedMessage);
@@ -139,16 +167,6 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                 receipt.UpdateInitialEntry(request.EnteredAtUtc, request.Description,
                     deliverer!.Id, request.PageNumber);
 
-            var itemRepository = unitOfWork.Repository<GoodsReceiptItem>();
-            var oldItems = existing is null ? [] : await itemRepository.ToListAsync(
-                itemRepository.Entities
-                    .Where(item => item.GoodsReceiptId == receipt.Id)
-                    .OrderBy(item => item.SortOrder)
-                    .ThenBy(item => item.Id),
-                cancellationToken);
-            var oldItemsByProduct = oldItems
-                .GroupBy(item => item.ProductId)
-                .ToDictionary(group => group.Key, group => new Queue<GoodsReceiptItem>(group));
             var matchedOldItemIds = new HashSet<Guid>();
 
             var issueNumbers = request.Items
@@ -216,11 +234,11 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
             for (var sortOrder = 0; sortOrder < preparedItems.Count; sortOrder++)
             {
                 var item = preparedItems[sortOrder];
-                GoodsReceiptItem? old = null;
-                if (oldItemsByProduct.TryGetValue(item.Product.ProductId, out var candidates) &&
-                    candidates.Count > 0)
+                var old = matchedItems[sortOrder];
+                if (old is not null && old.ProductId != item.Product.ProductId)
+                    old = null;
+                if (old is not null)
                 {
-                    old = candidates.Dequeue();
                     matchedOldItemIds.Add(old.Id);
                 }
                 if (old is null)
@@ -238,6 +256,9 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                     continue;
                 }
 
+                var oldInvoice = old.InvoiceId is Guid invoiceId
+                    ? await unitOfWork.Repository<Invoice>().GetByIdAsync(invoiceId, cancellationToken) : null;
+                if (oldInvoice?.IsLocked == true) continue;
                 var tracked = await itemRepository.GetByIdAsync(old.Id, cancellationToken);
                 tracked!.Update(
                     updateWarehouse ? item.Warehouse.Id : old.WarehouseId,
@@ -278,7 +299,7 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                         !await GoodsIssues.GoodsIssueEditGuard.CanChangeItemAsync(unitOfWork, issue, cancellationToken))
                     {
                         await unitOfWork.RollBackTransaction(cancellationToken);
-                        return Result<GoodsReceiptSummary>.Error(GoodsIssue.FinalizedMessage);
+                        return Result<GoodsReceiptSummary>.Error(Common.Concurrency.ConcurrencyMessages.Conflict);
                     }
                     issue.SetReturnAtUtc(returnAtUtc);
                 }

@@ -47,6 +47,8 @@ internal sealed class GetGoodsReceiptsQueryHandler(IUnitOfWork<Guid> unitOfWork)
                     item.InvoiceStatus == null)),
                 GoodsReceiptQuickFilter.Today => query.Where(receipt =>
                     receipt.EnteredAtUtc >= startUtc && receipt.EnteredAtUtc < endUtc),
+                GoodsReceiptQuickFilter.CreatedToday => query.Where(receipt =>
+                    receipt.CreatedOn >= startUtc && receipt.CreatedOn < endUtc),
                 _ => query
             };
         }
@@ -68,11 +70,16 @@ internal sealed class GetGoodsReceiptsQueryHandler(IUnitOfWork<Guid> unitOfWork)
                     (access.Counterparty && item.Invoice == null && item.Supplier != null && item.Supplier.Title.Contains(search)) ||
                     (access.ReceiptNumber && item.ReceiptNumber != null && item.ReceiptNumber.Contains(search)) ||
                     (item.Description != null && item.Description.Contains(search)) ||
+                    (item.GoodsIssueItem != null && item.GoodsIssueItem.GoodsIssue.IssueNumber.Contains(search)) ||
                     item.Product.Title.Contains(search) ||                  
                     item.Product.Code.Contains(search)));
         }
 
         query = query
+            .ApplyTextFilter(request.ReceiptDescription, receipt => receipt.Description)
+            .ApplyAnyTextFilter(request.ItemDescription, receipt => receipt.Items, item => item.Description)
+            .ApplyAnyTextFilter(request.IssueNumber, receipt => receipt.Items,
+                item => item.GoodsIssueItem == null ? null : item.GoodsIssueItem.GoodsIssue.IssueNumber)
             .ApplyDateFilter(request.EnteredAt, receipt => receipt.EnteredAtUtc)
             .ApplyTextFilter(request.PageNumberFilter, receipt => receipt.PageNumber);
 
@@ -152,6 +159,8 @@ internal sealed class GetGoodsReceiptsQueryHandler(IUnitOfWork<Guid> unitOfWork)
         bool descending) =>
         (sortBy?.Trim().ToLowerInvariant(), descending) switch
         {
+            ("id", false) => query.OrderBy(item => item.Id),
+            ("id", true) => query.OrderByDescending(item => item.Id),
             ("pagenumber", false) => query.OrderBy(item => item.PageNumber).ThenBy(item => item.Id),
             ("pagenumber", true) => query.OrderByDescending(item => item.PageNumber).ThenByDescending(item => item.Id),
             ("delivererfullname", false) => query.OrderBy(item => item.Deliverer.FullName).ThenBy(item => item.Id),

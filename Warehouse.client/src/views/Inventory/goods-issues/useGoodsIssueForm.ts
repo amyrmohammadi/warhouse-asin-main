@@ -31,6 +31,7 @@ import { focusEntryField } from '@/utils/entryFocus'
 
 export interface FormItem {
   key: number
+  id: string | null
   productId: string | null
   productCode: string
   productTitle: string
@@ -82,6 +83,7 @@ const FORM_FIELD_MAP: [string, string][] = [
 function newItem(key: number): FormItem {
   return {
     key,
+    id: null,
     productId: null,
     productCode: '',
     productTitle: '',
@@ -167,10 +169,6 @@ export function useGoodsIssueForm(deps: Dependencies) {
     const controller = channel.begin()
     try {
       const issue = await getGoodsIssue(id, controller.signal)
-      if (issue.isFinalized) {
-        toast.error('سند خروج تأیید نهایی شده است؛ ابتدا از تأیید نهایی خارج کنید.')
-        return
-      }
       reset()
       editingId.value = id
       concurrencyStamp.value = issue.concurrencyStamp
@@ -182,6 +180,7 @@ export function useGoodsIssueForm(deps: Dependencies) {
         issuerText: issue.issuerFullName,
       })
       entry.reset(issue.items.map(item => Object.assign(entry.newRow(), {
+        id: item.id,
         productId: item.productId,
         productCode: item.productCode,
         productTitle: item.productTitle ?? '',
@@ -365,6 +364,7 @@ export function useGoodsIssueForm(deps: Dependencies) {
       issuerFullName: form.issuerId ? null : form.issuerText.trim(),
       concurrencyStamp: editingId.value ? concurrencyStamp.value : null,
       items: entry.rowsForSubmission.value.map(item => ({
+        id: item.id,
         productId: item.productId,
         productCode: item.productCode.trim(),
         productTitle: item.productId ? null : item.productTitle.trim(),

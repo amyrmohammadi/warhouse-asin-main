@@ -65,13 +65,21 @@ internal sealed class LinkGoodsIssueItemCommandHandler(IUnitOfWork<Guid> unitOfW
                 .GetByIdAsync(issueItemId, cancellationToken);
             if (issueItem is null)
                 return Result<LinkGoodsIssueItemResult>.Error("آیتم خروج کالا پیدا نشد.");
+            var sameProduct = issueItem.ProductId == receiptItem.ProductId;
+            if (!issueItem.ProductId.HasValue)
+            {
+                var product = await unitOfWork.Repository<Product>().GetByIdAsync(receiptItem.ProductId, cancellationToken);
+                sameProduct = product is not null && product.Code == issueItem.ProductCode;
+            }
+            if (!sameProduct)
+                return Result<LinkGoodsIssueItemResult>.Error(GoodsIssues.GoodsIssueLinkRules.ProductMismatchMessage);
         }
 
         var receipt = await unitOfWork.Repository<GoodsReceipt>()
             .GetByIdAsync(receiptItem.GoodsReceiptId, cancellationToken);
         if (receipt is null)
             return Result<LinkGoodsIssueItemResult>.Error("سند ورود کالا پیدا نشد.");
-        if (await Invoices.InvoiceEditGuard.IsReceiptLockedAsync(unitOfWork, receipt.Id, cancellationToken))
+        if (await Invoices.InvoiceEditGuard.IsItemLockedAsync(unitOfWork, receiptItem.Id, cancellationToken))
             return Result<LinkGoodsIssueItemResult>.Error(Invoice.LockedMessage);
         if (!receipt.TryAdvanceConcurrencyStamp(request.ConcurrencyStamp))
             return Result<LinkGoodsIssueItemResult>.Error(ConcurrencyMessages.Conflict);

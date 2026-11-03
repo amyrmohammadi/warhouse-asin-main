@@ -16,6 +16,7 @@ using Warehouse.Application.Features.Inventory.GoodsIssues.Queries.GetGoodsIssue
 using Warehouse.Application.Features.Inventory.GoodsIssues.Queries.GetGoodsIssueItems;
 using Warehouse.Application.Features.Inventory.GoodsIssues.Queries.GetGoodsIssueOptions;
 using Warehouse.Application.Features.Inventory.GoodsIssues.Queries.GetGoodsIssues;
+using Warehouse.Application.Features.Inventory.GoodsIssues.Queries.GetGoodsIssueMetrics;
 using Warehouse.Domain.Enums;
 using Warehouse.Server.Contracts.Inventory;
 
@@ -28,6 +29,14 @@ public sealed class GoodsIssuesController(
     IAuthorizationService authorizationService) : ControllerBase
 {
     private const int ExportBatchSize = 100;
+
+    [Authorize(Policy = PermissionPolicyNames.Inventory.GoodsIssuesRead)]
+    [HttpGet("metrics")]
+    public async Task<ActionResult<Result<GoodsIssueMetrics>>> GetMetrics(CancellationToken cancellationToken)
+    {
+        var result = await sender.Send(new GetGoodsIssueMetricsQuery(), cancellationToken);
+        return result.IsSuccess ? Ok(result) : BadRequest(result);
+    }
 
     [Authorize(Policy = PermissionPolicyNames.Inventory.GoodsIssuesFinalize)]
     [HttpPost("finalize")]
@@ -231,7 +240,7 @@ public sealed class GoodsIssuesController(
             item.ProductId, item.ProductCode, item.Quantity, item.AssetNumber, item.DestinationId,
             item.DestinationTitle, item.ExitReason, item.Description, item.DeliveringUnit,
             item.ReturnAtUtc, item.ProductTitle, item.UnitOfMeasureId,
-            item.ShippingLocationId, item.IsReturnable)).ToArray(), request.ConcurrencyStamp);
+            item.ShippingLocationId, item.IsReturnable, item.Id)).ToArray(), request.ConcurrencyStamp);
 
     private static bool CreatesMasterData(SaveGoodsIssueRequest request) =>
         (!request.IssuerId.HasValue && !string.IsNullOrWhiteSpace(request.IssuerFullName)) ||

@@ -46,6 +46,8 @@ internal sealed class GetGoodsReceiptItemRowsQueryHandler(IUnitOfWork<Guid> unit
                 GoodsReceiptQuickFilter.MissingInvoice => query.Where(item => item.InvoiceStatus == null),
                 GoodsReceiptQuickFilter.Today => query.Where(item =>
                     item.GoodsReceipt.EnteredAtUtc >= startUtc && item.GoodsReceipt.EnteredAtUtc < endUtc),
+                GoodsReceiptQuickFilter.CreatedToday => query.Where(item =>
+                    item.CreatedOn >= startUtc && item.CreatedOn < endUtc),
                 _ => query
             };
         }
@@ -67,10 +69,15 @@ internal sealed class GetGoodsReceiptItemRowsQueryHandler(IUnitOfWork<Guid> unit
                     item.Invoice.Supplier.Title.Contains(search)) ||
                 (access.Counterparty && item.Invoice == null && item.Supplier != null && item.Supplier.Title.Contains(search)) ||
                 (item.Description != null && item.Description.Contains(search)) ||
+                (item.GoodsIssueItem != null && item.GoodsIssueItem.GoodsIssue.IssueNumber.Contains(search)) ||
                 (access.ReceiptNumber && item.ReceiptNumber != null && item.ReceiptNumber.Contains(search)));
         }
 
         query = query
+            .ApplyTextFilter(request.ReceiptDescription, item => item.GoodsReceipt.Description)
+            .ApplyTextFilter(request.ItemDescription, item => item.Description)
+            .ApplyTextFilter(request.IssueNumber,
+                item => item.GoodsIssueItem == null ? null : item.GoodsIssueItem.GoodsIssue.IssueNumber)
             .ApplyDateFilter(request.EnteredAt, item => item.GoodsReceipt.EnteredAtUtc)
             .ApplyTextFilter(request.ProductTitle, item => item.Product.Title)
             .ApplyTextFilter(request.ProductCode, item => item.Product.Code)
@@ -118,8 +125,8 @@ internal sealed class GetGoodsReceiptItemRowsQueryHandler(IUnitOfWork<Guid> unit
             query.Select(item => new GoodsReceiptItemRowSummary
             {
                 Id = item.Id,
-                IsLocked = item.GoodsReceipt.Items.Any(row => row.Invoice != null &&
-                    row.Invoice.ProcessingStatus != InvoiceProcessingStatus.UnderReview),
+                IsLocked = item.Invoice != null &&
+                    item.Invoice.ProcessingStatus != InvoiceProcessingStatus.UnderReview,
                 GoodsIssueItemId = item.GoodsIssueItemId,
                 IssueNumber = item.GoodsIssueItem == null ? null : item.GoodsIssueItem.GoodsIssue.IssueNumber,
                 GoodsReceiptId = item.GoodsReceiptId,
@@ -159,6 +166,8 @@ internal sealed class GetGoodsReceiptItemRowsQueryHandler(IUnitOfWork<Guid> unit
         bool descending) =>
         (sortBy?.Trim().ToLowerInvariant(), descending) switch
         {
+            ("id", false) => query.OrderBy(item => item.Id),
+            ("id", true) => query.OrderByDescending(item => item.Id),
             ("producttitle", false) => query.OrderBy(item => item.Product.Title).ThenBy(item => item.Id),
             ("producttitle", true) => query.OrderByDescending(item => item.Product.Title).ThenByDescending(item => item.Id),
             ("productcode", false) => query.OrderBy(item => item.Product.Code).ThenBy(item => item.Id),

@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 using NSubstitute;
 using Warehouse.Application.Common.Authorization;
 using Warehouse.Application.Common.Concurrency;
+using Warehouse.Application.Common.Interfaces;
 using Warehouse.Application.Common.Models;
 using Warehouse.Application.Common.Models.Auditing;
 using Warehouse.Application.Common.Models.Inventory;
@@ -52,6 +53,8 @@ public sealed class GoodsReceiptsControllerTests
     [Theory]
     [InlineData(nameof(GoodsReceiptsController.Import), PermissionPolicyNames.Inventory.GoodsReceiptsImport)]
     [InlineData(nameof(GoodsReceiptsController.ExportItems), PermissionPolicyNames.Inventory.GoodsReceiptsExport)]
+    [InlineData(nameof(GoodsReceiptsController.PrintItems), PermissionPolicyNames.Inventory.GoodsReceiptsPrint)]
+    [InlineData(nameof(GoodsReceiptsController.PrintReceipts), PermissionPolicyNames.Inventory.GoodsReceiptsPrint)]
     [InlineData(nameof(GoodsReceiptsController.GetItemHistory), PermissionPolicyNames.Inventory.GoodsReceiptHistoryRead)]
     [InlineData(nameof(GoodsReceiptsController.GetMetrics), PermissionPolicyNames.Inventory.GoodsReceiptsRead)]
     public void ImportAndExport_UseTheirDedicatedPolicies(string actionName, string expectedPolicy)
@@ -146,6 +149,65 @@ public sealed class GoodsReceiptsControllerTests
         }, worksheet.Row(1).Cells(1, 15).Select(cell => cell.GetString()));
         Assert.Equal("کالای 501", worksheet.Cell(502, 3).GetString());
         Assert.Equal(501, worksheet.Cell(502, 1).GetValue<int>());
+    }
+
+    [Fact]
+    public async Task PrintItems_PreservesFiltersAndOrder_FetchesEveryPage_AndExcludesUnauthorizedColumns()
+    {
+        var sender = Substitute.For<ISender>();
+        var auth = Substitute.For<IAuthorizationService>();
+        auth.AuthorizeAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<object?>(), Arg.Any<string>())
+            .Returns(AuthorizationResult.Failed());
+        var requests = new List<GetGoodsReceiptItemRowsQuery>();
+        sender.Send(Arg.Any<GetGoodsReceiptItemRowsQuery>(), Arg.Any<CancellationToken>()).Returns(call =>
+        {
+            var query = call.Arg<GetGoodsReceiptItemRowsQuery>();
+            requests.Add(query);
+            var rows = Enumerable.Range(1, query.PageNumber == 1 ? 500 : 1)
+                .Select(index => ExportRow($"کالا {index}")).ToArray();
+            return Result<GoodsReceiptItemRowListResult>.Success(new(rows, 501, 501, query.PageNumber, query.PageSize));
+        });
+        var pdf = Substitute.For<IGoodsReceiptListPdfService>();
+        pdf.GenerateItemsAsync(Arg.Any<IReadOnlyList<GoodsReceiptItemRowSummary>>(),
+            Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>()).Returns(new byte[] { 1, 2 });
+        var controller = new GoodsReceiptsController(sender, auth)
+        { ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() } };
+        var filter = new Warehouse.Application.Common.Models.Filtering.TextFilter { Value = "خروج" };
+        var response = await controller.PrintItems(new GetGoodsReceiptItemRowsQuery
+        {
+            Search = "فیلتر", IssueNumber = filter, SortBy = "id", SortDescending = true, PageNumber = 7
+        }, ["productTitle", "id", "invoiceNumber", "warehouseTitle", "actions", "unknown"], pdf, default);
+
+        Assert.Equal("application/pdf", Assert.IsType<FileContentResult>(response).ContentType);
+        Assert.Equal("no-store", controller.Response.Headers.CacheControl);
+        Assert.Equal([1, 2], requests.Select(query => query.PageNumber));
+        Assert.All(requests, query =>
+        {
+            Assert.Equal(500, query.PageSize);
+            Assert.Equal("فیلتر", query.Search);
+            Assert.Same(filter, query.IssueNumber);
+            Assert.Equal("id", query.SortBy);
+            Assert.True(query.SortDescending);
+            Assert.False(query.ColumnAccess.InvoiceNumber);
+        });
+        await pdf.Received(1).GenerateItemsAsync(
+            Arg.Is<IReadOnlyList<GoodsReceiptItemRowSummary>>(rows => rows.Count == 501 && rows.All(row => row.InvoiceNumber == null)),
+            Arg.Is<IReadOnlyList<string>>(columns => columns.SequenceEqual(new[] { "productTitle", "id" })), default);
+    }
+
+    [Fact]
+    public async Task PrintItems_RejectsAnEmptyPrintableSelection()
+    {
+        var sender = Substitute.For<ISender>();
+        var auth = Substitute.For<IAuthorizationService>();
+        auth.AuthorizeAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<object?>(), Arg.Any<string>())
+            .Returns(AuthorizationResult.Failed());
+        var controller = new GoodsReceiptsController(sender, auth)
+        { ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() } };
+        var pdf = Substitute.For<IGoodsReceiptListPdfService>();
+        Assert.IsType<BadRequestObjectResult>(await controller.PrintItems(new(), ["invoiceNumber", "actions"], pdf, default));
+        Assert.Empty(sender.ReceivedCalls());
+        Assert.Empty(pdf.ReceivedCalls());
     }
 
     [Theory]

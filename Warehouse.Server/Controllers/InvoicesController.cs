@@ -13,6 +13,8 @@ using Warehouse.Server.Contracts.Inventory;
 using Warehouse.Application.Common.Interfaces;
 using Warehouse.Application.Features.Inventory.Invoices.Commands.PrintInvoices;
 using Warehouse.Application.Features.Inventory.Invoices.Commands.ChangeInvoiceStatus;
+using Warehouse.Application.Features.Inventory.Invoices.Commands.CreateInvoice;
+using Warehouse.Application.Features.Inventory.Invoices.Queries.GetInvoiceMetrics;
 using Warehouse.Domain.Enums;
 
 namespace Warehouse.Server.Controllers;
@@ -24,6 +26,26 @@ public sealed class InvoicesController(
     ISender sender,
     IAuthorizationService authorizationService) : ControllerBase
 {
+    [HttpGet("metrics")]
+    public async Task<ActionResult<Result<InvoiceMetrics>>> GetMetrics(CancellationToken cancellationToken)
+    {
+        var result = await sender.Send(new GetInvoiceMetricsQuery(), cancellationToken);
+        return result.IsSuccess ? Ok(result) : BadRequest(result);
+    }
+
+    [Authorize(Policy = PermissionPolicyNames.Inventory.GoodsReceiptsReceiptInvoiceOperations)]
+    [HttpPost]
+    public async Task<ActionResult<Result<InvoiceDetails>>> Create(
+        [FromBody] CreateInvoiceRequest request, CancellationToken cancellationToken)
+    {
+        var result = await sender.Send(new CreateInvoiceCommand(request.InvoiceNumber, request.SupplierId,
+            request.Description, request.InvoiceDate, request.ProcessingStatus, request.Price,
+            request.FinanceDeliveryDate), cancellationToken);
+        return result.IsSuccess && result.Data is not null
+            ? CreatedAtAction(nameof(GetById), new { id = result.Data.Id }, result)
+            : BadRequest(result);
+    }
+
     [HttpPost("{id:guid}/status")]
     public async Task<ActionResult<Result<InvoiceDetails>>> ChangeStatus(Guid id,
         [FromBody] ChangeInvoiceStatusRequest request, CancellationToken cancellationToken)

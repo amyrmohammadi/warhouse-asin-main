@@ -6,7 +6,7 @@ namespace Warehouse.Application.Features.Inventory.GoodsReceipts.Queries.GetGood
 internal sealed class GetGoodsReceiptsQueryValidator : AbstractValidator<GetGoodsReceiptsQuery>
 {
     private static readonly string[] SortFields =
-        ["enteredAtUtc", "pageNumber", "delivererFullName", "invoiceStatus"];
+        ["id", "enteredAtUtc", "pageNumber", "delivererFullName", "invoiceStatus"];
 
     public GetGoodsReceiptsQueryValidator()
     {
@@ -34,6 +34,12 @@ internal sealed class GetGoodsReceiptsQueryValidator : AbstractValidator<GetGood
         RuleFor(query => query.ReceiptNumber!)
             .SetValidator(new TextFilterValidator(100))
             .When(query => query.ReceiptNumber is not null);
+        RuleFor(query => query.IssueNumber!).SetValidator(new TextFilterValidator(100))
+            .When(query => query.IssueNumber is not null);
+        RuleFor(query => query.ItemDescription!).SetValidator(new TextFilterValidator(1000))
+            .When(query => query.ItemDescription is not null);
+        RuleFor(query => query.ReceiptDescription!).SetValidator(new TextFilterValidator(1000))
+            .When(query => query.ReceiptDescription is not null);
         RuleFor(query => query.SortBy)
             .Must(value => SortFields.Contains(value!, StringComparer.OrdinalIgnoreCase))
             .When(query => !string.IsNullOrWhiteSpace(query.SortBy));

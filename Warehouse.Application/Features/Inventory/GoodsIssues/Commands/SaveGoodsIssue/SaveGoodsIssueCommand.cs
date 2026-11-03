@@ -24,7 +24,8 @@ public sealed record SaveGoodsIssueItem(
     string? ProductTitle = null,
     Guid? UnitOfMeasureId = null,
     Guid? ShippingLocationId = null,
-    bool IsReturnable = true);
+    bool IsReturnable = true,
+    Guid? Id = null);
 
 public sealed record SaveGoodsIssueCommand(
     Guid? Id,
@@ -55,6 +56,7 @@ internal sealed class SaveGoodsIssueCommandValidator : AbstractValidator<SaveGoo
             .Must(items => items.Count <= 100).WithMessage("در هر سند حداکثر ۱۰۰ ردیف قابل ثبت است.");
         RuleForEach(command => command.Items).ChildRules(item =>
         {
+            item.RuleFor(value => value.Id).NotEqual(Guid.Empty).When(value => value.Id.HasValue);
             item.RuleFor(value => value.ProductCode)
                 .NotEmpty().WithMessage("وارد کردن یا انتخاب کد کالا الزامی است.")
                 .MaximumLength(100).WithMessage("کد کالا نباید بیشتر از ۱۰۰ نویسه باشد.");
@@ -81,6 +83,9 @@ internal sealed class SaveGoodsIssueCommandValidator : AbstractValidator<SaveGoo
         RuleForEach(command => command.Items)
             .Must((command, item) => !item.ReturnAtUtc.HasValue || item.ReturnAtUtc >= command.IssuedAtUtc)
             .WithMessage("تاریخ عودت نمی‌تواند قبل از تاریخ خروج باشد.");
+        RuleFor(command => command.Items)
+            .Must(items => items.Where(item => item.Id.HasValue).Select(item => item.Id).Distinct().Count() ==
+                items.Count(item => item.Id.HasValue)).WithMessage("ردیف تکراری در سند خروج وجود دارد.");
     }
 }
 
@@ -98,19 +103,9 @@ internal sealed class SaveGoodsIssueCommandHandler(IUnitOfWork<Guid> unitOfWork)
             existingIssue = await issueRepository.GetByIdAsync(request.Id.Value, cancellationToken);
             if (existingIssue is null)
                 return Result<GoodsIssueSummary>.Error("سند خروج کالا پیدا نشد.");
-            if (existingIssue.IsFinalized)
-                return Result<GoodsIssueSummary>.Error(GoodsIssue.FinalizedMessage);
             if (!request.ConcurrencyStamp.HasValue ||
                 request.ConcurrencyStamp.Value != existingIssue.ConcurrencyStamp)
                 return Result<GoodsIssueSummary>.Error(ConcurrencyMessages.Conflict);
-            var itemRepository = unitOfWork.Repository<GoodsIssueItem>();
-            var linkedItems = await itemRepository.CountAsync(
-                itemRepository.Entities.Where(item =>
-                    item.GoodsIssueId == existingIssue.Id && item.GoodsReceiptItems.Any()),
-                cancellationToken);
-            if (linkedItems > 0)
-                return Result<GoodsIssueSummary>.Error(
-                    "ابتدا ارتباط آیتم‌های ورود کالا با این سند خروج را حذف کنید.");
             if (!existingIssue.TryAdvanceConcurrencyStamp(request.ConcurrencyStamp.Value))
                 return Result<GoodsIssueSummary>.Error(ConcurrencyMessages.Conflict);
         }
@@ -130,24 +125,59 @@ internal sealed class SaveGoodsIssueCommandHandler(IUnitOfWork<Guid> unitOfWork)
         if (!preparedResult.IsSuccess || preparedResult.Data is null)
             return Result<GoodsIssueSummary>.Error(preparedResult.Messages);
 
-        await unitOfWork.BeginTransaction(cancellationToken);
+        await unitOfWork.BeginSerializableTransaction(cancellationToken);
         try
         {
             GoodsIssue issue;
             if (request.Id.HasValue)
             {
                 issue = existingIssue!;
-                issue.Update(request.IssueNumber, request.IssuedAtUtc, request.Description, issuerResult.Issuer.Id);
                 var itemRepository = unitOfWork.Repository<GoodsIssueItem>();
                 var oldItems = await itemRepository.ToListAsync(
                     itemRepository.Entities.Where(item => item.GoodsIssueId == issue.Id),
                     cancellationToken);
-                foreach (var oldItem in oldItems)
+                var retainedIds = preparedResult.Data.Where(item => item.Id.HasValue).Select(item => item.Id!.Value).ToHashSet();
+                if (retainedIds.Any(id => !oldItems.Any(item => item.Id == id)))
+                    throw new InvalidOperationException("ردیف انتخاب‌شده متعلق به این سند خروج نیست؛ صفحه را تازه‌سازی کنید.");
+                var changedProductIds = preparedResult.Data.Where(item => item.Id.HasValue && oldItems.Any(old =>
+                    old.Id == item.Id.Value && (old.ProductId != item.ProductId || old.ProductCode != item.ProductCode ||
+                        request.Items.Any(source => source.Id == old.Id && source.ProductCode.Trim() != old.ProductCode))))
+                    .Select(item => item.Id!.Value).ToArray();
+                if (changedProductIds.Length > 0)
+                {
+                    var receipts = unitOfWork.Repository<GoodsReceiptItem>();
+                    var linkedCount = await receipts.CountAsync(receipts.Entities.Where(item =>
+                        item.GoodsIssueItemId.HasValue && changedProductIds.Contains(item.GoodsIssueItemId.Value)), cancellationToken);
+                    if (linkedCount > 0) throw new InvalidOperationException(GoodsIssueLinkRules.ProductChangeMessage);
+                }
+                issue.Update(request.IssueNumber, request.IssuedAtUtc, request.Description, issuerResult.Issuer.Id);
+                var removedItems = oldItems.Where(item => !retainedIds.Contains(item.Id)).ToArray();
+                var removedIds = removedItems.Select(item => item.Id).ToArray();
+                if (removedIds.Length > 0)
+                {
+                    var receipts = unitOfWork.Repository<GoodsReceiptItem>();
+                    var linked = await receipts.ToListAsync(receipts.Entities.Where(item =>
+                        item.GoodsIssueItemId.HasValue && removedIds.Contains(item.GoodsIssueItemId.Value)), cancellationToken);
+                    foreach (var receiptItem in linked) receiptItem.SetGoodsIssueItem(null);
+                }
+                foreach (var oldItem in removedItems)
+                {
+                    issue.Items.Remove(oldItem);
                     await itemRepository.DeleteAsync(oldItem, cancellationToken);
+                }
 
                 for (var index = 0; index < preparedResult.Data.Count; index++)
                 {
                     var item = preparedResult.Data[index];
+                    if (item.Id.HasValue)
+                    {
+                        var retained = oldItems.Single(value => value.Id == item.Id.Value);
+                        retained.Update(item.ProductId, item.ProductCode, item.Quantity, item.AssetNumber,
+                            item.DestinationId, item.ShippingLocationId, item.ExitReason, item.IsReturnable,
+                            item.Description, item.DeliveringUnit, item.ReturnAtUtc, index);
+                        await itemRepository.UpdateAsync(retained, cancellationToken);
+                        continue;
+                    }
                     var entity = issue.AddItem(item.ProductId, item.ProductCode, item.Quantity, item.AssetNumber,
                         item.DestinationId, item.ShippingLocationId, item.ExitReason, item.IsReturnable,
                         item.Description, item.DeliveringUnit, item.ReturnAtUtc, index);
@@ -338,7 +368,7 @@ internal sealed class SaveGoodsIssueCommandHandler(IUnitOfWork<Guid> unitOfWork)
             }
             result.Add(new PreparedItem(product.Id, product.Code, item.Quantity, item.AssetNumber,
                 destination.Id, item.ShippingLocationId, item.ExitReason, item.IsReturnable,
-                item.Description, item.DeliveringUnit, item.IsReturnable ? item.ReturnAtUtc : null));
+                item.Description, item.DeliveringUnit, item.IsReturnable ? item.ReturnAtUtc : null, item.Id));
         }
         return Result<IReadOnlyList<PreparedItem>>.Success(result);
     }
@@ -354,5 +384,6 @@ internal sealed class SaveGoodsIssueCommandHandler(IUnitOfWork<Guid> unitOfWork)
         bool IsReturnable,
         string? Description,
         string? DeliveringUnit,
-        DateTimeOffset? ReturnAtUtc);
+        DateTimeOffset? ReturnAtUtc,
+        Guid? Id);
 }

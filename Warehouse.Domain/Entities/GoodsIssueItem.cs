@@ -64,6 +64,24 @@ public sealed class GoodsIssueItem : Entity<Guid>
     public void SetReturnAtUtc(DateTimeOffset? returnAtUtc) =>
         ReturnAtUtc = returnAtUtc?.ToUniversalTime();
 
+    public void Update(Guid? productId, string productCode, decimal quantity, string? assetNumber,
+        Guid? destinationId, Guid? shippingLocationId, GoodsIssueExitReason exitReason, bool isReturnable,
+        string? description, string? deliveringUnit, DateTimeOffset? returnAtUtc, int sortOrder)
+    {
+        ProductId = productId;
+        ProductCode = productCode.Trim();
+        Quantity = quantity;
+        AssetNumber = Normalize(assetNumber);
+        DestinationId = destinationId;
+        ShippingLocationId = shippingLocationId;
+        ExitReasonType = exitReason;
+        IsReturnable = isReturnable;
+        Description = Normalize(description);
+        DeliveringUnit = Normalize(deliveringUnit);
+        ReturnAtUtc = isReturnable ? returnAtUtc?.ToUniversalTime() : null;
+        SortOrder = sortOrder;
+    }
+
     private static string? Normalize(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

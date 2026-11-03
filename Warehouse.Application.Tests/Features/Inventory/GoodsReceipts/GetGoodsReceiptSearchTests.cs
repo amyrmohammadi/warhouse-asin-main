@@ -1,4 +1,5 @@
 using Warehouse.Application.Common.Interfaces.Repositories;
+using Warehouse.Application.Common.Models.Filtering;
 using Warehouse.Application.Common.Models.Inventory;
 using Warehouse.Application.Features.Inventory.GoodsReceipts.Queries.GetGoodsReceiptItemRows;
 using Warehouse.Application.Features.Inventory.GoodsReceipts.Queries.GetGoodsReceipts;
@@ -9,6 +10,46 @@ namespace Warehouse.Application.Tests.Features.Inventory.GoodsReceipts;
 
 public sealed class GetGoodsReceiptSearchTests
 {
+    [Theory]
+    [InlineData("issueNumber", "OUT-MATCH", false)]
+    [InlineData("issueNumber", "MATCH", false)]
+    [InlineData("issueNumber", "MATCH", true)]
+    [InlineData("itemDescription", "شرح ردیف ویژه", true)]
+    [InlineData("receiptDescription", "شرح سند ویژه", true)]
+    [InlineData("search", "OUT-MATCH", false)]
+    public async Task NewFilters_WorkInBothTableModes(string field, string value, bool exact)
+    {
+        await using var context = new ApplicationTestContext();
+        var matching = CreateReceipt("شرح سند ویژه", "شرح ردیف ویژه", "supplier", "MATCH");
+        var other = CreateReceipt("دیگر", "دیگر", "supplier", "OTHER");
+        var issue = new GoodsIssue("OUT-MATCH", DateTimeOffset.UtcNow, null, Guid.NewGuid());
+        var issueItem = issue.AddItem(null, "P", 1, null, null, null, null, null, null, 0);
+        Set(issueItem, nameof(GoodsIssueItem.GoodsIssue), issue);
+        Set(matching.Items.Single(), nameof(GoodsReceiptItem.GoodsIssueItem), issueItem);
+        var receiptRepository = ReceiptRepository([matching, other]);
+        var itemRepository = ItemRepository([.. matching.Items, .. other.Items]);
+        context.UnitOfWork.Repository<GoodsReceipt>().Returns(receiptRepository);
+        context.UnitOfWork.Repository<GoodsReceiptItem>().Returns(itemRepository);
+        var filter = new TextFilter { Value = value, Operator = exact ? TextOperator.Eq : TextOperator.Contains };
+        var documents = await context.Sender.Send(new GetGoodsReceiptsQuery
+        {
+            IssueNumber = field == "issueNumber" ? filter : null,
+            ItemDescription = field == "itemDescription" ? filter : null,
+            ReceiptDescription = field == "receiptDescription" ? filter : null,
+            Search = field == "search" ? value : null
+        });
+        var items = await context.Sender.Send(new GetGoodsReceiptItemRowsQuery
+        {
+            IssueNumber = field == "issueNumber" ? filter : null,
+            ItemDescription = field == "itemDescription" ? filter : null,
+            ReceiptDescription = field == "receiptDescription" ? filter : null,
+            Search = field == "search" ? value : null
+        });
+        var expected = exact && field == "issueNumber" ? 0 : 1;
+        Assert.Equal(expected, documents.Data!.FilteredCount);
+        Assert.Equal(expected, items.Data!.FilteredCount);
+    }
+
     [Theory]
     [InlineData("شرح سند ویژه", true, true)]
     [InlineData("شرح ردیف ویژه", true, true)]

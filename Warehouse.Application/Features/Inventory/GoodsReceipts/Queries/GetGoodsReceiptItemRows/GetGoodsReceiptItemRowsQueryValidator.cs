@@ -8,6 +8,7 @@ internal sealed class GetGoodsReceiptItemRowsQueryValidator
 {
     private static readonly string[] SortFields =
     [
+        "id",
         "productTitle",
         "productCode",
         "quantity",
@@ -46,6 +47,12 @@ internal sealed class GetGoodsReceiptItemRowsQueryValidator
         RuleFor(query => query.ReceiptNumber!)
             .SetValidator(new TextFilterValidator(100))
             .When(query => query.ReceiptNumber is not null);
+        RuleFor(query => query.IssueNumber!).SetValidator(new TextFilterValidator(100))
+            .When(query => query.IssueNumber is not null);
+        RuleFor(query => query.ItemDescription!).SetValidator(new TextFilterValidator(1000))
+            .When(query => query.ItemDescription is not null);
+        RuleFor(query => query.ReceiptDescription!).SetValidator(new TextFilterValidator(1000))
+            .When(query => query.ReceiptDescription is not null);
         RuleFor(query => query.SortBy)
             .Must(value => SortFields.Contains(value!, StringComparer.OrdinalIgnoreCase))
             .When(query => !string.IsNullOrWhiteSpace(query.SortBy));

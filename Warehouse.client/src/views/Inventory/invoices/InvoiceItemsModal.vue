@@ -6,6 +6,7 @@ import BaseModal from '@/components/BaseModal.vue'
 import SupplierSelect from '@/components/selectors/SupplierSelect.vue'
 import type { InvoiceDetails, InvoiceProcessingStatus, UpdateInvoiceRequest } from '@/services/invoices'
 import { formatPersianDate, formatPersianNumber } from '@/utils/dateTime'
+import { rialToTomanWords } from '@/utils/currency'
 import InvoiceStatusChip from './InvoiceStatusChip.vue'
 
 const props = defineProps<{
@@ -20,6 +21,7 @@ const props = defineProps<{
   canApprove: boolean
   editMode: boolean
   saving: boolean
+  createMode?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -43,6 +45,18 @@ const form = reactive({
 const formError = ref('')
 const showItemPrices = false
 const manualPrice = ref(false)
+const invoicePriceText = ref('')
+const invoicePriceInWords = computed(() => rialToTomanWords(invoicePriceText.value))
+
+function groupPrice(value: string): string {
+  const [integer, fraction] = value.split('.')
+  const grouped = (integer ?? '').replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+  return fraction === undefined ? grouped : `${grouped}.${fraction}`
+}
+
+watch(() => form.price, value => {
+  invoicePriceText.value = value == null ? '' : groupPrice(String(value))
+}, { flush: 'sync' })
 const calculatedPrice = computed(() => {
   if (!form.items.some(item => item.price != null)) return null
   const total = form.items.reduce((sum, item) => sum + (item.price ?? 0), 0)
@@ -57,8 +71,30 @@ function setItemPrice(index: number, event: Event): void {
 
 function setInvoicePrice(event: Event): void {
   const input = event.target as HTMLInputElement
-  manualPrice.value = input.value !== ''
-  form.price = manualPrice.value ? input.valueAsNumber : calculatedPrice.value
+  const normalized = input.value
+    .replace(/[۰-۹]/g, digit => String(digit.charCodeAt(0) - 0x06f0))
+    .replace(/[٠-٩]/g, digit => String(digit.charCodeAt(0) - 0x0660))
+    .replace(/[,٬\s]/g, '')
+    .replace(/٫/g, '.')
+  if (!/^\d*(\.\d{0,2})?$/.test(normalized)) {
+    input.value = invoicePriceText.value
+    return
+  }
+  const position = input.selectionStart ?? input.value.length
+  const charactersBeforeCursor = input.value.slice(0, position).replace(/[,٬\s]/g, '').length
+  manualPrice.value = normalized !== '' && normalized !== '.'
+  form.price = manualPrice.value ? Number(normalized) : calculatedPrice.value
+  invoicePriceText.value = normalized === '' ? (form.price == null ? '' : groupPrice(String(form.price))) : groupPrice(normalized)
+  input.value = invoicePriceText.value
+  let cursor = 0
+  let characters = 0
+  while (cursor < input.value.length && characters < charactersBeforeCursor) {
+    if (input.value[cursor] !== ',') characters++
+    cursor++
+  }
+  input.setSelectionRange(cursor, cursor)
+  input.setCustomValidity(form.price != null && form.price > 9999999999999999.99
+    ? 'قیمت فاکتور بیش از حد مجاز است.' : '')
 }
 
 function useCalculatedPrice(): void {
@@ -83,6 +119,7 @@ watch([() => props.editMode, () => props.details], ([editing, details]) => {
     goodsReceiptConcurrencyStamp: item.goodsReceiptConcurrencyStamp,
   }))
   form.price = details.price
+  invoicePriceText.value = details.price == null ? '' : groupPrice(String(details.price))
   manualPrice.value = details.price != null && details.price !== calculatedPrice.value
 })
 
@@ -118,7 +155,7 @@ function submit(): void {
 
 <template>
   <BaseModal :model-value="modelValue" size="xl" modal-class="invoice-items-modal" :busy="saving"
-             :title="`${editMode ? 'ویرایش' : 'مشاهده'} فاکتور ${details?.invoiceNumber ?? ''}`"
+             :title="createMode ? 'افزودن فاکتور' : `${editMode ? 'ویرایش' : 'مشاهده'} فاکتور ${details?.invoiceNumber ?? ''}`"
              @update:model-value="$emit('update:modelValue', $event)">
     <div v-if="loading" class="invoice-items-modal__state">
       <span class="spinner-border text-primary" aria-hidden="true"></span>
@@ -149,6 +186,7 @@ function submit(): void {
         <div class="col-md-3 form-group">
           <label>تاریخ فاکتور</label>
           <DatePicker v-model="form.invoiceDate" type="date" format="YYYY-MM-DD"
+                      :auto-submit="true"
                       display-format="jYYYY/jMM/jDD" placeholder="تاریخ فاکتور را انتخاب کنید"
                       color="#2563eb" :editable="canEditInvoice" :clearable="canEditInvoice"
                       :disabled="saving || !canEditInvoice" />
@@ -162,24 +200,26 @@ function submit(): void {
             <option value="FinanceApproved">تأیید واحد مالی</option>
           </select>
         </div>
-        <div class="col-md-4 form-group">
+        <div class="col-md-3 form-group">
           <label>تاریخ تحویل به مالی</label>
           <DatePicker v-model="form.financeDeliveryDate" type="date" format="YYYY-MM-DD"
+                      :auto-submit="true"
                       display-format="jYYYY/jMM/jDD" placeholder="انتخاب تاریخ تحویل به مالی"
                       color="#2563eb" :editable="canEditInvoice" :clearable="canEditInvoice"
                       :disabled="saving || !canEditInvoice" />
         </div>
-        <div class="col-md-4 form-group">
-          <label for="invoice-price">قیمت فاکتور</label>
-          <input id="invoice-price" :value="form.price" class="form-control" type="number"
-                 min="0" max="9999999999999999.99" step="0.01" dir="ltr"
+        <div class="col-md-3 form-group">
+          <label for="invoice-price">قیمت فاکتور (ریال)</label>
+          <input id="invoice-price" :value="invoicePriceText" class="form-control" type="text"
+                 inputmode="decimal" dir="ltr"
+                 aria-describedby="invoice-price-words"
                  :disabled="saving" :readonly="!canEditInvoice" @input="setInvoicePrice" />
-          <small class="text-muted d-block">قیمت فاکتور را می‌توانید دستی وارد یا تغییر دهید.</small>
+          <small id="invoice-price-words" class="text-muted d-block" aria-live="polite" aria-atomic="true">{{ invoicePriceInWords }}</small>
           <small v-if="showItemPrices" class="text-muted d-block">جمع قیمت کل اقلام: {{ calculatedPrice == null ? '' : formatPersianNumber(calculatedPrice) }}</small>
           <button v-if="showItemPrices && canEditInvoice" type="button" class="btn btn-link btn-sm p-0" :disabled="saving"
                   @click="useCalculatedPrice">محاسبه از جمع اقلام</button>
         </div>
-        <div class="col-12 form-group">
+        <div class="col-6 form-group">
           <label for="invoice-description">توضیحات</label>
           <textarea id="invoice-description" v-model="form.description" class="form-control"
                     rows="2" maxlength="1000" :disabled="saving" :readonly="!canEditInvoice"></textarea>
@@ -191,14 +231,15 @@ function submit(): void {
         <div><span>تاریخ تحویل به مالی</span><strong>{{ formatPersianDate(details.financeDeliveryDate) }}</strong></div>
         <div><span>تاریخ فاکتور</span><strong>{{ formatPersianDate(details.invoiceDate) }}</strong></div>
         <div><span>وضعیت فاکتور</span><InvoiceStatusChip :status="details.processingStatus" /></div>
-        <div><span>قیمت فاکتور</span><strong>{{ details.price == null ? '' : formatPersianNumber(details.price) }}</strong></div>
+        <div><span>قیمت فاکتور (ریال)</span><strong>{{ details.price == null ? '' : formatPersianNumber(details.price) }}</strong></div>
         <div class="invoice-items-modal__description"><span>توضیحات</span><strong>{{ details.description || '' }}</strong></div>
       </div>
 
-      <h6 class="mb-2">اقلام و رسیدهای فاکتور</h6>
+      <template v-if="!createMode">
+      <h6 class="mb-2 mt-5">اقلام و رسیدهای فاکتور</h6>
       <div v-if="!details.items.length" class="invoice-items-modal__state text-muted">کالایی برای این فاکتور ثبت نشده است.</div>
       <div v-else class="table-responsive">
-        <table class="table table-sm table-striped invoice-items-table mb-0">
+        <table class="table table-sm   table-hover table-striped invoice-items-table mb-0  ">
           <thead>
             <tr>
               <th class="text-center">ردیف</th><th>عنوان کالا</th><th>کد کالا</th><th>تعداد</th>
@@ -224,7 +265,7 @@ function submit(): void {
               <td>{{ formatPersianDate(item.enteredAtUtc) }}</td>
               <td dir="ltr">{{ item.pageNumber }}</td>
               <td>
-                <input v-if="editMode" v-model="form.items[index].receiptNumber"
+                <input v-if="editMode" v-model="form.items[index].receiptNumber" style="width: 150px;"
                        class="form-control form-control-sm invoice-items-table__receipt-input"
                        type="text" maxlength="100" dir="ltr" :disabled="saving" :readonly="!canEditReceipt"
                        :aria-label="`شماره رسید ردیف ${index + 1}`" />
@@ -235,14 +276,16 @@ function submit(): void {
           </tbody>
         </table>
       </div>
+      </template>
     </form>
     <template #footer="{ close }">
-      <button v-if="editMode" class="btn btn-light" type="button" :disabled="saving"
+      <button v-if="createMode" class="btn btn-light" type="button" :disabled="saving" @click="close">انصراف</button>
+      <button v-else-if="editMode" class="btn btn-light" type="button" :disabled="saving"
               @click="$emit('update:editMode', false)">انصراف از ویرایش</button>
       <button v-else class="btn btn-light" type="button" @click="close">بستن</button>
       <button v-if="editMode" class="btn btn-primary" type="submit" form="invoice-details-form" :disabled="saving">
         <span v-if="saving" class="spinner-border spinner-border-sm mr-1" aria-hidden="true"></span>
-        ذخیره تغییرات
+        {{ createMode ? 'ثبت فاکتور' : 'ذخیره تغییرات' }}
       </button>
       <button v-if="!editMode && details?.isLocked && canReopen" class="btn btn-outline-warning" type="button" :disabled="saving"
               @click="$emit('change-status', 'UnderReview')">برگشت به در حال رسیدگی</button>
@@ -268,6 +311,10 @@ function submit(): void {
 .invoice-items-modal__state { align-items: center; display: flex; gap: .7rem; justify-content: center; min-height: 9rem; }
 .invoice-items-table th { white-space: nowrap; }
 .invoice-items-table td { vertical-align: middle; }
+.invoice-items-table,
+.invoice-items-table th,
+.invoice-items-table td,
+.invoice-items-table .form-control { font-size: .8125rem; }
 .invoice-items-table__receipt-input { min-width: 8rem; text-align: center; }
 .invoice-items-table__price-input { min-width: 9rem; }
 .invoice-items-modal__supplier :deep(.supplier-select__label) {

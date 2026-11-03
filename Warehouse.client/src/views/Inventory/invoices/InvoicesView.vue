@@ -17,11 +17,14 @@ import { isAbortError, useRequestChannel } from '@/composables/useRequestChannel
 import { useUnauthorizedRedirect } from '@/composables/useUnauthorizedRedirect'
 import {
   getInvoice,
+  createInvoice,
   getInvoices,
+  getInvoiceMetrics,
   updateInvoice,
   printInvoices,
   changeInvoiceStatus,
   type InvoiceDetails,
+  type InvoiceMetrics,
   type InvoiceListParameters,
   type InvoiceSummary,
   type InvoiceProcessingStatus,
@@ -34,6 +37,7 @@ import { formatPersianDate, formatPersianNumber } from '@/utils/dateTime'
 import { createInventoryTableOptions } from '@/utils/inventoryTable'
 import { printPdf } from '@/utils/pdfPrint'
 import '@/styles/inventory-list.css'
+import '@/styles/inventory-metrics.css'
 
 import InvoiceItemsModal from './InvoiceItemsModal.vue'
 import InvoiceStatusChip from './InvoiceStatusChip.vue'
@@ -51,6 +55,7 @@ const detailsLoading = ref(false)
 const detailsError = ref<string | null>(null)
 const editMode = ref(false)
 const editSaving = ref(false)
+const createMode = ref(false)
 
 const { has } = usePermissions()
 const canViewMissingReceiptCount = has('InvoicesMissingReceiptCountRead')
@@ -65,6 +70,7 @@ const printing = ref(false)
 const sendToFinance = ref(false)
 const printError = ref('')
 const selected = computed(() => [...selectedInvoices.value.values()])
+const selectionOrder = computed(() => new Map(selected.value.map((invoice, index) => [invoice.id, index + 1])))
 const incompleteInvoices = computed(() => selected.value.filter(invoice => invoice.price == null || !invoice.counterparty?.trim()))
 const hasLockedSelection = computed(() => selected.value.some(invoice => invoice.isLocked))
 
@@ -83,7 +89,6 @@ function openPrint(): void {
 async function completeInvoice(invoice: InvoiceSummary): Promise<void> {
   printOpen.value = false
   await openItems(invoice)
-  if (invoiceDetails.value && !invoiceDetails.value.isLocked && canEditInvoice) editMode.value = true
 }
 
 async function printSelected(): Promise<void> {
@@ -94,6 +99,7 @@ async function printSelected(): Promise<void> {
     const pdf = await printInvoices(selected.value.map(invoice => invoice.id), sendToFinance.value)
     // The server has completed the requested status change once it returns the PDF.
     list.reload(false)
+    void loadMetrics()
     printOpen.value = false
     selectedInvoices.value.clear()
     try {
@@ -115,8 +121,24 @@ const filters = useFilterState(() => list.reload(true))
 const { search: quickSearch, applied: appliedFilters } = filters
 
 const filterDefinitions = computed<DataTableFilterDefinition[]>(() => [
+  { key: 'quickFilter', label: 'فیلتر امروز', type: 'select', placeholder: 'همه روزها', options: [
+    { value: 'Today', label: 'فاکتورهای امروز' }, { value: 'ItemsToday', label: 'اقلام فاکتورهای امروز' },
+    { value: 'CreatedToday', label: 'فاکتورهای ثبت‌شده امروز' }, { value: 'ItemsCreatedToday', label: 'اقلام ثبت‌شده امروز' },
+  ] },
+  {
+    key: 'processingStatus', label: 'وضعیت فاکتور', type: 'select', placeholder: 'همه وضعیت‌ها',
+    options: [
+      { value: 'UnderReview', label: 'در حال رسیدگی' },
+      { value: 'SentToFinance', label: 'ارسال به واحد مالی' },
+      { value: 'FinanceApproved', label: 'تأیید واحد مالی' },
+    ],
+  },
+  { key: 'financeDeliveryDate', label: 'تاریخ تحویل به مالی', type: 'date-comparison' },
+  { key: 'invoiceDate', label: 'تاریخ فاکتور', type: 'date-comparison' },
   { key: 'invoiceNumber', label: 'شماره فاکتور', type: 'text-comparison', placeholder: 'شماره فاکتور', maxlength: 100 },
   { key: 'counterparty', label: 'طرف حساب', type: 'text-comparison', placeholder: 'نام طرف حساب', maxlength: 256 },
+  { key: 'receiptNumber', label: 'شماره رسید', type: 'text-comparison', placeholder: 'شماره رسید', maxlength: 100 },
+  { key: 'productTitle', label: 'کالا', type: 'text-comparison', placeholder: 'نام کالا', maxlength: 256 },
 ])
 
 function currentParameters(): InvoiceListParameters {
@@ -124,6 +146,12 @@ function currentParameters(): InvoiceListParameters {
     search: filters.searchQuery.value,
     invoiceNumber: filters.text('invoiceNumber'),
     counterparty: filters.text('counterparty'),
+    receiptNumber: filters.text('receiptNumber'),
+    productTitle: filters.text('productTitle'),
+    processingStatus: filters.id('processingStatus') as InvoiceProcessingStatus | undefined,
+    financeDeliveryDate: filters.date('financeDeliveryDate'),
+    invoiceDate: filters.date('invoiceDate'),
+    quickFilter: filters.id('quickFilter') as InvoiceListParameters['quickFilter'],
   }
 }
 
@@ -141,15 +169,72 @@ const list = useDataTableList<InvoiceSummary>({
 })
 const { table, loading: listLoading } = list
 
+const metrics = ref<InvoiceMetrics | null>(null)
+const metricsLoading = ref(false)
+const metricsChannel = useRequestChannel()
+type MetricCard = {
+  key: Exclude<keyof InvoiceMetrics, 'today'>
+  status?: InvoiceProcessingStatus
+  quickFilter?: InvoiceListParameters['quickFilter']
+  title: string
+  tone: string
+}
+const metricCards: MetricCard[] = [
+  { key: 'sentToFinanceTodayCount', status: 'SentToFinance', title: 'تحویلی‌های امروز مالی', tone: 'blue' },
+  { key: 'underReviewTodayCount', status: 'UnderReview', title: 'تحویل امروز، در حال رسیدگی', tone: 'amber' },
+  { key: 'todayInvoiceCount', quickFilter: 'Today', title: 'فاکتورهای امروز', tone: 'teal' },
+  { key: 'todayItemCount', quickFilter: 'ItemsToday', title: 'اقلام فاکتورهای امروز', tone: 'violet' },
+  { key: 'todayCreatedInvoiceCount', quickFilter: 'CreatedToday', title: 'فاکتورهای ثبت‌شده امروز', tone: 'green' },
+  { key: 'todayCreatedItemCount', quickFilter: 'ItemsCreatedToday', title: 'اقلام فاکتور ثبت‌شده امروز', tone: 'rose' },
+]
+
+async function loadMetrics(): Promise<void> {
+  const controller = metricsChannel.begin()
+  metricsLoading.value = true
+  try {
+    const result = await getInvoiceMetrics(controller.signal)
+    if (metricsChannel.isCurrent(controller)) metrics.value = result
+  } catch (error) {
+    if (isAbortError(error)) return
+    if (await handleUnauthorized(error)) return
+    toast.error(error instanceof Error ? error.message : 'دریافت آمار فاکتورها انجام نشد.')
+  } finally {
+    if (metricsChannel.isCurrent(controller)) { metricsChannel.end(controller); metricsLoading.value = false }
+  }
+}
+
+function isMetricActive(card: MetricCard): boolean {
+  if (card.quickFilter) return filters.id('quickFilter') === card.quickFilter
+  const date = filters.date('financeDeliveryDate')
+  return Boolean(metrics.value && filters.id('processingStatus') === card.status &&
+    date?.operator === 'eq' && date.value === metrics.value.today)
+}
+
+async function toggleMetric(card: MetricCard): Promise<void> {
+  if (metricsLoading.value) return
+  const active = isMetricActive(card)
+  await loadMetrics()
+  if (!metrics.value) return
+  quickSearch.value = ''
+  filters.onApply(active ? {} : {
+    ...(card.quickFilter ? { quickFilter: card.quickFilter } : {
+      processingStatus: card.status!,
+      financeDeliveryDate: { operator: 'eq' as const, value: metrics.value.today },
+    }),
+  })
+}
+
+void loadMetrics()
+
 const columns: Record<TableMode, ColumnsConfig[]> = {
   invoices: [
     ...(canPrint ? [{ data: 'id', name: 'selection', title: 'انتخاب', className: 'all text-center', orderable: false, searchable: false }] : []),
-    { ...createRowNumberColumn(), className: 'min-tablet-p text-center data-table-row-number' },
+    { ...createRowNumberColumn('id'), className: 'min-tablet-p text-center data-table-row-number' },
     { data: 'invoiceNumber', name: 'invoiceNumber', title: 'شماره فاکتور', className: 'all text-center' },
     { data: 'financeDeliveryDate', name: 'financeDeliveryDate', title: 'تاریخ تحویل به مالی', className: 'min-tablet-l text-center' },
     { data: 'invoiceDate', name: 'invoiceDate', title: 'تاریخ فاکتور', className: 'min-tablet-l text-center' },
     { data: 'counterparty', name: 'counterparty', title: 'طرف حساب', className: 'all' },
-    { data: 'price', name: 'price', title: 'قیمت', className: 'min-tablet-l text-center' },
+    { data: 'price', name: 'price', title: 'قیمت(ریال)', className: 'min-tablet-l text-center' },
     { data: 'processingStatus', name: 'processingStatus', title: 'وضعیت', className: 'min-tablet-l text-center' },
     { data: 'description', name: 'description', title: 'توضیحات', className: 'min-desktop', orderable: false },
     {
@@ -210,6 +295,7 @@ tableOptions.ordering = true
 
 const detailsChannel = useRequestChannel()
 async function openItems(invoice: InvoiceSummary): Promise<void> {
+  createMode.value = false
   const controller = detailsChannel.begin()
   invoiceDetails.value = null
   detailsError.value = null
@@ -217,7 +303,10 @@ async function openItems(invoice: InvoiceSummary): Promise<void> {
   detailsLoading.value = true
   detailsOpen.value = true
   try {
-    invoiceDetails.value = await getInvoice(invoice.id, controller.signal)
+    const details = await getInvoice(invoice.id, controller.signal)
+    if (!detailsChannel.isCurrent(controller)) return
+    invoiceDetails.value = details
+    editMode.value = canEditInvoice && !details.isLocked
   } catch (error) {
     if (isAbortError(error)) return
     if (await handleUnauthorized(error)) return
@@ -230,12 +319,28 @@ async function openItems(invoice: InvoiceSummary): Promise<void> {
   }
 }
 
+function openCreate(): void {
+  if (!canEditInvoice || editSaving.value) return
+  detailsChannel.abort()
+  detailsLoading.value = false
+  detailsError.value = null
+  createMode.value = true
+  invoiceDetails.value = {
+    id: '', invoiceNumber: '', supplierId: null, counterparty: null, description: null,
+    invoiceDate: null, financeDeliveryDate: null, processingStatus: 'UnderReview',
+    price: null, isLocked: false, receiptNumbers: [], items: [],
+  }
+  editMode.value = true
+  detailsOpen.value = true
+}
+
 function closeDetails(value: boolean): void {
   detailsOpen.value = value
   if (!value) {
     detailsChannel.abort()
     detailsLoading.value = false
     editMode.value = false
+    createMode.value = false
   }
 }
 
@@ -245,15 +350,23 @@ async function saveInvoice(values: UpdateInvoiceRequest): Promise<void> {
   const controller = detailsChannel.begin()
   editSaving.value = true
   detailsError.value = null
+  const creating = createMode.value
   try {
-    invoiceDetails.value = await updateInvoice(details.id, values, controller.signal)
+    if (creating) {
+      const { items: _items, ...header } = values
+      invoiceDetails.value = await createInvoice(header, controller.signal)
+      createMode.value = false
+    } else {
+      invoiceDetails.value = await updateInvoice(details.id, values, controller.signal)
+    }
     if (selectedInvoices.value.has(details.id)) selectedInvoices.value.set(details.id, {
       ...selectedInvoices.value.get(details.id)!, ...invoiceDetails.value,
       receiptNumbers: invoiceDetails.value.items.map(item => item.receiptNumber).filter((value): value is string => Boolean(value)),
     })
     editMode.value = false
-    list.reload(false)
-    toast.success('تغییرات با موفقیت ذخیره شد.')
+    list.reload(creating)
+    void loadMetrics()
+    toast.success(creating ? 'فاکتور با موفقیت ثبت شد.' : 'تغییرات با موفقیت ذخیره شد.')
   } catch (error) {
     if (isAbortError(error)) return
     if (await handleUnauthorized(error)) return
@@ -281,6 +394,7 @@ async function updateStatus(status: InvoiceProcessingStatus): Promise<void> {
     })
     editMode.value = false
     list.reload(false)
+    void loadMetrics()
     toast.success(status === 'UnderReview' ? 'فاکتور به در حال رسیدگی برگشت و قفل ویرایش آن برداشته شد.' : 'تأیید واحد مالی ثبت شد.')
   } catch (error) {
     if (isAbortError(error)) return
@@ -309,9 +423,10 @@ onBeforeUnmount(() => {
     </div>
     <div class="table-responsive invoice-print-selection">
       <table class="table table-sm">
-        <thead><tr><th>شماره فاکتور</th><th>طرف حساب</th><th>مبلغ</th><th>اطلاعات ناقص</th></tr></thead>
+        <thead><tr><th>ردیف چاپ</th><th>شماره فاکتور</th><th>طرف حساب</th><th>مبلغ</th><th>اطلاعات ناقص</th></tr></thead>
         <tbody>
-          <tr v-for="invoice in selected" :key="invoice.id">
+          <tr v-for="(invoice, index) in selected" :key="invoice.id">
+            <td>{{ formatPersianNumber(index + 1) }}</td>
             <td dir="ltr">{{ invoice.invoiceNumber }}</td>
             <td>{{ invoice.counterparty || 'ثبت نشده' }}</td>
             <td>{{ invoice.price == null ? 'ثبت نشده' : formatPersianNumber(invoice.price) }}</td>
@@ -338,6 +453,7 @@ onBeforeUnmount(() => {
     </template>
   </BaseModal>
   <InvoiceItemsModal :model-value="detailsOpen" :details="invoiceDetails"
+                     :create-mode="createMode"
                      :loading="detailsLoading" :error="detailsError" :can-edit="canEdit && !invoiceDetails?.isLocked"
                      :can-edit-invoice="canEditInvoice" :can-edit-receipt="canEditReceipt"
                      :can-reopen="canReopen" :can-approve="canEditInvoice"
@@ -360,24 +476,47 @@ onBeforeUnmount(() => {
           <h4 class="card-title"><i class="las la-file-invoice mr-1"></i> فاکتورها</h4>
           <p class="page-description mb-0 mt-1 text-muted">مشاهده فاکتورها و کالاهای ثبت‌شده در هر فاکتور</p>
         </div>
-        <InventoryListToolbar :mode="tableMode" :modes="VIEW_MODES" entity-label="فاکتور" create-label=""
-                              :can-create="false" :columns="toggleable[tableMode]"
+        <InventoryListToolbar :mode="tableMode" :modes="VIEW_MODES" entity-label="فاکتور" create-label="افزودن فاکتور"
+                              :can-create="canEditInvoice" :columns="toggleable[tableMode]"
+                              @create="openCreate"
                               :is-column-visible="isColumnVisible" :column-menu-open="menuOpen"
                               @update:mode="tableMode = $event as TableMode"
                               @toggle-column="toggleColumn" @toggle-column-menu="toggleMenu" />
       </div>
 
       <div class="card-body">
-        <div v-if="canPrint" class="d-flex align-items-center mb-3" style="gap: .75rem">
-          <button type="button" class="btn btn-primary" :disabled="printing || !selected.length" @click="openPrint">
-            <i class="las la-print" aria-hidden="true"></i> چاپ انتخاب‌شده‌ها ({{ formatPersianNumber(selected.length) }})
-          </button>
-          <button v-if="selected.length" type="button" class="btn btn-outline-secondary" :disabled="printing" @click="selectedInvoices.clear()">لغو انتخاب‌ها</button>
+        <div class="row receipt-metrics" aria-label="آمار تحویل امروز فاکتورها">
+          <div v-for="card in metricCards" :key="card.key" class="receipt-metrics__item">
+            <button type="button" class="receipt-metric-card"
+                    :class="[`receipt-metric-card--${card.tone}`, { 'receipt-metric-card--active': isMetricActive(card) }]"
+                    :aria-pressed="isMetricActive(card)" :title="card.title" :disabled="metricsLoading" @click="toggleMetric(card)">
+              <div class="receipt-metric-card__content">
+                <span class="receipt-metric-card__title">{{ card.title }}</span>
+                <strong class="receipt-metric-card__value" :aria-busy="metricsLoading">
+                  {{ metrics ? formatPersianNumber(metrics[card.key]) : '—' }}
+                </strong>
+              </div>
+            </button>
+          </div>
         </div>
         <DataTableFilters v-model="appliedFilters" :definitions="filterDefinitions" :search="quickSearch"
                           :loading="listLoading" search-placeholder="جستجو در شماره فاکتور و طرف حساب..."
                           @update:search="filters.onSearch" @apply="filters.onApply" @clear="filters.onClear"
-                          @remove="filters.onRemove" />
+                          @remove="filters.onRemove">
+          <template v-if="canPrint" #toolbar-actions>
+            <div class="invoice-print-actions">
+              <!-- <button v-if="selected.length" type="button" class="btn btn-outline-secondary btn-sm"
+                      title="لغو انتخاب‌ها" aria-label="لغو انتخاب‌ها" :disabled="printing" @click="selectedInvoices.clear()">
+                <i class="las la-times" aria-hidden="true"></i><span class="invoice-print-actions__label"> لغو انتخاب‌ها</span>
+              </button> -->
+              <button type="button" class="btn btn-primary btn-sm" title="چاپ انتخاب‌شده‌ها" aria-label="چاپ انتخاب‌شده‌ها"
+                      :disabled="printing || !selected.length" @click="openPrint">
+                <i class="las la-print" aria-hidden="true"></i><span class="invoice-print-actions__label"> چاپ انتخاب‌شده‌ها</span>
+                ({{ formatPersianNumber(selected.length) }})
+              </button>
+            </div>
+          </template>
+        </DataTableFilters>
 
         <div ref="tableContainer" class="users-table-container inventory-table-container inventory-table-container--invoices"
              @wheel="compact.onWheel">
@@ -387,6 +526,10 @@ onBeforeUnmount(() => {
               <input type="checkbox" :checked="selectedInvoices.has(rowData.id)" :disabled="printing"
                      :aria-label="`انتخاب فاکتور ${rowData.invoiceNumber}`"
                      @change="toggleInvoice(rowData, ($event.target as HTMLInputElement).checked)" />
+              <span v-if="selectionOrder.has(rowData.id)" class="badge light badge-primary mr-1"
+                    :aria-label="`ردیف چاپ ${selectionOrder.get(rowData.id)}`">
+                {{ formatPersianNumber(selectionOrder.get(rowData.id)!) }}
+              </span>
             </template>
             <template #column-invoiceNumber="{ cellData }">
               <strong class="invoice-number" dir="ltr">{{ cellData }}</strong>
@@ -425,8 +568,29 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.invoice-print-error { white-space: pre-line; }
-.invoice-print-selection { max-height: 340px; overflow-y: auto; }
+
+.invoice-print-actions 
+{ 
+  align-items: center;
+   display: flex; 
+   gap: .5rem; 
+   white-space: nowrap;
+   }
+@media (max-width: 575px) {
+  .invoice-print-actions__label 
+  {
+     display: none; 
+    }
+}
+.invoice-print-error 
+{
+   white-space: pre-line; 
+  }
+.invoice-print-selection 
+{ 
+  max-height: 340px;
+   overflow-y: auto;
+   }
 .invoice-receipt-numbers {
   display: flex;
   flex-wrap: wrap;
@@ -437,6 +601,5 @@ onBeforeUnmount(() => {
   color: var(--text-primary, #212529);
   font-weight: 700;
 }
-
 
 </style>

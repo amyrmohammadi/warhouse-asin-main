@@ -28,4 +28,5 @@ public sealed record CreateGoodsReceiptItem(
     decimal Quantity,
     string? RequestNumber,
     string? Description,
-    string? IssueNumber = null);
+    string? IssueNumber = null,
+    Guid? Id = null);

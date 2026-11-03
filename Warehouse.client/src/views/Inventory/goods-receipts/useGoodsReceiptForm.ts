@@ -1,4 +1,4 @@
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 
 import { useEntryRows } from '@/composables/useEntryRows'
 import { useFieldErrors } from '@/composables/useFieldErrors'
@@ -23,6 +23,8 @@ import { focusEntryField } from '@/utils/entryFocus'
 import { useGoodsReceiptColumnPermissions } from './useGoodsReceiptColumnPermissions'
 
 export interface FormItem {
+  id: string | null
+  isLocked: boolean
   persisted: boolean
   key: number
   productText: string
@@ -80,7 +82,7 @@ const textKey = (value: string): string =>
 
 function newItem(key: number): FormItem {
   return {
-    key, persisted: false, productText: '', productId: null, productCode: '', unitOfMeasureId: null, unitOfMeasureTitle: '',
+    key, id: null, isLocked: false, persisted: false, productText: '', productId: null, productCode: '', unitOfMeasureId: null, unitOfMeasureTitle: '',
     warehouseId: '', invoiceStatus: null, invoiceNumber: '', supplierId: '', supplierText: '',
     receiptNumber: '', issueNumber: '', quantity: null, requestNumber: '', description: '',
   }
@@ -113,6 +115,7 @@ export function useGoodsReceiptForm(deps: Dependencies) {
 
   const form = reactive({ enteredAtLocal: '', description: '', delivererId: '', delivererText: '', pageNumber: '' })
   const entry = useEntryRows<FormItem>({ create: newItem, hasContent: itemHasContent, minimumRows: 8 })
+  const hasLockedItems = computed(() => entry.rows.value.some(item => item.isLocked))
 
   // ── وضعیت‌های مشتق‌شده ───────────────────────────────────────────
   const isNewDeliverer = (): boolean => !form.delivererId && Boolean(form.delivererText.trim())
@@ -149,10 +152,6 @@ export function useGoodsReceiptForm(deps: Dependencies) {
       toast.error(error instanceof Error ? error.message : 'دریافت سند انجام نشد.')
       return
     }
-    if (receipt.isLocked) {
-      toast.error('فاکتور این ورودی به واحد مالی ارسال یا تأیید شده است؛ ابتدا فاکتور را به در حال رسیدگی برگردانید.')
-      return
-    }
     reset()
     editingId.value = id,
       concurrencyStamp.value = receipt.concurrencyStamp
@@ -165,6 +164,7 @@ export function useGoodsReceiptForm(deps: Dependencies) {
     })
     entry.reset(receipt.items.map(item => Object.assign(entry.newRow(), {
       persisted: true,
+      id: item.id, isLocked: item.isLocked,
       productId: item.productId, productText: item.productTitle, productCode: item.productCode,
       unitOfMeasureId: item.unitOfMeasureId, unitOfMeasureTitle: item.unitOfMeasureTitle,
       warehouseId: item.warehouseId, invoiceStatus: item.invoiceStatus, invoiceNumber: item.invoiceNumber ?? '',
@@ -182,8 +182,14 @@ export function useGoodsReceiptForm(deps: Dependencies) {
   }
 
   // ── رویدادهای کالا / واحد ───────────────────────────────────────
-  function selectProduct(item: FormItem, product: Product): void {
+  function inheritFromPrevious(item: FormItem): void {
+    const index = entry.rows.value.findIndex(row => row.key === item.key)
+    if (index > 0 && entry.rows.value[index - 1]?.isLocked) return
     entry.inheritFromPrevious(item, [...INHERITED_FIELDS])
+  }
+
+  function selectProduct(item: FormItem, product: Product): void {
+    inheritFromPrevious(item)
     item.productId = product.id
     item.productText = product.title
     item.productCode = product.code
@@ -198,7 +204,7 @@ export function useGoodsReceiptForm(deps: Dependencies) {
   function onProductText(item: FormItem, field: 'title' | 'code', value: string): void {
     if (field === 'title') item.productText = value
     else item.productCode = value
-    entry.inheritFromPrevious(item, [...INHERITED_FIELDS])
+    inheritFromPrevious(item)
     clearRowError(item, field === 'title' ? 'product' : 'code')
   }
 
@@ -336,6 +342,7 @@ export function useGoodsReceiptForm(deps: Dependencies) {
       delivererFullName: form.delivererId ? null : form.delivererText.trim(),
       pageNumber: form.pageNumber.trim(),
       items: entry.rowsForSubmission.value.map(item => ({
+        id: item.id,
         productId: item.productId,
         productTitle: item.productId ? null : item.productText.trim(),
         productCode: item.productId ? null : item.productCode.trim(),
@@ -406,8 +413,9 @@ export function useGoodsReceiptForm(deps: Dependencies) {
   }
 
   return {
-    permissions, open, editingId, saving, formError, form, errors,
-    rows: entry.rows, mode: entry.mode, setMode: entry.setMode, addRow: entry.addRow, removeRow: entry.removeRow,
+    permissions, open, editingId, saving, formError, form, errors, hasLockedItems,
+    rows: entry.rows, mode: entry.mode, setMode: entry.setMode, addRow: entry.addRow,
+    removeRow: (index: number) => { if (!entry.rows.value[index]?.isLocked) entry.removeRow(index) },
     itemHasContent, isNewDeliverer, isNewProduct, isNewSupplier, hasInvoiceNumber, rowError, clearRowError,
     openCreate, openEdit, close, save, remove,
     selectProduct, onProductText, clearProduct, onUnitText, onInvoiceStatusChange,

@@ -25,7 +25,7 @@ const emit = defineEmits<{ saved: [reason: 'saved' | 'deleted'] }>()
 const confirmDialog = ref<{ ask: (options: ConfirmOptions) => Promise<boolean> } | null>(null)
 
 const {
-  permissions, open, editingId, saving, formError, form, errors, rows, mode,
+  permissions, open, editingId, saving, formError, form, errors, rows, mode, hasLockedItems,
   setMode, addRow, removeRow, itemHasContent, isNewDeliverer, isNewProduct, isNewSupplier, hasInvoiceNumber,
   rowError, clearRowError, openCreate, openEdit, close, save, remove,
   selectProduct, onProductText, clearProduct, onUnitText, onInvoiceStatusChange,
@@ -51,13 +51,17 @@ defineExpose({ openCreate, openEdit })
              :title="editingId ? 'ویرایش ورود کالا' : 'ثبت ورود کالا'">
     <form id="goods-receipt-form" novalidate @submit.prevent="save">
       <div v-if="formError" class="alert alert-danger py-2">{{ formError }}</div>
+      <div v-if="hasLockedItems" class="alert alert-info py-2">
+        اقلام فاکتور ارسال‌شده به مالی قفل هستند. سایر اقلام قابل ویرایش‌اند؛ تاریخ ورود تا باز شدن فاکتور ثابت می‌ماند.
+      </div>
 
       <div class="row goods-receipt-header-fields">
         <div class="col-md-3 form-group">
           <label>تاریخ و ساعت ورود <span class="text-danger">*</span></label>
           <DatePicker v-model="form.enteredAtLocal" type="date" format="YYYY-MM-DDTHH:mm:ss"
+                      :auto-submit="true"
                       display-format="jYYYY/jMM/jDD HH:mm" placeholder="تاریخ و ساعت را انتخاب کنید"
-                      color="#2563eb" :editable="true" :clearable="true" :disabled="saving"
+                      color="#2563eb" :editable="true" :clearable="true" :disabled="saving || hasLockedItems"
                       :class="{ 'is-invalid': errors.get('enteredAtLocal') }"
                       @input="errors.clear('enteredAtLocal')" />
           <small v-if="errors.get('enteredAtLocal')" class="invalid-feedback d-block">{{ errors.get('enteredAtLocal') }}</small>
@@ -117,12 +121,12 @@ defineExpose({ openCreate, openEdit })
             <tbody>
               <tr v-for="(item, index) in rows" :key="item.key"
                   :class="{ 'receipt-list-row--empty': !itemHasContent(item), 'receipt-list-row--new-product': isNewProduct(item) }">
-                <td class="receipt-list-row-number">{{ index + 1 }}</td>
+                <td class="receipt-list-row-number"><i v-if="item.isLocked" class="las la-lock" title="فاکتور ارسال یا تأیید شده در مالی"></i>{{ index + 1 }}</td>
 
                 <td class="receipt-list-product-cell">
                   <ProductSelect :model-value="item.productId" :text="item.productText" size="sm" search-by="title"
                                  placeholder="" aria-label="عنوان کالا" :not-found-text="productNotFoundText"
-                                 :error="rowError(item, 'product')" error-class="receipt-list-cell-error" :disabled="saving"
+                                 :error="rowError(item, 'product')" error-class="receipt-list-cell-error" :disabled="saving || item.isLocked"
                                  @update:model-value="item.productId = $event"
                                  @update:text="onProductText(item, 'title', $event)"
                                  @select="selectProduct(item, $event)" @clear="clearProduct(item, 'title')"
@@ -134,7 +138,7 @@ defineExpose({ openCreate, openEdit })
                 <td class="receipt-list-code-cell">
                   <ProductSelect :model-value="item.productId" :text="item.productCode" size="sm" search-by="code"
                                  placeholder="" aria-label="کد کالا" :not-found-text="productNotFoundText"
-                                 :error="rowError(item, 'code')" error-class="receipt-list-cell-error" :disabled="saving"
+                                 :error="rowError(item, 'code')" error-class="receipt-list-cell-error" :disabled="saving || item.isLocked"
                                  v-bind="entryFieldAttrs(item.key, 'code')"
                                  @update:model-value="item.productId = $event"
                                  @update:text="onProductText(item, 'code', $event)"
@@ -145,7 +149,7 @@ defineExpose({ openCreate, openEdit })
                 <td class="receipt-list-unit-cell">
                   <UnitSelect :model-value="item.unitOfMeasureId" :text="item.unitOfMeasureTitle" :units="units"
                               size="sm" borderless aria-label="واحد اندازه‌گیری" :readonly="Boolean(item.productId)"
-                              :disabled="saving" :error="rowError(item, 'unit')"
+                              :disabled="saving || item.isLocked" :error="rowError(item, 'unit')"
                               v-bind="entryFieldAttrs(item.key, 'unit')"
                               @update:model-value="item.unitOfMeasureId = $event"
                               @update:text="onUnitText(item, $event)" @enter="advanceFromUnit(item)" />
@@ -157,7 +161,7 @@ defineExpose({ openCreate, openEdit })
                 <td class="receipt-list-quantity-cell">
                   <input v-model.number="item.quantity" class="form-control form-control-sm"
                          :class="{ 'is-invalid': rowError(item, 'quantity') }" type="number" step="any" inputmode="decimal"
-                         aria-label="مقدار" :disabled="saving" v-bind="entryFieldAttrs(item.key, 'quantity')"
+                         aria-label="مقدار" :disabled="saving || item.isLocked" v-bind="entryFieldAttrs(item.key, 'quantity')"
                          @input="clearRowError(item, 'quantity')" />
                   <small v-if="rowError(item, 'quantity')" class="invalid-feedback d-block receipt-list-cell-error">{{ rowError(item, 'quantity') }}</small>
                 </td>
@@ -165,7 +169,7 @@ defineExpose({ openCreate, openEdit })
                 <td v-if="canReadWarehouse" class="receipt-list-warehouse-cell">
                   <select v-model="item.warehouseId" class="form-control form-control-sm"
                           :class="{ 'is-invalid': rowError(item, 'warehouse') }" aria-label="انبار"
-                          :disabled="saving || (item.persisted ? !canEditWarehouse : !canInitialEntry)" @change="clearRowError(item, 'warehouse')">
+                          :disabled="saving || item.isLocked || (item.persisted ? !canEditWarehouse : !canInitialEntry)" @change="clearRowError(item, 'warehouse')">
                     <option value="" aria-label="بدون انتخاب"></option>
                     <option v-for="warehouse in warehouses" :key="warehouse.id" :value="warehouse.id">{{ warehouse.title }}</option>
                   </select>
@@ -174,7 +178,7 @@ defineExpose({ openCreate, openEdit })
 
                 <td v-if="canReadInvoiceStatus" class="receipt-list-invoice-status-cell">
                   <select v-model="item.invoiceStatus" class="form-control form-control-sm" aria-label="وضعیت فاکتور"
-                          :disabled="saving || !canManageInvoice" @change="onInvoiceStatusChange(item)">
+                          :disabled="saving || item.isLocked || !canManageInvoice" @change="onInvoiceStatusChange(item)">
                     <option :value="null" aria-label="بدون انتخاب"></option>
                     <option value="DoesNotHave">ندارد</option>
                     <option value="HasInvoice">دارد</option>
@@ -184,7 +188,7 @@ defineExpose({ openCreate, openEdit })
                 <td v-if="canReadInvoiceNumber" class="receipt-list-invoice-number-cell">
                   <input v-model="item.invoiceNumber" class="form-control form-control-sm"
                          :class="{ 'is-invalid': rowError(item, 'invoiceNumber') }" type="text" maxlength="100"
-                         aria-label="شماره فاکتور" :disabled="saving || !canManageInvoice || !hasInvoiceNumber(item)"
+                         aria-label="شماره فاکتور" :disabled="saving || item.isLocked || !canManageInvoice || !hasInvoiceNumber(item)"
                          @input="clearRowError(item, 'invoiceNumber')" />
                   <small v-if="rowError(item, 'invoiceNumber')" class="invalid-feedback d-block receipt-list-cell-error">{{ rowError(item, 'invoiceNumber') }}</small>
                 </td>
@@ -192,7 +196,7 @@ defineExpose({ openCreate, openEdit })
                 <td v-if="canReadCounterparty" class="receipt-list-supplier-cell">
                   <SupplierSelect :model-value="item.supplierId || null" :text="item.supplierText" size="sm" placeholder="‌"
                                   :error="rowError(item, 'supplier')" error-class="receipt-list-cell-error"
-                                  :disabled="saving || !canManageInvoice" allow-create
+                                  :disabled="saving || item.isLocked || !canManageInvoice" allow-create
                                   @update:model-value="item.supplierId = $event ?? ''"
                                   @update:text="item.supplierText = $event; clearRowError(item, 'supplier')"
                                   @clear="clearRowError(item, 'supplier')" />
@@ -202,32 +206,32 @@ defineExpose({ openCreate, openEdit })
 
                 <td v-if="canReadReceiptNumber" class="receipt-list-receipt-number-cell">
                   <input v-model="item.receiptNumber" class="form-control form-control-sm" type="text" maxlength="100"
-                         aria-label="شماره رسید" :disabled="saving" :readonly="!canManageReceipt" />
+                         aria-label="شماره رسید" :disabled="saving || item.isLocked" :readonly="!canManageReceipt" />
                 </td>
 
                 <td class="receipt-list-issue-number-cell">
                   <input v-model="item.issueNumber" class="form-control form-control-sm" type="text" maxlength="100"
-                         aria-label="شماره خروج" :disabled="saving || !canInitialEntry"
+                         aria-label="شماره خروج" :disabled="saving || item.isLocked || !canInitialEntry"
                          :class="{ 'is-invalid': rowError(item, 'issueNumber') }" @input="clearRowError(item, 'issueNumber')" />
                 </td>
 
                 <td class="receipt-list-request-cell">
                   <input v-model="item.requestNumber" class="form-control form-control-sm"
                          :class="{ 'is-invalid': rowError(item, 'requestNumber') }" type="text" maxlength="100"
-                         aria-label="شماره درخواست" :disabled="saving" @input="clearRowError(item, 'requestNumber')" />
+                         aria-label="شماره درخواست" :disabled="saving || item.isLocked" @input="clearRowError(item, 'requestNumber')" />
                   <small v-if="rowError(item, 'requestNumber')" class="invalid-feedback d-block receipt-list-cell-error">{{ rowError(item, 'requestNumber') }}</small>
                 </td>
 
                 <td class="receipt-list-description-cell">
                   <textarea v-model="item.description" class="form-control form-control-sm receipt-list-description-input"
                             :class="{ 'is-invalid': rowError(item, 'description') }" rows="1" maxlength="1000"
-                            aria-label="توضیحات کالا" :disabled="saving" @input="clearRowError(item, 'description')"></textarea>
+                            aria-label="توضیحات کالا" :disabled="saving || item.isLocked" @input="clearRowError(item, 'description')"></textarea>
                   <small v-if="rowError(item, 'description')" class="invalid-feedback d-block receipt-list-cell-error">{{ rowError(item, 'description') }}</small>
                 </td>
 
                 <td class="receipt-list-action-column">
                   <button class="master-data-row-action receipt-remove-item" type="button" title="پاک‌کردن ردیف"
-                          aria-label="پاک‌کردن ردیف" :disabled="saving" @click="removeRow(index)">
+                          aria-label="پاک‌کردن ردیف" :disabled="saving || item.isLocked" @click="removeRow(index)">
                     <i class="las la-trash"></i>
                   </button>
                 </td>
@@ -246,7 +250,7 @@ defineExpose({ openCreate, openEdit })
               <label>عنوان کالا <span class="text-danger">*</span></label>
               <ProductSelect :model-value="item.productId" :text="item.productText" search-by="title"
                              placeholder="تایپ یا انتخاب کالا" aria-label="عنوان کالا" :not-found-text="productNotFoundText"
-                             :error="rowError(item, 'product')" :disabled="saving"
+                             :error="rowError(item, 'product')" :disabled="saving || item.isLocked"
                              @update:model-value="item.productId = $event"
                              @update:text="onProductText(item, 'title', $event)" @select="selectProduct(item, $event)"
                              @clear="clearProduct(item, 'title')" @enter="advanceFromProductTitle(item)" />
@@ -255,7 +259,7 @@ defineExpose({ openCreate, openEdit })
               <label>کد کالا <span v-if="!item.productId" class="text-danger">*</span></label>
               <ProductSelect :model-value="item.productId" :text="item.productCode" search-by="code"
                              placeholder="انتخاب کد" aria-label="کد کالا" :not-found-text="productNotFoundText"
-                             :error="rowError(item, 'code')" :disabled="saving" v-bind="entryFieldAttrs(item.key, 'code')"
+                             :error="rowError(item, 'code')" :disabled="saving || item.isLocked" v-bind="entryFieldAttrs(item.key, 'code')"
                              @update:model-value="item.productId = $event"
                              @update:text="onProductText(item, 'code', $event)" @select="selectProduct(item, $event)"
                              @clear="clearProduct(item, 'code')" @enter="advanceFromProductCode(item)" />
@@ -263,7 +267,7 @@ defineExpose({ openCreate, openEdit })
             <div class="form-group mb-0 receipt-unit-field">
               <label>واحد <span v-if="!item.productId" class="text-danger">*</span></label>
               <UnitSelect :model-value="item.unitOfMeasureId" :text="item.unitOfMeasureTitle" :units="units"
-                          placeholder="انتخاب واحد" :readonly="Boolean(item.productId)" :disabled="saving"
+                          placeholder="انتخاب واحد" :readonly="Boolean(item.productId)" :disabled="saving || item.isLocked"
                           :error="rowError(item, 'unit')"
                           v-bind="entryFieldAttrs(item.key, 'unit')"
                           @update:model-value="item.unitOfMeasureId = $event" @update:text="onUnitText(item, $event)"
@@ -277,14 +281,14 @@ defineExpose({ openCreate, openEdit })
             <div class="form-group mb-0 receipt-quantity-field">
               <label>مقدار <span class="text-danger">*</span></label>
               <input v-model.number="item.quantity" class="form-control" :class="{ 'is-invalid': rowError(item, 'quantity') }"
-                     type="number" step="any" inputmode="decimal" :disabled="saving"
+                     type="number" step="any" inputmode="decimal" :disabled="saving || item.isLocked"
                      v-bind="entryFieldAttrs(item.key, 'quantity')" @input="clearRowError(item, 'quantity')" />
               <small v-if="rowError(item, 'quantity')" class="invalid-feedback d-block">{{ rowError(item, 'quantity') }}</small>
             </div>
             <div class="form-group mb-0 receipt-contract-field">
               <label>شماره درخواست</label>
               <input v-model="item.requestNumber" class="form-control" :class="{ 'is-invalid': rowError(item, 'requestNumber') }"
-                     type="text" maxlength="100" :disabled="saving" @input="clearRowError(item, 'requestNumber')" />
+                     type="text" maxlength="100" :disabled="saving || item.isLocked" @input="clearRowError(item, 'requestNumber')" />
               <small v-if="rowError(item, 'requestNumber')" class="invalid-feedback d-block">{{ rowError(item, 'requestNumber') }}</small>
             </div>
           </div>
@@ -293,7 +297,7 @@ defineExpose({ openCreate, openEdit })
             <div v-if="canReadWarehouse" class="form-group mb-0">
               <label>انبار <span class="text-danger">*</span></label>
               <select v-model="item.warehouseId" class="form-control" :class="{ 'is-invalid': rowError(item, 'warehouse') }"
-                      :disabled="saving || (item.persisted ? !canEditWarehouse : !canInitialEntry)" @change="clearRowError(item, 'warehouse')">
+                      :disabled="saving || item.isLocked || (item.persisted ? !canEditWarehouse : !canInitialEntry)" @change="clearRowError(item, 'warehouse')">
                 <option value="" aria-label="بدون انتخاب"></option>
                 <option v-for="warehouse in warehouses" :key="warehouse.id" :value="warehouse.id">{{ warehouse.title }}</option>
               </select>
@@ -301,7 +305,7 @@ defineExpose({ openCreate, openEdit })
             </div>
             <div v-if="canReadInvoiceStatus" class="form-group mb-0">
               <label>وضعیت فاکتور</label>
-              <select v-model="item.invoiceStatus" class="form-control" :disabled="saving || !canManageInvoice"
+              <select v-model="item.invoiceStatus" class="form-control" :disabled="saving || item.isLocked || !canManageInvoice"
                       @change="onInvoiceStatusChange(item)">
                 <option :value="null" aria-label="بدون انتخاب"></option>
                 <option value="DoesNotHave">ندارد</option>
@@ -311,7 +315,7 @@ defineExpose({ openCreate, openEdit })
             <div v-if="canReadInvoiceNumber" class="form-group mb-0">
               <label>شماره فاکتور <span v-if="hasInvoiceNumber(item)" class="text-danger">*</span></label>
               <input v-model="item.invoiceNumber" class="form-control" :class="{ 'is-invalid': rowError(item, 'invoiceNumber') }"
-                     type="text" maxlength="100" :disabled="saving || !canManageInvoice || !hasInvoiceNumber(item)"
+                     type="text" maxlength="100" :disabled="saving || item.isLocked || !canManageInvoice || !hasInvoiceNumber(item)"
                      @input="clearRowError(item, 'invoiceNumber')" />
               <small v-if="rowError(item, 'invoiceNumber')" class="invalid-feedback d-block">{{ rowError(item, 'invoiceNumber') }}</small>
             </div>
@@ -319,19 +323,19 @@ defineExpose({ openCreate, openEdit })
               <label>طرف حساب</label>
               <SupplierSelect :model-value="item.supplierId || null" :text="item.supplierText"
                               placeholder="تایپ یا انتخاب تأمین‌کننده" :error="rowError(item, 'supplier')"
-                              :disabled="saving || !canManageInvoice" allow-create
+                              :disabled="saving || item.isLocked || !canManageInvoice" allow-create
                               @update:model-value="item.supplierId = $event ?? ''" @update:text="item.supplierText = $event"
                               @clear="clearRowError(item, 'supplier')" />
             </div>
             <div v-if="canReadReceiptNumber" class="form-group mb-0">
               <label>شماره رسید</label>
               <input v-model="item.receiptNumber" class="form-control" type="text" maxlength="100"
-                     :disabled="saving" :readonly="!canManageReceipt" />
+                     :disabled="saving || item.isLocked" :readonly="!canManageReceipt" />
             </div>
             <div class="form-group mb-0">
               <label>شماره خروج</label>
               <input v-model="item.issueNumber" class="form-control" type="text" maxlength="100"
-                     :disabled="saving || !canInitialEntry" :class="{ 'is-invalid': rowError(item, 'issueNumber') }"
+                     :disabled="saving || item.isLocked || !canInitialEntry" :class="{ 'is-invalid': rowError(item, 'issueNumber') }"
                      @input="clearRowError(item, 'issueNumber')" />
             </div>
           </div>
@@ -346,12 +350,12 @@ defineExpose({ openCreate, openEdit })
             <div class="form-group mb-0 receipt-item-description">
               <label>توضیحات کالا</label>
               <input v-model="item.description" class="form-control" :class="{ 'is-invalid': rowError(item, 'description') }"
-                     type="text" maxlength="1000" :disabled="saving" @input="clearRowError(item, 'description')" />
+                     type="text" maxlength="1000" :disabled="saving || item.isLocked" @input="clearRowError(item, 'description')" />
               <small v-if="rowError(item, 'description')" class="invalid-feedback d-block">{{ rowError(item, 'description') }}</small>
             </div>
             <div class="receipt-item-actions">
               <button class="master-data-row-action receipt-remove-item" type="button" title="حذف کالا" aria-label="حذف کالا"
-                      :disabled="saving || rows.length === 1" @click="removeRow(index)">
+                      :disabled="saving || item.isLocked || rows.length === 1" @click="removeRow(index)">
                 <i class="las la-trash"></i>
               </button>
             </div>
@@ -361,7 +365,7 @@ defineExpose({ openCreate, openEdit })
     </form>
 
     <template #footer="{ close: requestClose }">
-      <button v-if="editingId && canInitialEntry" class="btn btn-outline-danger px-4" type="button" :disabled="saving" @click="remove">
+      <button v-if="editingId && canInitialEntry" class="btn btn-outline-danger px-4" type="button" :disabled="saving || hasLockedItems" @click="remove">
         <i class="las la-trash ml-1" aria-hidden="true"></i>حذف ورودی
       </button>
       <button class="btn btn-light px-4" type="button" :disabled="saving" @click="requestClose">انصراف</button>

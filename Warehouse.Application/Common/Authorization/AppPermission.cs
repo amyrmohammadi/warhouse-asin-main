@@ -40,5 +40,6 @@ public enum AppPermission
     GoodsReceiptsInvoiceNumberRead,
     GoodsReceiptsReceiptNumberRead,
     InvoicesPrint,
-    InvoicesReopen
+    InvoicesReopen,
+    GoodsReceiptsPrint
 }

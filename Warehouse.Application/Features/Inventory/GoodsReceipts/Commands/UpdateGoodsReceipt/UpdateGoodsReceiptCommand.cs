@@ -25,9 +25,7 @@ internal sealed class UpdateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                       .GetByIdAsync(request.Id, cancellationToken);
         if (receipt is null) return Result<GoodsReceiptSummary>
                       .Error("سند ورود کالا پیدا نشد.");
-        if (await Invoices.InvoiceEditGuard.IsReceiptLockedAsync(unitOfWork, receipt.Id, cancellationToken))
-            return Result<GoodsReceiptSummary>.Error(Invoice.LockedMessage);
-        if (!receipt.TryAdvanceConcurrencyStamp(request.ConcurrencyStamp))
+        if (request.ConcurrencyStamp == Guid.Empty || receipt.ConcurrencyStamp != request.ConcurrencyStamp)
             return Result<GoodsReceiptSummary>.Error(ConcurrencyMessages.Conflict);
 
         var values = request.Values;
@@ -48,12 +46,13 @@ internal sealed class UpdateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
             invoiceRepository.Entities.Where(invoice => storedInvoiceIds.Contains(invoice.Id)),
             cancellationToken);
         var invoicesById = storedInvoices.ToDictionary(invoice => invoice.Id);
+        var matched = Invoices.InvoiceEditGuard.MatchItems(values.Items, storedItems);
+        var requestedById = values.Items.Zip(matched)
+            .Where(pair => pair.Second is not null)
+            .GroupBy(pair => pair.Second!.Id)
+            .ToDictionary(group => group.Key, group => group.First().First);
         if (!request.CanEditInitialEntry)
         {
-            var requestedByProduct = values.Items
-                .Where(item => item.ProductId.HasValue)
-                .GroupBy(item => item.ProductId!.Value)
-                .ToDictionary(group => group.Key, group => new Queue<CreateGoodsReceiptItem>(group));
             values = values with
             {
                 EnteredAtUtc = receipt.EnteredAtUtc,
@@ -63,12 +62,7 @@ internal sealed class UpdateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                 PageNumber = receipt.PageNumber,
                 Items = storedItems.Select(item =>
                 {
-                    CreateGoodsReceiptItem? requested = null;
-                    if (requestedByProduct.TryGetValue(item.ProductId, out var candidates) &&
-                        candidates.Count > 0)
-                    {
-                        requested = candidates.Dequeue();
-                    }
+                    requestedById.TryGetValue(item.Id, out var requested);
                     return new CreateGoodsReceiptItem(
                         item.ProductId, null, null, null,
                         request.CanEditWarehouse ? requested?.WarehouseId ?? item.WarehouseId : item.WarehouseId,
@@ -79,26 +73,18 @@ internal sealed class UpdateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                             item.InvoiceId.HasValue ? invoicesById[item.InvoiceId.Value].SupplierId : item.SupplierId,
                         request.CanEditInvoice ? requested?.SupplierTitle : null,
                         request.CanEditReceipt ? requested?.ReceiptNumber : item.ReceiptNumber,
-                        item.Quantity, item.RequestNumber, item.Description);
+                        item.Quantity, item.RequestNumber, item.Description, Id: item.Id);
                 }).ToArray()
             };
         }
         else if (!request.CanEditInvoice || !request.CanEditReceipt)
         {
-            var storedByProduct = storedItems
-                .GroupBy(item => item.ProductId)
-                .ToDictionary(group => group.Key, group => new Queue<GoodsReceiptItem>(group));
             values = values with
             {
-                Items = values.Items.Select(item =>
+                Items = values.Items.Zip(matched).Select(pair =>
                 {
-                    GoodsReceiptItem? stored = null;
-                    if (item.ProductId.HasValue &&
-                        storedByProduct.TryGetValue(item.ProductId.Value, out var candidates) &&
-                        candidates.Count > 0)
-                    {
-                        stored = candidates.Dequeue();
-                    }
+                    var item = pair.First;
+                    var stored = pair.Second;
                     return item with
                     {
                         InvoiceStatus = request.CanEditInvoice ? item.InvoiceStatus : stored?.InvoiceStatus,
@@ -117,18 +103,20 @@ internal sealed class UpdateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
         // Preserve warehouses on existing rows even when the caller can edit initial-entry details.
         if (!request.CanEditWarehouse)
         {
-            var warehousesByProduct = storedItems.GroupBy(item => item.ProductId)
-                .ToDictionary(group => group.Key, group => new Queue<GoodsReceiptItem>(group));
+            var warehouseMatches = Invoices.InvoiceEditGuard.MatchItems(values.Items, storedItems);
             values = values with
             {
-                Items = values.Items.Select(item =>
+                Items = values.Items.Zip(warehouseMatches).Select(pair =>
                 {
-                    if (item.ProductId is Guid productId && warehousesByProduct.TryGetValue(productId, out var stored) && stored.Count > 0)
-                        return item with { WarehouseId = stored.Dequeue().WarehouseId };
-                    return item;
+                    return pair.Second is { } stored ? pair.First with { WarehouseId = stored.WarehouseId } : pair.First;
                 }).ToArray()
             };
         }
+        if (!await Invoices.InvoiceEditGuard.CanUpdateReceiptAsync(unitOfWork, receipt, values, storedItems,
+                request.CanEditInitialEntry, request.CanEditInvoice, request.CanEditReceipt, request.CanEditWarehouse, cancellationToken))
+            return Result<GoodsReceiptSummary>.Error(Invoice.LockedMessage);
+        if (!receipt.TryAdvanceConcurrencyStamp(request.ConcurrencyStamp))
+            return Result<GoodsReceiptSummary>.Error(ConcurrencyMessages.Conflict);
         await new CreateGoodsReceiptCommandValidator().ValidateAndThrowAsync(values, cancellationToken);
         return await new CreateGoodsReceiptCommandHandler(unitOfWork).SaveAsync(
             values,

@@ -19,11 +19,34 @@ using Warehouse.Server.Contracts.Inventory;
 using Warehouse.Domain.Enums;
 using Warehouse.Application.Features.Inventory.Invoices.Commands.PrintInvoices;
 using Warehouse.Application.Features.Inventory.Invoices.Commands.ChangeInvoiceStatus;
+using Warehouse.Application.Features.Inventory.Invoices.Commands.CreateInvoice;
 
 namespace Warehouse.Server.Tests.Controllers;
 
 public sealed class InvoicesControllerTests
 {
+    [Fact]
+    public async Task Create_RequiresInvoiceEditPermission_AndForwardsOnlyHeaderFields()
+    {
+        Assert.Equal(PermissionPolicyNames.Inventory.GoodsReceiptsReceiptInvoiceOperations,
+            typeof(InvoicesController).GetMethod(nameof(InvoicesController.Create))!.GetCustomAttribute<AuthorizeAttribute>()!.Policy);
+        var sender = Substitute.For<ISender>();
+        var auth = Substitute.For<IAuthorizationService>();
+        var id = Guid.NewGuid();
+        var supplierId = Guid.NewGuid();
+        sender.Send(Arg.Any<CreateInvoiceCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result<InvoiceDetails>.Success(new() { Id = id }));
+        var controller = new InvoicesController(sender, auth);
+        var response = await controller.Create(new("INV-NEW", supplierId, "شرح", new DateOnly(2026, 11, 3),
+            Price: 124000), default);
+        var created = Assert.IsType<CreatedAtActionResult>(response.Result);
+        Assert.Equal(nameof(InvoicesController.GetById), created.ActionName);
+        Assert.Equal(id, created.RouteValues!["id"]);
+        await sender.Received(1).Send(Arg.Is<CreateInvoiceCommand>(command => command.InvoiceNumber == "INV-NEW" &&
+            command.SupplierId == supplierId && command.Price == 124000 && command.ProcessingStatus == InvoiceProcessingStatus.UnderReview),
+            Arg.Any<CancellationToken>());
+    }
+
     [Theory]
     [InlineData(InvoiceProcessingStatus.UnderReview, PermissionPolicyNames.Inventory.GoodsReceiptsReceiptInvoiceOperations, false)]
     [InlineData(InvoiceProcessingStatus.UnderReview, PermissionPolicyNames.Inventory.InvoicesReopen, true)]

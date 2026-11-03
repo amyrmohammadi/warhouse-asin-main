@@ -8,6 +8,7 @@ export type InvoiceStatus = 'DoesNotHave' | 'HasInvoice'
 export type InvoiceStatusFilter = InvoiceStatus | 'NotEntered'
 
 export interface GoodsReceiptItem {
+  isLocked: boolean
   id: string
   issueNumber: string | null
   productId: string
@@ -84,6 +85,8 @@ export interface GoodsReceiptMetrics {
   itemsWithoutInvoiceCount: number | null
   todayItemCount: number | null
   todayDocumentCount: number | null
+  todayCreatedItemCount: number | null
+  todayCreatedDocumentCount: number | null
 }
 
 export interface EntityHistoryChange {
@@ -126,18 +129,22 @@ export interface GoodsReceiptListParameters {
   quantity?: NumericFilterValue
   invoiceNumber?: TextFilterValue
   receiptNumber?: TextFilterValue
+  issueNumber?: TextFilterValue
+  itemDescription?: TextFilterValue
+  receiptDescription?: TextFilterValue
   receiptNumberIsEmpty?: boolean
   warehouseId?: string
   delivererId?: string
   supplierId?: string
   invoiceStatus?: InvoiceStatusFilter
-  quickFilter?: 'MissingReceipt' | 'MissingInvoice' | 'Today'
+  quickFilter?: 'MissingReceipt' | 'MissingInvoice' | 'Today' | 'CreatedToday'
   sortBy?: string
   sortDescending?: boolean
   signal?: AbortSignal
 }
 
 export interface CreateGoodsReceiptItemRequest {
+  id?: string | null
   issueNumber: string | null
   productId: string | null
   productTitle: string | null
@@ -236,6 +243,19 @@ export function getGoodsReceiptItemHistory(
   )
 }
 
+export function printGoodsReceipts(
+  mode: 'items' | 'receipts',
+  columns: string[],
+  parameters: GoodsReceiptListParameters = {},
+): Promise<Blob> {
+  const query = new URLSearchParams()
+  appendListParameters(query, parameters)
+  columns.forEach(column => query.append('columns', column))
+  const path = mode === 'items' ? 'items/print' : 'print'
+  return request<Blob>(`${basePath}/${path}?${query}`, { signal: parameters.signal },
+    'آماده‌سازی چاپ ورودی کالا انجام نشد.', true, true)
+}
+
 export async function exportGoodsReceiptItems(
   parameters: GoodsReceiptListParameters = {},
 ): Promise<Blob> {
@@ -303,6 +323,9 @@ function appendListParameters(
   appendNumericFilter(query, 'quantity', parameters.quantity)
   appendTextFilter(query, 'invoiceNumber', parameters.invoiceNumber)
   appendTextFilter(query, 'receiptNumber', parameters.receiptNumber)
+  appendTextFilter(query, 'issueNumber', parameters.issueNumber)
+  appendTextFilter(query, 'itemDescription', parameters.itemDescription)
+  appendTextFilter(query, 'receiptDescription', parameters.receiptDescription)
   if (parameters.sortDescending !== undefined) {
     query.set('sortDescending', String(parameters.sortDescending))
   }
@@ -383,6 +406,7 @@ async function request<T>(
   init: RequestInit,
   fallbackMessage: string,
   requireData = true,
+  pdf = false,
 ): Promise<T> {
   const session = getSession()
   if (!session?.accessToken) {
@@ -401,6 +425,8 @@ async function request<T>(
   }
 
   if (response.status === 401) expireSession()
+
+  if (response.ok && pdf) return await response.blob() as T
 
   let payload: ApiResult<T> | ValidationProblemDetails | null = null
   try {

@@ -1,4 +1,5 @@
 using Warehouse.Application.Common.Interfaces.Repositories;
+using Warehouse.Application.Common.Models.Filtering;
 using Warehouse.Application.Common.Models.Inventory;
 using Warehouse.Application.Features.Inventory.Invoices.Queries.GetInvoiceById;
 using Warehouse.Application.Features.Inventory.Invoices.Queries.GetInvoices;
@@ -10,6 +11,120 @@ namespace Warehouse.Application.Tests.Features.Inventory.Invoices;
 
 public sealed class GetInvoicesFeatureTests
 {
+    [Theory]
+    [InlineData(DateOperator.Eq, 1, false)]
+    [InlineData(DateOperator.Before, 2, false)]
+    [InlineData(DateOperator.After, 2, false)]
+    [InlineData(DateOperator.Between, 2, false)]
+    [InlineData(DateOperator.Eq, 1, true)]
+    [InlineData(DateOperator.Before, 2, true)]
+    [InlineData(DateOperator.After, 2, true)]
+    [InlineData(DateOperator.Between, 2, true)]
+    public async Task GetInvoices_FiltersDates_InclusivelyAndExcludesUnsetDates(DateOperator operation, int expected, bool useInvoiceDate)
+    {
+        await using var context = new ApplicationTestContext();
+        var values = Enumerable.Range(1, 4).Select(index => new Invoice($"INV-{index}", null)).ToArray();
+        for (var index = 0; index < 3; index++)
+        {
+            var date = new DateOnly(2026, 11, index + 1);
+            if (useInvoiceDate) values[index].UpdateDetails(null, date, InvoiceProcessingStatus.UnderReview);
+            else values[index].UpdateFinanceDeliveryDate(date);
+        }
+        var repository = CreateRepository(values);
+        context.UnitOfWork.Repository<Invoice>().Returns(repository);
+        var filter = new DateFilter
+        {
+            Operator = operation, Value = new DateOnly(2026, 11, 2),
+            ValueTo = new DateOnly(2026, 11, 3), UtcOffsetMinutes = 210
+        };
+        var result = await context.Sender.Send(new GetInvoicesQuery
+        {
+            FinanceDeliveryDate = useInvoiceDate ? null : filter,
+            InvoiceDate = useInvoiceDate ? filter : null
+        });
+        Assert.Equal(4, result.Data!.TotalCount);
+        Assert.Equal(expected, result.Data.FilteredCount);
+        Assert.DoesNotContain(result.Data.Items, invoice => (useInvoiceDate ? invoice.InvoiceDate : invoice.FinanceDeliveryDate) == null);
+        if (operation == DateOperator.Eq) Assert.Equal(values[1].Id, Assert.Single(result.Data.Items).Id);
+    }
+
+    [Theory]
+    [InlineData(InvoiceProcessingStatus.UnderReview)]
+    [InlineData(InvoiceProcessingStatus.SentToFinance)]
+    [InlineData(InvoiceProcessingStatus.FinanceApproved)]
+    public async Task GetInvoices_CombinesStatusAndDeliveryDate_BeforePagination(InvoiceProcessingStatus status)
+    {
+        await using var context = new ApplicationTestContext();
+        var day = new DateOnly(2026, 11, 3);
+        var values = Enum.GetValues<InvoiceProcessingStatus>().SelectMany(value => Enumerable.Range(1, 3).Select(index =>
+        {
+            var invoice = new Invoice($"INV-{value}-{index}", null);
+            invoice.UpdateDetails(null, day, value);
+            invoice.UpdateFinanceDeliveryDate(index == 3 ? day.AddDays(-1) : day);
+            return invoice;
+        })).ToArray();
+        var repository = CreateRepository(values);
+        context.UnitOfWork.Repository<Invoice>().Returns(repository);
+        var result = await context.Sender.Send(new GetInvoicesQuery
+        {
+            ProcessingStatus = status, FinanceDeliveryDate = new DateFilter { Operator = DateOperator.Eq, Value = day },
+            InvoiceDate = new DateFilter { Operator = DateOperator.Eq, Value = day },
+            PageNumber = 2, PageSize = 1, SortBy = "invoiceNumber"
+        });
+        Assert.Equal(9, result.Data!.TotalCount);
+        Assert.Equal(2, result.Data.FilteredCount);
+        var item = Assert.Single(result.Data.Items);
+        Assert.Equal($"INV-{status}-2", item.InvoiceNumber);
+        Assert.Equal(status, item.ProcessingStatus);
+        Assert.Equal(day, item.FinanceDeliveryDate);
+    }
+
+    [Fact]
+    public async Task GetInvoices_RejectsInvalidStatusAndIncompleteDateRanges()
+    {
+        await using var context = new ApplicationTestContext();
+        await Assert.ThrowsAsync<ValidationException>(() => context.Sender.Send(new GetInvoicesQuery
+            { ProcessingStatus = (InvoiceProcessingStatus)999 }));
+        await Assert.ThrowsAsync<ValidationException>(() => context.Sender.Send(new GetInvoicesQuery
+            { FinanceDeliveryDate = new DateFilter { Operator = DateOperator.Between, Value = new DateOnly(2026, 11, 3) } }));
+        await Assert.ThrowsAsync<ValidationException>(() => context.Sender.Send(new GetInvoicesQuery
+            { InvoiceDate = new DateFilter { Operator = DateOperator.Between, Value = new DateOnly(2026, 11, 3), ValueTo = new DateOnly(2026, 11, 2) } }));
+    }
+
+    [Theory]
+    [InlineData("receiptNumber", "REC-MATCH", true)]
+    [InlineData("receiptNumber", "MATCH", false)]
+    [InlineData("receiptNumber", "MATCH", true)]
+    [InlineData("productTitle", "کالای ویژه", true)]
+    [InlineData("productTitle", "ویژه", false)]
+    [InlineData("search", "REC-MATCH", false)]
+    [InlineData("search", "کالای ویژه", false)]
+    [InlineData("search", "CODE-MATCH", false)]
+    public async Task GetInvoices_FiltersReceiptNumberAndProduct(string field, string value, bool exact)
+    {
+        await using var context = new ApplicationTestContext();
+        var matching = new Invoice("INV-1", null);
+        var other = new Invoice("INV-2", null);
+        var receipt = new GoodsReceipt(DateTimeOffset.UtcNow, null, Guid.NewGuid(), "1");
+        AddInvoiceItem(receipt, matching, "REC-MATCH", 0);
+        AddInvoiceItem(receipt, other, null, 1);
+        var product = new Product("کالای ویژه", "CODE-MATCH", Guid.NewGuid(), null);
+        typeof(GoodsReceiptItem).GetProperty(nameof(GoodsReceiptItem.Product))!.SetValue(matching.GoodsReceiptItems.Single(), product);
+        var repository = CreateRepository(other, matching);
+        context.UnitOfWork.Repository<Invoice>().Returns(repository);
+        var filter = new TextFilter { Value = value, Operator = exact ? TextOperator.Eq : TextOperator.Contains };
+        var result = await context.Sender.Send(new GetInvoicesQuery
+        {
+            ReceiptNumber = field == "receiptNumber" ? filter : null,
+            ProductTitle = field == "productTitle" ? filter : null,
+            Search = field == "search" ? value : null
+        });
+        Assert.Equal(2, result.Data!.TotalCount);
+        var expected = exact && value == "MATCH" ? 0 : 1;
+        Assert.Equal(expected, result.Data.FilteredCount);
+        if (expected == 1) Assert.Equal(matching.Id, Assert.Single(result.Data.Items).Id);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("createdAtUtc")]

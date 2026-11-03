@@ -15,6 +15,7 @@ public sealed record GetGoodsIssuesQuery
     : DataTableParameters, IRequest<Result<GoodsIssueListResult>>
 {
     public DateFilter? IssuedAt { get; init; }
+    public InventoryDateQuickFilter? QuickFilter { get; init; }
     public TextFilter? IssueNumberFilter { get; init; }
     public TextFilter? ProductTitle { get; init; }
     public TextFilter? ProductCode { get; init; }
@@ -32,6 +33,7 @@ internal sealed class GetGoodsIssuesQueryValidator : AbstractValidator<GetGoodsI
         RuleFor(query => query.PageNumber).GreaterThanOrEqualTo(1);
         RuleFor(query => query.PageSize).InclusiveBetween(1, 100);
         RuleFor(query => query.Search).MaximumLength(256);
+        RuleFor(query => query.QuickFilter).Must(value => value is null or InventoryDateQuickFilter.Today or InventoryDateQuickFilter.CreatedToday);
         RuleFor(query => query.IssuedAt!).SetValidator(new DateFilterValidator()).When(query => query.IssuedAt is not null);
         RuleFor(query => query.IssueNumberFilter!).SetValidator(new TextFilterValidator(100)).When(query => query.IssueNumberFilter is not null);
         RuleFor(query => query.ProductTitle!).SetValidator(new TextFilterValidator(256)).When(query => query.ProductTitle is not null);
@@ -42,7 +44,7 @@ internal sealed class GetGoodsIssuesQueryValidator : AbstractValidator<GetGoodsI
     }
 }
 
-internal sealed class GetGoodsIssuesQueryHandler(IUnitOfWork<Guid> unitOfWork)
+internal sealed class GetGoodsIssuesQueryHandler(IUnitOfWork<Guid> unitOfWork, TimeProvider clock)
     : IRequestHandler<GetGoodsIssuesQuery, Result<GoodsIssueListResult>>
 {
     public async Task<Result<GoodsIssueListResult>> Handle(
@@ -52,6 +54,13 @@ internal sealed class GetGoodsIssuesQueryHandler(IUnitOfWork<Guid> unitOfWork)
         var repository = unitOfWork.Repository<GoodsIssue>();
         var query = repository.Entities;
         var totalCount = await repository.CountAsync(query, cancellationToken);
+        var (start, end) = InventoryTodayRange.For(clock.GetUtcNow());
+        query = request.QuickFilter switch
+        {
+            InventoryDateQuickFilter.Today => query.Where(issue => issue.IssuedAtUtc >= start && issue.IssuedAtUtc < end),
+            InventoryDateQuickFilter.CreatedToday => query.Where(issue => issue.CreatedOn >= start && issue.CreatedOn < end),
+            _ => query
+        };
         var search = request.Search?.Trim();
         if (!string.IsNullOrWhiteSpace(search))
         {
@@ -96,6 +105,8 @@ internal sealed class GetGoodsIssuesQueryHandler(IUnitOfWork<Guid> unitOfWork)
         bool descending) =>
         (sortBy?.Trim().ToLowerInvariant(), descending) switch
         {
+            ("id", false) => query.OrderBy(item => item.Id),
+            ("id", true) => query.OrderByDescending(item => item.Id),
             ("issuenumber", false) => query.OrderBy(issue => issue.IssueNumber).ThenBy(issue => issue.Id),
             ("issuenumber", true) => query.OrderByDescending(issue => issue.IssueNumber).ThenByDescending(issue => issue.Id),
             ("issuerfullname", false) => query.OrderBy(issue => issue.Issuer.FullName).ThenBy(issue => issue.Id),

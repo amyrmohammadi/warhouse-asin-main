@@ -12,8 +12,10 @@ defineProps<{
   canCreate: boolean
   canImport?: boolean
   canExport?: boolean
+  canPrint?: boolean
   createDisabled?: boolean
   exporting?: boolean
+  printing?: boolean
   columns: ToggleableColumn[]
   isColumnVisible: (key: string) => boolean
   columnMenuOpen: boolean
@@ -23,6 +25,7 @@ const emit = defineEmits<{
   'update:mode': [mode: string]
   create: []
   export: []
+  print: []
   import: [file: File]
   'toggle-column': [column: ToggleableColumn]
   'toggle-column-menu': []
@@ -62,6 +65,12 @@ function onFileChange(event: Event): void {
         <span v-if="exporting" class="spinner-border spinner-border-sm" aria-hidden="true"></span>
         <i v-else class="las la-file-excel" aria-hidden="true"></i>
       </button>
+      <button v-if="canPrint" class="btn btn-outline-primary btn-sm inventory-toolbar__icon inventory-toolbar__print"
+              type="button" :title="`چاپ ${entityLabel}`" :aria-label="`چاپ ${entityLabel}`"
+              :disabled="printing" @click="emit('print')">
+        <span v-if="printing" class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+        <i v-else class="las la-print" aria-hidden="true"></i>
+      </button>
       <button class="btn btn-outline-primary btn-sm inventory-toolbar__icon inventory-toolbar__columns" type="button"
               title="تنظیم ستون‌ها" aria-label="تنظیم ستون‌ها" :aria-expanded="columnMenuOpen"
               @click="emit('toggle-column-menu')">
@@ -86,7 +95,7 @@ function onFileChange(event: Event): void {
     </button>
   </div>
 
-  <div v-if="canCreate || canExport || canImport || $slots['create-actions']" class="inventory-mobile-actions" role="toolbar"
+  <div v-if="canCreate || canExport || canImport || canPrint || $slots['create-actions']" class="inventory-mobile-actions" role="toolbar"
        :aria-label="`عملیات ${entityLabel}`">
     <slot name="create-actions" />
     <button v-if="canCreate" class="btn btn-primary" type="button" :disabled="createDisabled" @click="emit('create')">
@@ -95,6 +104,10 @@ function onFileChange(event: Event): void {
     <button v-if="canExport" class="btn btn-outline-success" type="button" :disabled="exporting" @click="emit('export')">
       <span v-if="exporting" class="spinner-border spinner-border-sm" aria-hidden="true"></span>
       <i v-else class="las la-file-excel" aria-hidden="true"></i><span>خروجی Excel</span>
+    </button>
+    <button v-if="canPrint" class="btn btn-outline-primary" type="button" :disabled="printing" @click="emit('print')">
+      <span v-if="printing" class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+      <i v-else class="las la-print" aria-hidden="true"></i><span>چاپ</span>
     </button>
     <button v-if="canImport" class="btn btn-outline-primary" type="button" @click="fileInput?.click()">
       <i class="las la-file-import" aria-hidden="true"></i><span>ایمپورت</span>
@@ -144,7 +157,7 @@ function onFileChange(event: Event): void {
   .inventory-toolbar__mode { min-width: 0; padding: .2rem .35rem; width: 100%; }
   .inventory-toolbar__mode .form-control { flex: 1 1 auto; min-width: 0; width: 100%; }
   .inventory-toolbar__group { justify-self: end; }
-  .inventory-toolbar__import, .inventory-toolbar__export { display: none; }
+  .inventory-toolbar__import, .inventory-toolbar__export, .inventory-toolbar__print { display: none; }
   .inventory-toolbar__columns { border-radius: .35rem !important; }
   .inventory-toolbar__add { display: none !important; }
   .inventory-toolbar__extra { display: none; }

@@ -4,5 +4,6 @@ public enum GoodsReceiptQuickFilter
 {
     MissingReceipt,
     MissingInvoice,
-    Today
+    Today,
+    CreatedToday
 }

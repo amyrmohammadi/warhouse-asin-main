@@ -61,6 +61,39 @@ public sealed class GetGoodsReceiptQuickFilterTests
         Assert.Equal(1, result.Data.FilteredCount);
     }
 
+    [Fact]
+    public async Task CreatedTodayFilter_UsesItemCreationForItems_AndDocumentCreationForDocuments()
+    {
+        await using var context = new ApplicationTestContext();
+        var now = DateTimeOffset.UtcNow;
+        var oldReceipt = Receipt(now.AddDays(-10));
+        SetCreatedOn(oldReceipt, now.AddDays(-10));
+        AddItem(oldReceipt, null, null);
+        AddItem(oldReceipt, null, null);
+        foreach (var item in oldReceipt.Items) SetCreatedOn(item, now);
+        var newReceipt = Receipt(now.AddDays(-5));
+        SetCreatedOn(newReceipt, now);
+        AddItem(newReceipt, null, null);
+        SetCreatedOn(newReceipt.Items.Single(), now.AddDays(-5));
+        var legacyReceipt = Receipt(now);
+        AddItem(legacyReceipt, null, null);
+        var receipts = new[] { oldReceipt, newReceipt, legacyReceipt };
+        var receiptRepository = ReceiptRepository(receipts);
+        var itemRepository = ItemRepository(receipts.SelectMany(receipt => receipt.Items).ToArray());
+        context.UnitOfWork.Repository<GoodsReceipt>().Returns(receiptRepository);
+        context.UnitOfWork.Repository<GoodsReceiptItem>().Returns(itemRepository);
+
+        var items = await context.Sender.Send(new GetGoodsReceiptItemRowsQuery
+            { QuickFilter = GoodsReceiptQuickFilter.CreatedToday });
+        var documents = await context.Sender.Send(new GetGoodsReceiptsQuery
+            { QuickFilter = GoodsReceiptQuickFilter.CreatedToday });
+        Assert.Equal(2, items.Data!.FilteredCount);
+        Assert.Equal(1, documents.Data!.FilteredCount);
+    }
+
+    private static void SetCreatedOn(Warehouse.Domain.Common.AuditableEntity entity, DateTimeOffset value) =>
+        typeof(Warehouse.Domain.Common.AuditableEntity).GetProperty(nameof(entity.CreatedOn))!.SetValue(entity, value);
+
     private static GoodsReceipt Receipt(DateTimeOffset enteredAtUtc) =>
         new(enteredAtUtc, null, Guid.NewGuid(), Guid.NewGuid().ToString());
 

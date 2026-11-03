@@ -1,6 +1,8 @@
+using Warehouse.Domain.Common;
+
 namespace Warehouse.Infrastructure.Persistence.Auditing;
 
-public sealed class AuditTrail
+public sealed class AuditTrail : AuditableEntity
 {
     public long Id { get; set; }
 

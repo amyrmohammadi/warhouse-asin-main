@@ -20,6 +20,7 @@ import { isAbortError, useRequestChannel } from '@/composables/useRequestChannel
 import { useUnauthorizedRedirect } from '@/composables/useUnauthorizedRedirect'
 import {
   exportGoodsReceiptItems,
+  printGoodsReceipts,
   getGoodsReceiptItemHistory,
   getGoodsReceiptItems,
   getGoodsReceiptMetrics,
@@ -39,8 +40,10 @@ import type { DataTableFilterDefinition, DataTableFilterValue } from '@/types/da
 import { createRowNumberColumn } from '@/utils/dataTable'
 import { formatPersianDate, formatPersianNumber } from '@/utils/dateTime'
 import { downloadBlob } from '@/utils/download'
+import { printPdf } from '@/utils/pdfPrint'
 import { createInventoryTableOptions } from '@/utils/inventoryTable'
 import '@/styles/inventory-list.css'
+import '@/styles/inventory-metrics.css'
 
 import GoodsReceiptFormModal from './GoodsReceiptFormModal.vue'
 import GoodsReceiptImportModal from './GoodsReceiptImportModal.vue'
@@ -63,13 +66,17 @@ const { canManageInvoice, canManageReceipt, canEditWarehouse, canReadColumn } = 
 const canReadItemHistory = has('GoodsReceiptHistoryRead')
 const canImport = has('GoodsReceiptsImport')
 const canExport = has('GoodsReceiptsExport')
+const canPrint = has('GoodsReceiptsPrint')
+const printing = ref(false)
 const canEdit = canInitialEntry || canManageInvoice || canManageReceipt || canEditWarehouse
 
 const metricCards = [
   { key: 'itemsWithoutReceiptCount', permission: 'GoodsReceiptsMissingReceiptCountRead', title: 'کالاهای بدون رسید', tone: 'blue', mode: 'items' },
   { key: 'itemsWithoutInvoiceCount', permission: 'GoodsReceiptsMissingInvoiceCountRead', title: 'فاکتور بلاتکلیف', tone: 'amber', mode: 'items' },
   { key: 'todayItemCount', permission: 'GoodsReceiptsTodayItemCountRead', title: 'تعداد اقلام ورودی امروز', tone: 'teal', mode: 'items' },
-  { key: 'todayDocumentCount', permission: 'GoodsReceiptsTodayDocumentCountRead', title: 'تعداد اسناد ورودی امروز', tone: 'violet', mode: 'receipts' }  
+  { key: 'todayDocumentCount', permission: 'GoodsReceiptsTodayDocumentCountRead', title: 'تعداد اسناد ورودی امروز', tone: 'violet', mode: 'receipts' },
+  { key: 'todayCreatedItemCount', permission: 'GoodsReceiptsTodayItemCountRead', title: 'کالاهای ثبت‌شده امروز', tone: 'green', mode: 'items' },
+  { key: 'todayCreatedDocumentCount', permission: 'GoodsReceiptsTodayDocumentCountRead', title: 'اسناد ثبت‌شده امروز', tone: 'rose', mode: 'receipts' },
 ] as const
 type MetricCard = (typeof metricCards)[number]
 const visibleMetricCards = metricCards.filter(card => has(card.permission))
@@ -180,6 +187,9 @@ const filterDefinitions = computed<DataTableFilterDefinition[]>(() => {
   },
   { key: 'invoiceNumber', label: 'شماره فاکتور', type: 'text-comparison', placeholder: 'شماره فاکتور', maxlength: 100 },
   { key: 'receiptNumber', label: 'شماره رسید', type: 'text-comparison', placeholder: 'شماره رسید', maxlength: 100 },
+  { key: 'issueNumber', label: 'شماره خروج', type: 'text-comparison', placeholder: 'شماره خروج', maxlength: 100 },
+  { key: 'itemDescription', label: 'توضیحات کالا', type: 'text-comparison', placeholder: 'توضیحات کالا', maxlength: 1000 },
+  { key: 'receiptDescription', label: 'توضیحات سند', type: 'text-comparison', placeholder: 'توضیحات سند', maxlength: 1000 },
   {
     key: 'supplierId', label: 'طرف حساب', type: 'select', placeholder: 'همه طرف حساب‌ها',
     options: filters.selectedOption('supplierId'),
@@ -198,13 +208,18 @@ function currentFilterParameters(): GoodsReceiptListParameters {
     quantity: filters.numeric('quantity'),
     invoiceNumber: filters.text('invoiceNumber'),
     receiptNumber: filters.text('receiptNumber'),
+    issueNumber: filters.text('issueNumber'),
+    itemDescription: filters.text('itemDescription'),
+    receiptDescription: filters.text('receiptDescription'),
     warehouseId: filters.id('warehouseId'),
     delivererId: filters.id('delivererId'),
     supplierId: filters.id('supplierId'),
     invoiceStatus: filters.id('invoiceStatus') as InvoiceStatusFilter | undefined,
     receiptNumberIsEmpty: selectedMetric.value?.key === 'itemsWithoutReceiptCount' || undefined,
     quickFilter: selectedMetric.value?.key === 'todayItemCount' || selectedMetric.value?.key === 'todayDocumentCount'
-      ? 'Today' : undefined,
+      ? 'Today'
+      : selectedMetric.value?.key === 'todayCreatedItemCount' || selectedMetric.value?.key === 'todayCreatedDocumentCount'
+        ? 'CreatedToday' : undefined,
   }
 }
 
@@ -239,7 +254,7 @@ function clearProductFilter(setValue: SetFilterValue): void {
 }
 
 // ── ستون‌ها ────────────────────────────────────────────────────────
-const rowNumber: ColumnsConfig = { ...createRowNumberColumn(), className: 'min-tablet-p text-center data-table-row-number' }
+const rowNumber: ColumnsConfig = { ...createRowNumberColumn('id'), className: 'min-tablet-p text-center data-table-row-number' }
 const actions = (data: string): ColumnsConfig => ({
   data, name: 'actions', title: 'عملیات', className: 'min-tablet-p text-center', orderable: false, searchable: false,
 })
@@ -399,6 +414,37 @@ function onImported(summary: GoodsReceiptImportSummary): void {
 }
 
 const exportChannel = useRequestChannel()
+const printChannel = useRequestChannel()
+
+async function printItems(): Promise<void> {
+  if (!canPrint || printing.value) return
+  const mode = tableMode.value
+  const selectedColumns = columns[mode]
+    .map(column => String(column.name ?? ''))
+    .filter(key => key && key !== 'actions' && isColumnVisible(key))
+  if (!selectedColumns.length) {
+    toast.error('حداقل یک ستون برای چاپ انتخاب کنید.')
+    return
+  }
+  const controller = printChannel.begin()
+  printing.value = true
+  const order = table.value?.dt.order()[0]
+  const sortBy = order ? String(columns[mode][order[0]]?.name ?? '') : undefined
+  try {
+    const pdf = await printGoodsReceipts(mode, selectedColumns, {
+      ...currentFilterParameters(), sortBy, sortDescending: order ? order[1] === 'desc' : undefined,
+      signal: controller.signal,
+    })
+    await printPdf(pdf, 'چاپ ورودی کالا', controller.signal)
+  } catch (error) {
+    if (isAbortError(error)) return
+    if (await handleUnauthorized(error)) return
+    toast.error(error instanceof Error ? error.message : 'آماده‌سازی چاپ انجام نشد.')
+  } finally {
+    if (printChannel.isCurrent(controller)) { printChannel.end(controller); printing.value = false }
+  }
+}
+
 async function exportItems(): Promise<void> {
   const controller = exportChannel.begin()
   exporting.value = true
@@ -478,11 +524,12 @@ onBeforeUnmount(() => {
         </div>
         <InventoryListToolbar :mode="tableMode" :modes="VIEW_MODES" entity-label="ورودی کالا" create-label="ثبت ورود کالا"
                               :can-create="canInitialEntry" :can-import="canImport" :can-export="canExport"
+                              :can-print="canPrint" :printing="printing"
                               :create-disabled="optionsLoading" :exporting="exporting"
                               :columns="toggleable[tableMode]" :is-column-visible="isColumnVisible"
                               :column-menu-open="menuOpen"
                               @update:mode="changeTableMode($event as TableMode)"
-                              @create="openCreate" @export="exportItems" @import="onImportFile"
+                              @create="openCreate" @export="exportItems" @print="printItems" @import="onImportFile"
                               @toggle-column="toggleColumn" @toggle-column-menu="toggleMenu" />
       </div>
 
@@ -518,7 +565,7 @@ onBeforeUnmount(() => {
         <DataTableFilters :key="selectedMetric?.key ?? 'all'" v-model="appliedFilters"
                           :definitions="filterDefinitions" :search="quickSearch"
                           :loading="listLoading"
-                          search-placeholder="جستجو در کالا، توضیحات، طرف حساب، شماره صفحه، فاکتور و رسید..."
+                          search-placeholder="جستجو در کالا، توضیحات، طرف حساب، شماره صفحه، فاکتور، رسید و خروج..."
                           @update:search="filters.onSearch" @apply="filters.onApply" @clear="clearAllFilters"
                           @remove="filters.onRemove">
           <template #filter-productTitle="{ setValue, error }">
@@ -589,8 +636,8 @@ onBeforeUnmount(() => {
             <template v-if="canEdit || canReadItemHistory" #column-actions="{ rowData }">
               <div class="d-flex">
                 <button v-if="canEdit" class="btn users-table__role-action" type="button"
-                        :title="rowData.isLocked ? 'ورودی به‌دلیل ارسال یا تأیید فاکتور در مالی قفل است' : 'ویرایش سند'"
-                        aria-label="ویرایش سند" :disabled="editLoading || rowData.isLocked" @click="openEdit(rowData)">
+                        title="ویرایش سند"
+                        aria-label="ویرایش سند" :disabled="editLoading" @click="openEdit(rowData)">
                   <i class="las" :class="rowData.isLocked ? 'la-lock' : 'la-edit'" aria-hidden="true"></i>
                 </button>
                 <button v-if="canReadItemHistory && tableMode === 'items'" class="btn users-table__role-action"
@@ -616,57 +663,6 @@ onBeforeUnmount(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.receipt-metrics { margin: 0 -.25rem .25rem; }
-.receipt-metrics__item { display: flex; flex: 0 0 50%; max-width: 50%; padding: 0 .25rem .5rem; }
-@media (min-width: 992px) {
-  .receipt-metrics__item { flex-basis: 25%; max-width: 25%; }
-}
-@media (min-width: 1200px) {
-  .receipt-metrics__item { flex-basis: 12.5%; max-width: 12.5%; }
-}
-.receipt-metric-card {
-  align-items: center;
-  background: var(--metric-bg);
-  border: 1px solid var(--metric-border);
-  border-radius: .5rem;
-  color: var(--metric-ink);
-  display: flex;
-  flex: 1;
-  font-family: "iransans-medium", sans-serif;
-  gap: .35rem;
-  min-height: calc(3.25rem - 10px);
-  padding: .25rem .45rem;
-  text-align: right;
-  width: 100%;
-  cursor: pointer;
-  transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
-}
-.receipt-metric-card:hover, .receipt-metric-card--active { border-color: var(--metric-ink); }
-.receipt-metric-card:hover { box-shadow: 0 4px 12px rgba(20, 30, 50, .13); transform: translateY(-2px); }
-.receipt-metric-card--active { box-shadow: inset 0 0 0 1px var(--metric-ink); }
-.receipt-metric-card--active:hover { box-shadow: inset 0 0 0 1px var(--metric-ink), 0 4px 12px rgba(20, 30, 50, .13); }
-.receipt-metric-card:focus-visible { outline: 2px solid var(--metric-ink); outline-offset: 2px; }
-@media (prefers-reduced-motion: reduce) {
-  .receipt-metric-card { transition: none; }
-  .receipt-metric-card:hover { transform: none; }
-}
-.receipt-metric-card__content {
-  align-items: center;
-  display: flex;
-  gap: .35rem;
-  justify-content: space-between;
-  width: 100%;
-}
-.receipt-metric-card__title { flex: 1; font-family: "iransans-bold", sans-serif; font-size: .68rem; line-height: 1.5; }
-.receipt-metric-card__value { flex: 0 0 auto; font-family: "iransans-bold", sans-serif; font-size: 1.05rem; line-height: 1.5; }
-.receipt-metric-card--blue { --metric-bg: #e8efff; --metric-border: #c8d8ff; --metric-ink: #1d4ed8; }
-.receipt-metric-card--amber { --metric-bg: #fff3df; --metric-border: #f7dcad; --metric-ink: #9a5805; }
-.receipt-metric-card--teal { --metric-bg: #e4f6f4; --metric-border: #b9e5df; --metric-ink: #0f766e; }
-.receipt-metric-card--violet { --metric-bg: #f0eaff; --metric-border: #d9c9ff; --metric-ink: #6d28d9; }
-:global(body[data-app-theme='dark'] .receipt-metric-card--blue) { --metric-bg: #172c50; --metric-border: #29518a; --metric-ink: #93b4ff; }
-:global(body[data-app-theme='dark'] .receipt-metric-card--amber) { --metric-bg: #3b2b1c; --metric-border: #735029; --metric-ink: #f6c778; }
-:global(body[data-app-theme='dark'] .receipt-metric-card--teal) { --metric-bg: #173b3d; --metric-border: #286a67; --metric-ink: #80d9ca; }
-:global(body[data-app-theme='dark'] .receipt-metric-card--violet) { --metric-bg: #33234f; --metric-border: #5d3a85; --metric-ink: #c5a8ff; }
 .goods-receipts-page :deep(.dt-layout-table > div) {
   max-height: 50vh;
   overflow: auto !important;

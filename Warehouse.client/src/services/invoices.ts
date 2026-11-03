@@ -1,6 +1,6 @@
 import type { ApiResult } from '@/services/auth'
 import { expireSession, getSession } from '@/services/auth'
-import type { TextFilterValue } from '@/types/dataTableFilters'
+import type { DateFilterValue, TextFilterValue } from '@/types/dataTableFilters'
 
 export interface InvoiceSummary {
   isLocked: boolean
@@ -66,12 +66,34 @@ export interface UpdateInvoiceItemResult {
   concurrencyStamp: string
 }
 
+export type CreateInvoiceRequest = Omit<UpdateInvoiceRequest, 'items'>
+
+export function createInvoice(payload: CreateInvoiceRequest, signal?: AbortSignal): Promise<InvoiceDetails> {
+  return request('/endpoint/inventory/invoices', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal,
+  }, 'ثبت فاکتور انجام نشد.')
+}
+
 export interface InvoiceListResult {
   items: InvoiceSummary[]
   totalCount: number
   filteredCount: number
   pageNumber: number
   pageSize: number
+}
+
+export interface InvoiceMetrics {
+  today: string
+  sentToFinanceTodayCount: number
+  underReviewTodayCount: number
+  todayInvoiceCount: number
+  todayItemCount: number
+  todayCreatedInvoiceCount: number
+  todayCreatedItemCount: number
+}
+
+export function getInvoiceMetrics(signal?: AbortSignal): Promise<InvoiceMetrics> {
+  return request('/endpoint/inventory/invoices/metrics', { signal }, 'دریافت آمار فاکتورها انجام نشد.')
 }
 
 export interface InvoiceListParameters {
@@ -82,6 +104,12 @@ export interface InvoiceListParameters {
   sortDescending?: boolean
   invoiceNumber?: TextFilterValue
   counterparty?: TextFilterValue
+  receiptNumber?: TextFilterValue
+  productTitle?: TextFilterValue
+  processingStatus?: InvoiceProcessingStatus
+  financeDeliveryDate?: DateFilterValue
+  invoiceDate?: DateFilterValue
+  quickFilter?: 'Today' | 'CreatedToday' | 'ItemsToday' | 'ItemsCreatedToday'
   signal?: AbortSignal
 }
 
@@ -103,6 +131,18 @@ export function getInvoices(parameters: InvoiceListParameters = {}): Promise<Inv
     query.set('sortDescending', String(parameters.sortDescending))
   appendTextFilter(query, 'invoiceNumber', parameters.invoiceNumber)
   appendTextFilter(query, 'counterparty', parameters.counterparty)
+  appendTextFilter(query, 'receiptNumber', parameters.receiptNumber)
+  appendTextFilter(query, 'productTitle', parameters.productTitle)
+  if (parameters.processingStatus) query.set('processingStatus', parameters.processingStatus)
+  if (parameters.quickFilter) query.set('quickFilter', parameters.quickFilter)
+  for (const key of ['financeDeliveryDate', 'invoiceDate'] as const) {
+    const date = parameters[key]
+    if (!date?.value) continue
+    query.set(`${key}.operator`, date.operator)
+    query.set(`${key}.value`, date.value)
+    if (date.operator === 'between' && date.valueTo)
+      query.set(`${key}.valueTo`, date.valueTo)
+  }
 
   return request(
     `/endpoint/inventory/invoices?${query}`,

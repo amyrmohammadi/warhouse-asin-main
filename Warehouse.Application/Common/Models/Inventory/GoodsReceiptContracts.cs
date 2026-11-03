@@ -25,6 +25,7 @@ public sealed record GoodsReceiptSummary
 
 public sealed record GoodsReceiptItemSummary
 {
+    public bool IsLocked { get; init; }
     public Guid Id { get; init; }
 
     public Guid? GoodsIssueItemId { get; init; }

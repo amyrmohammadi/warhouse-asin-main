@@ -6,6 +6,10 @@ public sealed record PrintInvoicesRequest(IReadOnlyCollection<Guid> InvoiceIds, 
 
 public sealed record ChangeInvoiceStatusRequest(InvoiceProcessingStatus Status, InvoiceProcessingStatus ExpectedStatus);
 
+public sealed record CreateInvoiceRequest(string InvoiceNumber, Guid? SupplierId, string? Description,
+    DateOnly? InvoiceDate, InvoiceProcessingStatus ProcessingStatus = InvoiceProcessingStatus.UnderReview,
+    decimal? Price = null, DateOnly? FinanceDeliveryDate = null);
+
 public sealed record UpdateInvoiceRequest(
     string InvoiceNumber,
     Guid? SupplierId,

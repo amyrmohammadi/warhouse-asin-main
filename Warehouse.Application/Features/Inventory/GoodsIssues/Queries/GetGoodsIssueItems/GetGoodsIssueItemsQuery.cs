@@ -15,6 +15,7 @@ public sealed record GetGoodsIssueItemsQuery
     : DataTableParameters, IRequest<Result<GoodsIssueItemRowListResult>>
 {
     public DateFilter? IssuedAt { get; init; }
+    public InventoryDateQuickFilter? QuickFilter { get; init; }
     public TextFilter? IssueNumberFilter { get; init; }
     public TextFilter? ProductTitle { get; init; }
     public TextFilter? ProductCode { get; init; }
@@ -32,6 +33,7 @@ internal sealed class GetGoodsIssueItemsQueryValidator : AbstractValidator<GetGo
         RuleFor(query => query.PageNumber).GreaterThanOrEqualTo(1);
         RuleFor(query => query.PageSize).InclusiveBetween(1, 100);
         RuleFor(query => query.Search).MaximumLength(256);
+        RuleFor(query => query.QuickFilter).Must(value => value is null or InventoryDateQuickFilter.Today or InventoryDateQuickFilter.CreatedToday);
         RuleFor(query => query.IssuedAt!).SetValidator(new DateFilterValidator()).When(query => query.IssuedAt is not null);
         RuleFor(query => query.IssueNumberFilter!).SetValidator(new TextFilterValidator(100)).When(query => query.IssueNumberFilter is not null);
         RuleFor(query => query.ProductTitle!).SetValidator(new TextFilterValidator(256)).When(query => query.ProductTitle is not null);
@@ -42,7 +44,7 @@ internal sealed class GetGoodsIssueItemsQueryValidator : AbstractValidator<GetGo
     }
 }
 
-internal sealed class GetGoodsIssueItemsQueryHandler(IUnitOfWork<Guid> unitOfWork)
+internal sealed class GetGoodsIssueItemsQueryHandler(IUnitOfWork<Guid> unitOfWork, TimeProvider clock)
     : IRequestHandler<GetGoodsIssueItemsQuery, Result<GoodsIssueItemRowListResult>>
 {
     public async Task<Result<GoodsIssueItemRowListResult>> Handle(
@@ -52,6 +54,13 @@ internal sealed class GetGoodsIssueItemsQueryHandler(IUnitOfWork<Guid> unitOfWor
         var repository = unitOfWork.Repository<GoodsIssueItem>();
         var query = repository.Entities;
         var totalCount = await repository.CountAsync(query, cancellationToken);
+        var (start, end) = InventoryTodayRange.For(clock.GetUtcNow());
+        query = request.QuickFilter switch
+        {
+            InventoryDateQuickFilter.Today => query.Where(item => item.GoodsIssue.IssuedAtUtc >= start && item.GoodsIssue.IssuedAtUtc < end),
+            InventoryDateQuickFilter.CreatedToday => query.Where(item => item.CreatedOn >= start && item.CreatedOn < end),
+            _ => query
+        };
         var search = request.Search?.Trim();
         if (!string.IsNullOrWhiteSpace(search))
         {
@@ -122,6 +131,8 @@ internal sealed class GetGoodsIssueItemsQueryHandler(IUnitOfWork<Guid> unitOfWor
         bool descending) =>
         (sortBy?.Trim().ToLowerInvariant(), descending) switch
         {
+            ("id", false) => query.OrderBy(item => item.Id),
+            ("id", true) => query.OrderByDescending(item => item.Id),
             ("issuenumber", false) => query.OrderBy(item => item.GoodsIssue.IssueNumber)
                 .ThenBy(item => item.GoodsIssueId).ThenBy(item => item.SortOrder).ThenBy(item => item.Id),
             ("issuenumber", true) => query.OrderByDescending(item => item.GoodsIssue.IssueNumber)

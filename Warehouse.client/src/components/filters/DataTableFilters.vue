@@ -416,6 +416,9 @@ function formatValue(
         <span>فیلترها</span>
         <span v-if="activeFilterCount" class="badge badge-primary">{{ activeFilterCount }}</span>
       </button>
+      <div v-if="$slots['toolbar-actions']" class="data-table-filters__toolbar-actions">
+        <slot name="toolbar-actions" />
+      </div>
     </div>
 
     <Transition name="filter-panel">
@@ -567,6 +570,7 @@ function formatValue(
 <style scoped>
 .data-table-filters { margin-bottom: 1rem; }
 .data-table-filters__toolbar { align-items: center; display: flex; gap: 0.75rem; }
+.data-table-filters__toolbar-actions { flex: 0 0 auto; margin-inline-start: auto; }
 .data-table-filters__search { flex: 0 1 24rem; max-width: 24rem; position: relative; width: 100%; }
 .data-table-filters__search > i {
   color: var(--text-secondary); font-size: 1.1rem; pointer-events: none;

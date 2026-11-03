@@ -72,7 +72,7 @@ internal sealed class UpdateInvoiceItemCommandHandler(IUnitOfWork<Guid> unitOfWo
             return Result<UpdateInvoiceItemResult>.Error("سند ورود مرتبط با ردیف فاکتور پیدا نشد.");
         }
 
-        if (await InvoiceEditGuard.IsReceiptLockedAsync(unitOfWork, receipt.Id, cancellationToken))
+        if (await InvoiceEditGuard.IsItemLockedAsync(unitOfWork, item.Id, cancellationToken))
             return Result<UpdateInvoiceItemResult>.Error(Invoice.LockedMessage);
         if (!receipt.TryAdvanceConcurrencyStamp(request.ConcurrencyStamp))
         {

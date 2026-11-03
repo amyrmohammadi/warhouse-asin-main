@@ -25,7 +25,8 @@ internal sealed class GetGoodsReceiptMetricsQueryHandler(IUnitOfWork<Guid> unitO
         int? missingInvoice = null;
         int? todayItems = null;
         int? todayDocuments = null;
-        int? todayCreatedItems=null;
+        int? todayCreatedItems = null;
+        int? todayCreatedDocuments = null;
 
         if (request.IncludeMissingReceipt)
             missingReceipt = await items.CountAsync(items.Entities.Where(item =>
@@ -40,17 +41,23 @@ internal sealed class GetGoodsReceiptMetricsQueryHandler(IUnitOfWork<Guid> unitO
             var (startUtc, endUtc) = GoodsReceiptTodayRange.For(request.UtcNow);
 
             if (request.IncludeTodayItems)
+            {
                 todayItems = await items.CountAsync(items.Entities.Where(item =>
                     item.GoodsReceipt.EnteredAtUtc >= startUtc &&
                     item.GoodsReceipt.EnteredAtUtc < endUtc), cancellationToken);
+                todayCreatedItems = await items.CountAsync(items.Entities.Where(item =>
+                    item.CreatedOn >= startUtc && item.CreatedOn < endUtc), cancellationToken);
+            }
 
             if (request.IncludeTodayDocuments)
+            {
                 todayDocuments = await receipts.CountAsync(receipts.Entities.Where(receipt =>
                     receipt.EnteredAtUtc >= startUtc && receipt.EnteredAtUtc < endUtc), cancellationToken);
+                todayCreatedDocuments = await receipts.CountAsync(receipts.Entities.Where(receipt =>
+                    receipt.CreatedOn >= startUtc && receipt.CreatedOn < endUtc), cancellationToken);
+            }
         }
-
-
-            return Result<GoodsReceiptMetrics>.Success(new(
-                missingReceipt, missingInvoice, todayItems, todayDocuments));
+        return Result<GoodsReceiptMetrics>.Success(new(
+            missingReceipt, missingInvoice, todayItems, todayDocuments, todayCreatedItems, todayCreatedDocuments));
     }
 }

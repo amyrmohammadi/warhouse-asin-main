@@ -58,6 +58,7 @@ defineExpose({ openCreate, openEdit, removeDocument })
         <div class="col-md-3 form-group">
           <label>تاریخ خروج <span class="text-danger">*</span></label>
           <DatePicker v-model="form.issuedAtLocal" type="date" format="YYYY-MM-DDTHH:mm:ss"
+                      :auto-submit="true"
                       display-format="jYYYY/jMM/jDD HH:mm" placeholder="تاریخ و ساعت را انتخاب کنید"
                       :editable="true" :clearable="true" :disabled="saving" color="#2563eb"
                       :class="{ 'is-invalid': errors.get('issuedAtLocal') }"

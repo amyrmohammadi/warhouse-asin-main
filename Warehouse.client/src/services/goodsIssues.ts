@@ -93,6 +93,7 @@ export function importGoodsIssues(file: File, signal?: AbortSignal): Promise<Goo
 }
 
 export interface SaveGoodsIssueItem {
+  id?: string | null
   productId: string | null
   productCode: string
   productTitle: string | null
@@ -120,6 +121,7 @@ export interface SaveGoodsIssueRequest {
 }
 
 export interface GoodsIssueListFilters {
+  quickFilter?: 'Today' | 'CreatedToday'
   issuedAt?: DateFilterValue
   issueNumberFilter?: TextFilterValue
   productTitle?: TextFilterValue
@@ -225,6 +227,7 @@ function appendListParameters(query: URLSearchParams, parameters: GoodsIssueList
 }
 
 function appendFilters(query: URLSearchParams, filters: GoodsIssueListFilters): void {
+  if (filters.quickFilter) query.set('quickFilter', filters.quickFilter)
   if (filters.destinationId) query.set('destinationId', filters.destinationId)
   if (filters.issuerId) query.set('issuerId', filters.issuerId)
   appendDateFilter(query, 'issuedAt', filters.issuedAt)
@@ -234,6 +237,17 @@ function appendFilters(query: URLSearchParams, filters: GoodsIssueListFilters): 
   appendNumericFilter(query, 'quantity', filters.quantity)
   appendTextFilter(query, 'assetNumber', filters.assetNumber)
   appendTextFilter(query, 'deliveringUnit', filters.deliveringUnit)
+}
+
+export interface GoodsIssueMetrics {
+  todayItemCount: number
+  todayDocumentCount: number
+  todayCreatedItemCount: number
+  todayCreatedDocumentCount: number
+}
+
+export function getGoodsIssueMetrics(signal?: AbortSignal): Promise<GoodsIssueMetrics> {
+  return request('/endpoint/inventory/goods-issues/metrics', { signal }, 'دریافت آمار خروج کالا انجام نشد.')
 }
 
 function appendTextFilter(query: URLSearchParams, key: string, filter?: TextFilterValue): void {

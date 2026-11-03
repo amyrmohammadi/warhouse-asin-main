@@ -16,7 +16,7 @@ public sealed class InvoicePdfServiceTests
     {
         var converter = new Converter();
         var invoices = Enumerable.Range(1, count).Select(index => new InvoicePrintEntry(
-            "INV-" + index, "طرف حساب " + index, new DateOnly(2026, 10, 31))).ToArray();
+            "INV-" + index, "طرف حساب " + index, new DateOnly(2026, 10, 31))).Reverse().ToArray();
         await new InvoicePdfService(converter).GenerateAsync(invoices);
         using var workbook = new XLWorkbook(new MemoryStream(converter.Workbook!));
         Assert.Equal(pageCount, workbook.Worksheets.Count);
@@ -24,8 +24,8 @@ public sealed class InvoicePdfServiceTests
         {
             var sheet = workbook.Worksheet(index / 25 + 1);
             var row = index % 25 + 7;
-            Assert.Equal("INV-" + (index + 1), sheet.Cell(row, 5).GetString());
-            Assert.Equal("طرف حساب " + (index + 1), sheet.Cell(row, 4).GetString());
+            Assert.Equal(invoices[index].InvoiceNumber, sheet.Cell(row, 5).GetString());
+            Assert.Equal(invoices[index].Counterparty, sheet.Cell(row, 4).GetString());
             Assert.Equal("۱۴۰۵/۰۸/۰۹", sheet.Cell(row, 3).GetString());
         }
         foreach (var sheet in workbook.Worksheets)

@@ -6,6 +6,7 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Warehouse.Application.Common.Authorization;
+using Warehouse.Application.Common.Interfaces;
 using Warehouse.Application.Common.Concurrency;
 using Warehouse.Application.Common.Models;
 using Warehouse.Application.Common.Models.Inventory;
@@ -30,6 +31,79 @@ public sealed class GoodsReceiptsController(
     IAuthorizationService authorizationService) : ControllerBase
 {
     private const int ExportBatchSize = 500;
+
+    [Authorize(Policy = PermissionPolicyNames.Inventory.GoodsReceiptsPrint)]
+    [HttpGet("items/print")]
+    [Produces("application/pdf")]
+    public async Task<IActionResult> PrintItems(
+        [FromQuery] GetGoodsReceiptItemRowsQuery query,
+        [FromQuery] string[] columns,
+        [FromServices] IGoodsReceiptListPdfService pdfService,
+        CancellationToken cancellationToken)
+    {
+        var access = await Warehouse.Server.Filters.GoodsReceiptColumnAccessFilter.GetAccessAsync(authorizationService, User);
+        var selected = SelectPrintColumns(columns, GoodsReceiptPrintColumns.Items, access);
+        if (selected.Length == 0) return BadRequest(Result.Error("حداقل یک ستون معتبر برای چاپ انتخاب کنید."));
+        query = query with { ColumnAccess = access };
+        var rows = new List<GoodsReceiptItemRowSummary>();
+        for (var page = 1; ; page++)
+        {
+            var result = await sender.Send(query with { PageNumber = page, PageSize = ExportBatchSize }, cancellationToken);
+            if (!result.IsSuccess || result.Data is null) return BadRequest(result);
+            rows.AddRange(result.Data.Items.Select(access.Apply));
+            if (result.Data.Items.Count < ExportBatchSize || rows.Count >= result.Data.FilteredCount) break;
+        }
+        return await PrintPdfAsync(() => pdfService.GenerateItemsAsync(rows, selected, cancellationToken));
+    }
+
+    [Authorize(Policy = PermissionPolicyNames.Inventory.GoodsReceiptsPrint)]
+    [HttpGet("print")]
+    [Produces("application/pdf")]
+    public async Task<IActionResult> PrintReceipts(
+        [FromQuery] GetGoodsReceiptsQuery query,
+        [FromQuery] string[] columns,
+        [FromServices] IGoodsReceiptListPdfService pdfService,
+        CancellationToken cancellationToken)
+    {
+        var access = await Warehouse.Server.Filters.GoodsReceiptColumnAccessFilter.GetAccessAsync(authorizationService, User);
+        var selected = SelectPrintColumns(columns, GoodsReceiptPrintColumns.Receipts, access);
+        if (selected.Length == 0) return BadRequest(Result.Error("حداقل یک ستون معتبر برای چاپ انتخاب کنید."));
+        query = query with { ColumnAccess = access };
+        var rows = new List<GoodsReceiptSummary>();
+        const int batchSize = 100;
+        for (var page = 1; ; page++)
+        {
+            var result = await sender.Send(query with { PageNumber = page, PageSize = batchSize }, cancellationToken);
+            if (!result.IsSuccess || result.Data is null) return BadRequest(result);
+            rows.AddRange(result.Data.Items.Select(access.Apply));
+            if (result.Data.Items.Count < batchSize || rows.Count >= result.Data.FilteredCount) break;
+        }
+        return await PrintPdfAsync(() => pdfService.GenerateReceiptsAsync(rows, selected, cancellationToken));
+    }
+
+    private static string[] SelectPrintColumns(string[] columns,
+        IReadOnlyList<GoodsReceiptPrintColumn> definitions, GoodsReceiptColumnAccess access) =>
+        columns.Where(key => definitions.Any(column => column.Key == key) && access.CanRead(key)).Distinct().ToArray();
+
+    private async Task<IActionResult> PrintPdfAsync(Func<Task<byte[]>> generate)
+    {
+        try
+        {
+            var pdf = await generate();
+            Response.Headers.CacheControl = "no-store";
+            return File(pdf, "application/pdf");
+        }
+        catch (TimeoutException)
+        {
+            return Problem(statusCode: StatusCodes.Status504GatewayTimeout,
+                title: "آماده‌سازی چاپ بیش از زمان مجاز طول کشید. دوباره تلاش کنید.");
+        }
+        catch (ExcelToPdfConversionException)
+        {
+            return Problem(statusCode: StatusCodes.Status503ServiceUnavailable,
+                title: "تولید فایل چاپ انجام نشد. سرویس چاپ را بررسی کنید.");
+        }
+    }
 
     private async Task<bool> CanManageInvoiceAsync() =>
         (await authorizationService.AuthorizeAsync(User, PermissionPolicyNames.Inventory.GoodsReceiptsReceiptInvoiceOperations)).Succeeded &&
@@ -416,7 +490,8 @@ public sealed class GoodsReceiptsController(
                 item.Quantity,
                 item.RequestNumber,
                 item.Description,
-                canInitialEntry ? item.IssueNumber : null)).ToArray());
+                canInitialEntry ? item.IssueNumber : null,
+                item.Id)).ToArray());
         var result = await sender.Send(new UpdateGoodsReceiptCommand(
             id, command, canInitialEntry, canManageInvoice, canManageReceipt,
             request.ConcurrencyStamp ?? Guid.Empty, canEditWarehouse), cancellationToken);

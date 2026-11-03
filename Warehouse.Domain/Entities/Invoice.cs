@@ -6,7 +6,7 @@ namespace Warehouse.Domain.Entities;
 
 public sealed class Invoice : Entity<Guid>
 {
-    public const string LockedMessage = "این فاکتور به واحد مالی ارسال یا تأیید شده است؛ برای ویرایش فاکتور و ورودی مرتبط، ابتدا با مجوز مربوطه آن را به «در حال رسیدگی» برگردانید.";
+    public const string LockedMessage = "این فاکتور به واحد مالی ارسال یا تأیید شده است؛ برای ویرایش فاکتور و اقلام مرتبط با آن، ابتدا با مجوز مربوطه آن را به «در حال رسیدگی» برگردانید.";
 
     [NotMapped]
     public bool IsLocked => ProcessingStatus != InvoiceProcessingStatus.UnderReview;

@@ -43,7 +43,7 @@ internal sealed class DeleteGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                     !await GoodsIssues.GoodsIssueEditGuard.CanChangeItemAsync(unitOfWork, issueItem, cancellationToken))
                 {
                     await unitOfWork.RollBackTransaction(cancellationToken);
-                    return Result.Error(GoodsIssue.FinalizedMessage);
+                    return Result.Error(Common.Concurrency.ConcurrencyMessages.Conflict);
                 }
                 issueItem?.SetReturnAtUtc(returnAtUtc);
             }

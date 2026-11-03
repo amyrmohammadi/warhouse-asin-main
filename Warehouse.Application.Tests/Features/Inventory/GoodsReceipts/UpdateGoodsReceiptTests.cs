@@ -10,6 +10,32 @@ namespace Warehouse.Application.Tests.Features.Inventory.GoodsReceipts;
 
 public sealed class UpdateGoodsReceiptTests
 {
+    [Fact]
+    public async Task ChangingLinkedReceiptProduct_IsRejectedEvenWhenTheIssueNumberIsClearedInTheSameSave()
+    {
+        await using var context = new ApplicationTestContext();
+        var receipt = new GoodsReceipt(DateTimeOffset.UtcNow, null, Guid.NewGuid(), "1");
+        receipt.AddItem(Guid.NewGuid(), Guid.NewGuid(), null, null, "REC-1", 1, null, null, 0);
+        var item = receipt.Items.Single();
+        var originalProduct = item.ProductId;
+        var issue = new GoodsIssue("OUT-1", DateTimeOffset.UtcNow, null, Guid.NewGuid());
+        var issueItem = issue.AddItem(originalProduct, "P-1", 1, null, null, null, null, null, null, 0);
+        item.SetGoodsIssueItem(issueItem);
+        Register(context, new MemoryRepository<GoodsReceipt>([receipt]));
+        Register(context, new MemoryRepository<GoodsReceiptItem>([item]));
+        Register(context, new MemoryRepository<Invoice>([]));
+        var values = new CreateGoodsReceiptCommand(receipt.EnteredAtUtc, null, receipt.DelivererId, null, "1",
+            [new CreateGoodsReceiptItem(Guid.NewGuid(), null, null, null, item.WarehouseId, null, null,
+                null, null, "REC-1", 1, null, null, IssueNumber: null, Id: item.Id)]);
+        var result = await context.Sender.Send(new UpdateGoodsReceiptCommand(receipt.Id, values,
+            true, true, true, receipt.ConcurrencyStamp));
+        Assert.False(result.IsSuccess);
+        Assert.Contains(result.Messages, message => message.Contains("ابتدا ارتباط شماره خروج"));
+        Assert.Equal(originalProduct, item.ProductId);
+        Assert.Equal(issueItem.Id, item.GoodsIssueItemId);
+        await context.UnitOfWork.DidNotReceive().SaveAsync(Arg.Any<CancellationToken>());
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData(InvoiceStatus.DoesNotHave)]

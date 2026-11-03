@@ -21,6 +21,20 @@ namespace Warehouse.Server.Tests.Integration;
 
 public sealed class ServerPipelineTests
 {
+    [Theory]
+    [InlineData("items/print")]
+    [InlineData("print")]
+    public async Task GoodsReceiptPrinting_ExportPermissionDoesNotGrantPrintAccess(string route)
+    {
+        await using var factory = new TestWebApplicationFactory();
+        using var client = factory.CreateClient();
+        using var request = CreateRequest("GET", $"/endpoint/inventory/goods-receipts/{route}?columns=id");
+        AddIdentity(request, PermissionPolicyNames.Inventory.GoodsReceiptsExport);
+        var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Empty(factory.Sender.ReceivedCalls());
+    }
+
     [Fact]
     public async Task GoodsReceiptItemFilters_BindFromQueryString()
     {

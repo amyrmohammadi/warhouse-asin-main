@@ -7,16 +7,45 @@ namespace Warehouse.Application.Tests.Features.Inventory.GoodsReceipts;
 
 public sealed class LinkGoodsIssueItemTests
 {
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task Link_OnlyAcceptsTheSameProduct_OrMatchingCodeForLegacyRows(bool legacy, bool matching)
+    {
+        await using var context = new ApplicationTestContext();
+        var product = new Product("کالا", "P-1", Guid.NewGuid(), null);
+        var receipt = new GoodsReceipt(DateTimeOffset.UtcNow, null, Guid.NewGuid(), "1");
+        receipt.AddItem(product.Id, Guid.NewGuid(), null, null, null, 1, null, null, 0);
+        var item = receipt.Items.Single();
+        var issue = new GoodsIssue("OUT-1", DateTimeOffset.UtcNow, null, Guid.NewGuid());
+        var issueItem = issue.AddItem(legacy ? null : Guid.NewGuid(), matching ? product.Code : "OTHER",
+            1, null, null, null, null, null, null, 0);
+        context.UnitOfWork.Repository<Product>().GetByIdAsync(product.Id, Arg.Any<CancellationToken>()).Returns(product);
+        context.UnitOfWork.Repository<GoodsReceiptItem>().GetByIdAsync(item.Id, Arg.Any<CancellationToken>()).Returns(item);
+        context.UnitOfWork.Repository<GoodsIssueItem>().GetByIdAsync(issueItem.Id, Arg.Any<CancellationToken>()).Returns(issueItem);
+        context.UnitOfWork.Repository<GoodsReceipt>().GetByIdAsync(receipt.Id, Arg.Any<CancellationToken>()).Returns(receipt);
+        var result = await context.Sender.Send(new LinkGoodsIssueItemCommand(item.Id, issueItem.Id, receipt.ConcurrencyStamp));
+        Assert.Equal(legacy && matching, result.IsSuccess);
+        if (!result.IsSuccess)
+        {
+            Assert.Null(item.GoodsIssueItemId);
+            Assert.Contains(result.Messages, message => message.Contains("کالای ورودی و خروجی یکسان نیستند"));
+            await context.UnitOfWork.DidNotReceive().SaveAsync(Arg.Any<CancellationToken>());
+        }
+    }
+
     [Fact]
     public async Task Link_MultipleReceiptItemsToOneIssueItem_AndClearOne()
     {
         await using var context = new ApplicationTestContext();
         var receipt = new GoodsReceipt(DateTimeOffset.UtcNow, null, Guid.NewGuid(), "1");
-        receipt.AddItem(Guid.NewGuid(), Guid.NewGuid(), null, null, null, 1, null, null, 0);
-        receipt.AddItem(Guid.NewGuid(), Guid.NewGuid(), null, null, null, 1, null, null, 1);
+        var productId = Guid.NewGuid();
+        receipt.AddItem(productId, Guid.NewGuid(), null, null, null, 1, null, null, 0);
+        receipt.AddItem(productId, Guid.NewGuid(), null, null, null, 1, null, null, 1);
         var items = receipt.Items.ToArray();
         var issue = new GoodsIssue("OUT-1", DateTimeOffset.UtcNow, null, Guid.NewGuid());
-        var issueItem = issue.AddItem(null, "P-1", 2, null, Guid.NewGuid(), "خروج",
+        var issueItem = issue.AddItem(productId, "P-1", 2, null, Guid.NewGuid(), "خروج",
             null, "واحد", null, 0);
         var receiptItemRepository = Substitute.For<IRepositoryAsync<GoodsReceiptItem, Guid>>();
         receiptItemRepository.GetByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
@@ -59,7 +88,7 @@ public sealed class LinkGoodsIssueItemTests
         receipt.AddItem(Guid.NewGuid(), Guid.NewGuid(), null, null, null, 1, null, null, 0);
         var item = receipt.Items.Single();
         var issue = new GoodsIssue("OUT-1", DateTimeOffset.UtcNow, null, Guid.NewGuid());
-        var issueItem = issue.AddItem(null, "P-1", 1, null, Guid.NewGuid(), "خروج",
+        var issueItem = issue.AddItem(item.ProductId, "P-1", 1, null, Guid.NewGuid(), "خروج",
             null, "واحد", null, 0);
         context.UnitOfWork.Repository<GoodsReceiptItem>().GetByIdAsync(item.Id, Arg.Any<CancellationToken>())
             .Returns(item);

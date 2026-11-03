@@ -30,4 +30,5 @@ public sealed record SaveGoodsIssueItemRequest(
     string? ProductTitle = null,
     Guid? UnitOfMeasureId = null,
     Guid? ShippingLocationId = null,
-    bool IsReturnable = true);
+    bool IsReturnable = true,
+    Guid? Id = null);

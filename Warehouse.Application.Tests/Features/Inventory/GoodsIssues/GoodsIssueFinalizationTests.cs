@@ -11,7 +11,7 @@ namespace Warehouse.Application.Tests.Features.Inventory.GoodsIssues;
 public sealed class GoodsIssueFinalizationTests
 {
     [Fact]
-    public async Task FinalizeAndReopen_AdvanceStamp_AndEnableEditingAgain()
+    public async Task FinalizeAndReopen_AdvanceStamp_WithoutLockingEditing()
     {
         await using var context = new ApplicationTestContext();
         var issue = Issue("2026-10-20T12:00:00Z");
@@ -23,9 +23,10 @@ public sealed class GoodsIssueFinalizationTests
         Assert.Equal(1, result.Data);
         Assert.True(issue.IsFinalized);
         Assert.NotEqual(original, issue.ConcurrencyStamp);
-        Assert.Throws<InvalidOperationException>(() => issue.Update("OUT-2", issue.IssuedAtUtc, null, issue.IssuerId));
-        Assert.Throws<InvalidOperationException>(() => issue.AddItem(null, "P", 1, null, null, null,
-            GoodsIssueExitReason.Other, false, null, null, null, 0));
+        issue.Update("OUT-2", issue.IssuedAtUtc, null, issue.IssuerId);
+        issue.AddItem(null, "P", 1, null, null, null, GoodsIssueExitReason.Other, false, null, null, null, 0);
+        Assert.Equal("OUT-2", issue.IssueNumber);
+        Assert.Single(issue.Items);
 
         var reopened = await context.Sender.Send(new SetGoodsIssueFinalizationCommand(false, issue.Id,
             ConcurrencyStamp: issue.ConcurrencyStamp));
@@ -75,22 +76,19 @@ public sealed class GoodsIssueFinalizationTests
     }
 
     [Fact]
-    public async Task FinalizedDocument_CannotBeSavedOrDeleted()
+    public async Task FinalizedDocument_CanBeDeleted()
     {
         await using var context = new ApplicationTestContext();
         var issue = Issue("2026-10-21T12:00:00Z");
         issue.SetFinalized(true);
         Register(context, issue);
-        var save = await context.Sender.Send(new SaveGoodsIssueCommand(issue.Id, issue.IssueNumber,
-            issue.IssuedAtUtc, null, issue.IssuerId, null,
-            [new SaveGoodsIssueItem(Guid.NewGuid(), "P-1", 1, null, Guid.NewGuid(), null,
-                GoodsIssueExitReason.Other, null, null, null)], issue.ConcurrencyStamp));
-        Assert.False(save.IsSuccess);
-        Assert.Contains(GoodsIssue.FinalizedMessage, save.Messages);
+        var receipts = Substitute.For<IRepositoryAsync<GoodsReceiptItem, Guid>>();
+        receipts.Entities.Returns(Array.Empty<GoodsReceiptItem>().AsQueryable());
+        receipts.ToListAsync(Arg.Any<IQueryable<GoodsReceiptItem>>(), Arg.Any<CancellationToken>()).Returns([]);
+        context.UnitOfWork.Repository<GoodsReceiptItem>().Returns(receipts);
         var delete = await context.Sender.Send(new DeleteGoodsIssueCommand(issue.Id));
-        Assert.False(delete.IsSuccess);
-        Assert.Contains(GoodsIssue.FinalizedMessage, delete.Messages);
-        await context.UnitOfWork.DidNotReceive().SaveAsync(Arg.Any<CancellationToken>());
+        Assert.True(delete.IsSuccess);
+        await context.UnitOfWork.Received(1).SaveAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]

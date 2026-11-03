@@ -115,6 +115,7 @@ public static class DependencyInjection
         services.AddSingleton<IExcelToPdfService>(provider => provider.GetRequiredService<LibreOfficeExcelToPdfService>());
         services.AddSingleton<IGoodsIssuePdfService, GoodsIssuePdfService>();
         services.AddSingleton<IInvoicePdfService, InvoicePdfService>();
+        services.AddSingleton<IGoodsReceiptListPdfService, GoodsReceiptListPdfService>();
         services.AddHostedService<ExcelToPdfTempCleanupService>();
 
         return services;

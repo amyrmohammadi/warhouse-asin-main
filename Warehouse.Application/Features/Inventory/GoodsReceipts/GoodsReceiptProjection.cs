@@ -23,6 +23,8 @@ internal static class GoodsReceiptProjection
                 .ThenBy(item => item.Id)
                 .Select(item => new GoodsReceiptItemSummary
                 {
+                    IsLocked = item.Invoice != null &&
+                        item.Invoice.ProcessingStatus != Warehouse.Domain.Enums.InvoiceProcessingStatus.UnderReview,
                     Id = item.Id,
                     GoodsIssueItemId = item.GoodsIssueItemId,
                     IssueNumber = item.GoodsIssueItem == null ? null : item.GoodsIssueItem.GoodsIssue.IssueNumber,
