@@ -13,7 +13,7 @@ public sealed class GoodsReceiptItem : Entity<Guid>
     internal GoodsReceiptItem(
         Guid goodsReceiptId,
         Guid productId,
-        Guid warehouseId,
+        Guid? warehouseId,
         InvoiceStatus? invoiceStatus,
         Invoice? invoice,
         string? receiptNumber,
@@ -22,6 +22,7 @@ public sealed class GoodsReceiptItem : Entity<Guid>
         string? description,
         int sortOrder)
     {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(quantity);
         Id = Guid.NewGuid();
         GoodsReceiptId = goodsReceiptId;
         ProductId = productId;
@@ -41,9 +42,9 @@ public sealed class GoodsReceiptItem : Entity<Guid>
 
     public Product Product { get; private set; } = null!;
 
-    public Guid WarehouseId { get; private set; }
+    public Guid? WarehouseId { get; private set; }
 
-    public StorageWarehouse Warehouse { get; private set; } = null!;
+    public StorageWarehouse? Warehouse { get; private set; }
 
     public InvoiceStatus? InvoiceStatus { get; private set; }
 
@@ -83,10 +84,11 @@ public sealed class GoodsReceiptItem : Entity<Guid>
 
     public int SortOrder { get; private set; }
 
-    public void Update(Guid warehouseId, InvoiceStatus? invoiceStatus, Guid? invoiceId, Invoice? invoice,
+    public void Update(Guid? warehouseId, InvoiceStatus? invoiceStatus, Guid? invoiceId, Invoice? invoice,
         string? receiptNumber, decimal quantity, string? requestNumber,
         string? description, int sortOrder)
     {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(quantity);
         WarehouseId = warehouseId;
         SetReceiptInvoice(invoiceStatus, invoiceId, invoice, receiptNumber);
         Quantity = quantity;

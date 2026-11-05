@@ -19,7 +19,7 @@ public sealed record CreateGoodsReceiptItem(
     string? ProductTitle,
     string? ProductCode,
     Guid? UnitOfMeasureId,
-    Guid WarehouseId,
+    Guid? WarehouseId,
     InvoiceStatus? InvoiceStatus,
     string? InvoiceNumber,
     Guid? SupplierId,

@@ -94,7 +94,7 @@ internal sealed class CreateGoodsReceiptCommandValidator : AbstractValidator<Cre
 
     private sealed record ItemComparisonKey(
         string Product,
-        Guid WarehouseId,
+        Guid? WarehouseId,
         InvoiceStatus? InvoiceStatus,
         string InvoiceNumber,
         string Supplier,
@@ -114,7 +114,7 @@ internal sealed class CreateGoodsReceiptItemValidator : AbstractValidator<Create
     public CreateGoodsReceiptItemValidator()
     {
         RuleFor(item => item.WarehouseId)
-            .NotEmpty().WithMessage("انتخاب انبار برای هر ردیف کالا الزامی است.");
+            .Must(id => id != Guid.Empty).WithMessage("شناسه انبار معتبر نیست.");
         RuleFor(item => item.InvoiceNumber).MaximumLength(100);
         RuleFor(item => item.SupplierTitle)
             .MaximumLength(200)

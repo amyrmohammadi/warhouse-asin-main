@@ -78,6 +78,12 @@ const router = createRouter({
           },
         },
         {
+          path: 'inventory/warehouses',
+          name: 'warehouse-stocks',
+          component: () => import('@/views/Inventory/warehouse-stocks/WarehouseStocksView.vue'),
+          meta: { title: 'موجودی انبارها', requiredPermission: 'WarehouseStockView' },
+        },
+        {
           path: 'inventory/goods-issues',
           name: 'goods-issues',
           component: () => import('@/views/Inventory/goods-issues/GoodsIssuesView.vue'),

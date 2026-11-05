@@ -41,5 +41,8 @@ public enum AppPermission
     GoodsReceiptsReceiptNumberRead,
     InvoicesPrint,
     InvoicesReopen,
-    GoodsReceiptsPrint
+    GoodsReceiptsPrint,
+    WarehouseStockView,
+    WarehouseOpeningBalanceManage,
+    WarehouseInventoryAdjustmentManage
 }

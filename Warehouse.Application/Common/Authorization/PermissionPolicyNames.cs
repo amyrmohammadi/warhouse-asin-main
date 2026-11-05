@@ -30,6 +30,9 @@ public static class PermissionPolicyNames
 
     public static class Inventory
     {
+        public const string WarehouseStockView = nameof(AppPermission.WarehouseStockView);
+        public const string WarehouseOpeningBalanceManage = nameof(AppPermission.WarehouseOpeningBalanceManage);
+        public const string WarehouseInventoryAdjustmentManage = nameof(AppPermission.WarehouseInventoryAdjustmentManage);
         public const string GoodsReceiptsWarehouseUpdate = nameof(AppPermission.GoodsReceiptsWarehouseUpdate);
         public const string GoodsReceiptsWarehouseRead = nameof(AppPermission.GoodsReceiptsWarehouseRead);
         public const string GoodsReceiptsInvoiceStatusRead = nameof(AppPermission.GoodsReceiptsInvoiceStatusRead);
@@ -64,6 +67,12 @@ public static class PermissionPolicyNames
 
     public static IReadOnlyCollection<PermissionPolicyGroup> Groups { get; } =
     [
+        new("warehouse-stock", "موجودی انبارها",
+        [
+            new(Inventory.WarehouseStockView, "مشاهده موجودی انبارها"),
+            new(Inventory.WarehouseOpeningBalanceManage, "ثبت موجودی اولیه انبار"),
+            new(Inventory.WarehouseInventoryAdjustmentManage, "اصلاح موجودی انبار")
+        ]),
         new(
             "users",
             "مدیریت کاربران",

@@ -27,8 +27,17 @@ public sealed class GoodsIssueExitReasonMigrationTests
             var repair = issue.AddItem(null, "REPAIR", 1, null, null, "تعمیر", null, null, null, 1);
             var sale = issue.AddItem(null, "SALE", 1, null, null, "فروش", null, null, null, 2);
             context.Add(person);
-            context.Add(issue);
             await context.SaveChangesAsync();
+            // Seed the old schema directly: today's entity also has columns introduced by later migrations.
+            await context.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO [Business].[GoodsIssues] ([Id], [IssueNumber], [IssuedAtUtc], [IssuerId], [IsFinalized], [ConcurrencyStamp])
+                VALUES ({issue.Id}, {issue.IssueNumber}, {issue.IssuedAtUtc}, {person.Id}, 0, {issue.ConcurrencyStamp})
+                """);
+            foreach (var item in issue.Items)
+                await context.Database.ExecuteSqlInterpolatedAsync($"""
+                    INSERT INTO [Business].[GoodsIssueItems] ([Id], [GoodsIssueId], [ProductCode], [Quantity], [SortOrder], [ExitReasonType], [ExitReason], [IsReturnable])
+                    VALUES ({item.Id}, {issue.Id}, {item.ProductCode}, {item.Quantity}, {item.SortOrder}, {item.ExitReasonType.ToString()}, {item.ExitReason}, 1)
+                    """);
             await context.Database.ExecuteSqlInterpolatedAsync($"""
                 UPDATE [Business].[GoodsIssueItems]
                 SET [ExitReasonType] = N'Maintenance', [ExitReason] = N'تعمیرات'

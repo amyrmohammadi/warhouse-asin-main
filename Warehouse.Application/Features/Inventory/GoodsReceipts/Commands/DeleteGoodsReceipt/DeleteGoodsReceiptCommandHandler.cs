@@ -5,7 +5,7 @@ using Warehouse.Domain.Entities;
 
 namespace Warehouse.Application.Features.Inventory.GoodsReceipts.Commands.DeleteGoodsReceipt;
 
-internal sealed class DeleteGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfWork)
+internal sealed class DeleteGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfWork, Common.Interfaces.IInventoryMovementService inventory)
     : IRequestHandler<DeleteGoodsReceiptCommand, Result>
 {
     public async Task<Result> Handle(
@@ -46,6 +46,12 @@ internal sealed class DeleteGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                     return Result.Error(Common.Concurrency.ConcurrencyMessages.Conflict);
                 }
                 issueItem?.SetReturnAtUtc(returnAtUtc);
+            }
+            var inventoryResult = await inventory.SynchronizeGoodsReceiptAsync(receipt.Id, [], cancellationToken);
+            if (!inventoryResult.IsSuccess)
+            {
+                await unitOfWork.RollBackTransaction(CancellationToken.None);
+                return inventoryResult;
             }
             await repository.DeleteAsync(receipt, cancellationToken);
             await unitOfWork.SaveAsync(cancellationToken);

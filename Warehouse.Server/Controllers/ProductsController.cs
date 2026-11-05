@@ -53,7 +53,7 @@ public sealed class ProductsController(
         [FromQuery] SearchProductsQuery query,
         CancellationToken cancellationToken)
     {
-        if (!await CanReadProductsAsync()) return Forbid();
+        if (!await CanReadProductsAsync() && !await CanSelectStockProductsAsync()) return Forbid();
 
         var result = await sender.Send(query, cancellationToken);
         return Ok(result);
@@ -67,7 +67,7 @@ public sealed class ProductsController(
         Guid id,
         CancellationToken cancellationToken)
     {
-        if (!await CanReadProductsAsync()) return Forbid();
+        if (!await CanReadProductsAsync() && !await CanSelectStockProductsAsync()) return Forbid();
 
         var result = await sender.Send(new GetProductByIdQuery(id), cancellationToken);
         return result.IsSuccess ? Ok(result) : NotFound(result);
@@ -150,6 +150,9 @@ public sealed class ProductsController(
         var result = await sender.Send(new DeleteProductCommand(id), cancellationToken);
         return result.IsSuccess ? Ok(result) : NotFound(result);
     }
+
+    private async Task<bool> CanSelectStockProductsAsync() =>
+        (await authorizationService.AuthorizeAsync(User, PermissionPolicyNames.Inventory.WarehouseOpeningBalanceManage)).Succeeded;
 
     private async Task<bool> CanReadProductsAsync()
     {

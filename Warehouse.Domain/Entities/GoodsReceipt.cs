@@ -41,7 +41,7 @@ public sealed class GoodsReceipt : ConcurrencyEntity<Guid>
 
     public void AddItem(
         Guid productId,
-        Guid warehouseId,
+        Guid? warehouseId,
         Domain.Enums.InvoiceStatus? invoiceStatus,
         Invoice? invoice,
         string? receiptNumber,

@@ -28,6 +28,8 @@ public static class DependencyInjection
             applicationAssembly,
             includeInternalTypes: true);
 
+        services.AddScoped<Common.Interfaces.IInventoryMovementService, Features.Inventory.InventoryMovementService>();
+
         return services;
     }
 }

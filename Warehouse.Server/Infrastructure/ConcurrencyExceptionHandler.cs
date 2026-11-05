@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Data.SqlClient;
 using Warehouse.Application.Common.Concurrency;
 
 namespace Warehouse.Server.Infrastructure;
@@ -13,7 +14,11 @@ internal sealed class ConcurrencyExceptionHandler(
         Exception exception,
         CancellationToken cancellationToken)
     {
-        if (exception is not DbUpdateConcurrencyException) return false;
+        // A serializable inventory transaction may lose a deadlock race; its changes are rolled back.
+        var deadlock = false;
+        for (Exception? current = exception; current is not null; current = current.InnerException)
+            if (current is SqlException { Number: 1205 }) deadlock = true;
+        if (exception is not DbUpdateConcurrencyException && !deadlock) return false;
 
         logger.LogWarning(
             exception,

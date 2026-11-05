@@ -130,6 +130,10 @@
     () => session.value?.permissions.includes('GoodsReceiptsRead') ?? false
   )
 
+  const canReadWarehouseStock = computed(
+    () => session.value?.permissions.includes('WarehouseStockView') ?? false
+  )
+
   const canReadGoodsIssues = computed(
     () => session.value?.permissions.includes('GoodsIssuesRead') ?? false
   )
@@ -640,6 +644,12 @@
                Master Data
           ================================== -->
 
+          <li v-if="canReadWarehouseStock">
+            <RouterLink class="ai-icon" to="/dashboard/inventory/warehouses" aria-expanded="false">
+              <i class="las la-boxes" aria-hidden="true"></i>
+              <span class="nav-text">موجودی انبارها</span>
+            </RouterLink>
+          </li>
           <li v-if="canReadGoodsReceipts">
             <RouterLink class="ai-icon"
                         to="/dashboard/inventory/goods-receipts"

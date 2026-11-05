@@ -8,7 +8,7 @@ using Warehouse.Domain.Entities;
 namespace Warehouse.Application.Features.Inventory.GoodsReceipts.Commands.ImportGoodsReceipts;
 
 internal sealed class ImportGoodsReceiptsCommandHandler(
-    IUnitOfWork<Guid> unitOfWork)
+    IUnitOfWork<Guid> unitOfWork, Common.Interfaces.IInventoryMovementService inventory)
     : IRequestHandler<ImportGoodsReceiptsCommand, Result<GoodsReceiptImportSummary>>
 {
     public async Task<Result<GoodsReceiptImportSummary>> Handle(
@@ -204,6 +204,12 @@ internal sealed class ImportGoodsReceiptsCommandHandler(
                     .Repository<GoodsReceipt>()
                     .AddAsync(receipt, token);
 
+                var inventoryResult = await inventory.SynchronizeGoodsReceiptAsync(receipt.Id, receipt.Items.ToArray(), token);
+                if (!inventoryResult.IsSuccess)
+                {
+                    await unitOfWork.RollBackTransaction(CancellationToken.None);
+                    return Result<GoodsReceiptImportSummary>.Error(inventoryResult.Messages);
+                }
                 importedReceipts++;
                 importedItems++;
             }

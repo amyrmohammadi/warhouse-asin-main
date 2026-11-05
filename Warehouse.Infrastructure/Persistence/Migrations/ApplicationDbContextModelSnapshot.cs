@@ -328,6 +328,9 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                     b.Property<int>("SortOrder")
                         .HasColumnType("int");
 
+                    b.Property<Guid?>("WarehouseId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.HasKey("Id");
 
                     b.HasIndex("DestinationId");
@@ -337,6 +340,8 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                     b.HasIndex("ProductId");
 
                     b.HasIndex("ShippingLocationId");
+
+                    b.HasIndex("WarehouseId");
 
                     b.ToTable("GoodsIssueItems", "Business");
                 });
@@ -455,7 +460,7 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("SupplierId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<Guid>("WarehouseId")
+                    b.Property<Guid?>("WarehouseId")
                         .HasColumnType("uniqueidentifier");
 
                     b.HasKey("Id");
@@ -666,6 +671,79 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                     b.ToTable("Products", "Business");
                 });
 
+            modelBuilder.Entity("Warehouse.Domain.Entities.StockMovement", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<DateTimeOffset?>("CreatedOn")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("LastModifiedBy")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<DateTimeOffset?>("LastModifiedOn")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("MovementType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<DateTimeOffset>("OccurredAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("OperationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("QuantityDelta")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<Guid?>("ReversedMovementId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("SourceDocumentId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("SourceLineId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("WarehouseId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OperationId")
+                        .IsUnique();
+
+                    b.HasIndex("ProductId");
+
+                    b.HasIndex("ReversedMovementId");
+
+                    b.HasIndex("SourceDocumentId", "MovementType", "SourceLineId");
+
+                    b.HasIndex("WarehouseId", "ProductId", "MovementType");
+
+                    b.ToTable("StockMovements", "Business", t =>
+                        {
+                            t.HasCheckConstraint("CK_StockMovements_Nonzero", "[QuantityDelta] <> 0");
+                        });
+                });
+
             modelBuilder.Entity("Warehouse.Domain.Entities.StorageWarehouse", b =>
                 {
                     b.Property<Guid>("Id")
@@ -790,6 +868,55 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                     b.HasIndex("Title");
 
                     b.ToTable("UnitsOfMeasure", "Business");
+                });
+
+            modelBuilder.Entity("Warehouse.Domain.Entities.WarehouseStockBalance", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<DateTimeOffset?>("CreatedOn")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("LastModifiedBy")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<DateTimeOffset?>("LastModifiedOn")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<Guid>("WarehouseId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductId");
+
+                    b.HasIndex("WarehouseId", "ProductId")
+                        .IsUnique();
+
+                    b.ToTable("WarehouseStockBalances", "Business", t =>
+                        {
+                            t.HasCheckConstraint("CK_WarehouseStockBalances_Nonnegative", "[Quantity] >= 0");
+                        });
                 });
 
             modelBuilder.Entity("Warehouse.Infrastructure.Identity.ApplicationUser", b =>
@@ -1072,6 +1199,10 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                         .HasForeignKey("ShippingLocationId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("Warehouse.Domain.Entities.StorageWarehouse", "Warehouse")
+                        .WithMany()
+                        .HasForeignKey("WarehouseId");
+
                     b.Navigation("Destination");
 
                     b.Navigation("GoodsIssue");
@@ -1079,6 +1210,8 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                     b.Navigation("Product");
 
                     b.Navigation("ShippingLocation");
+
+                    b.Navigation("Warehouse");
                 });
 
             modelBuilder.Entity("Warehouse.Domain.Entities.GoodsReceipt", b =>
@@ -1124,8 +1257,7 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                     b.HasOne("Warehouse.Domain.Entities.StorageWarehouse", "Warehouse")
                         .WithMany("GoodsReceiptItems")
                         .HasForeignKey("WarehouseId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("GoodsIssueItem");
 
@@ -1159,6 +1291,51 @@ namespace Warehouse.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("UnitOfMeasure");
+                });
+
+            modelBuilder.Entity("Warehouse.Domain.Entities.StockMovement", b =>
+                {
+                    b.HasOne("Warehouse.Domain.Entities.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Warehouse.Domain.Entities.StockMovement", "ReversedMovement")
+                        .WithMany()
+                        .HasForeignKey("ReversedMovementId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Warehouse.Domain.Entities.StorageWarehouse", "Warehouse")
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Product");
+
+                    b.Navigation("ReversedMovement");
+
+                    b.Navigation("Warehouse");
+                });
+
+            modelBuilder.Entity("Warehouse.Domain.Entities.WarehouseStockBalance", b =>
+                {
+                    b.HasOne("Warehouse.Domain.Entities.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Warehouse.Domain.Entities.StorageWarehouse", "Warehouse")
+                        .WithMany()
+                        .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Product");
+
+                    b.Navigation("Warehouse");
                 });
 
             modelBuilder.Entity("Warehouse.Infrastructure.Identity.RefreshToken", b =>

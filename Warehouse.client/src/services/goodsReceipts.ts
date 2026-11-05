@@ -16,7 +16,7 @@ export interface GoodsReceiptItem {
   productCode: string
   unitOfMeasureId: string
   unitOfMeasureTitle: string
-  warehouseId: string
+  warehouseId: string | null
   warehouseTitle: string
   invoiceStatus: InvoiceStatus | null
   invoiceNumber: string | null
@@ -150,7 +150,7 @@ export interface CreateGoodsReceiptItemRequest {
   productTitle: string | null
   productCode: string | null
   unitOfMeasureId: string | null
-  warehouseId: string
+  warehouseId: string | null
   invoiceStatus: InvoiceStatus | null
   invoiceNumber: string | null
   supplierId: string | null

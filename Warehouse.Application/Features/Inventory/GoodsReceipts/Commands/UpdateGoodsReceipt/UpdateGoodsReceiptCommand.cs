@@ -14,7 +14,7 @@ public sealed record UpdateGoodsReceiptCommand(Guid Id, CreateGoodsReceiptComman
     Guid ConcurrencyStamp = default, bool CanEditWarehouse = false)
     : IRequest<Result<GoodsReceiptSummary>>;
 
-internal sealed class UpdateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfWork)
+internal sealed class UpdateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfWork, Common.Interfaces.IInventoryMovementService inventory)
     : IRequestHandler<UpdateGoodsReceiptCommand, Result<GoodsReceiptSummary>>
 {
     public async Task<Result<GoodsReceiptSummary>> Handle(UpdateGoodsReceiptCommand request, CancellationToken cancellationToken)
@@ -65,7 +65,7 @@ internal sealed class UpdateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                     requestedById.TryGetValue(item.Id, out var requested);
                     return new CreateGoodsReceiptItem(
                         item.ProductId, null, null, null,
-                        request.CanEditWarehouse ? requested?.WarehouseId ?? item.WarehouseId : item.WarehouseId,
+                        request.CanEditWarehouse && requested is not null ? requested.WarehouseId : item.WarehouseId,
                         request.CanEditInvoice ? requested?.InvoiceStatus : item.InvoiceStatus,
                         request.CanEditInvoice ? requested?.InvoiceNumber :
                             item.InvoiceId.HasValue ? invoicesById[item.InvoiceId.Value].InvoiceNumber : null,
@@ -118,7 +118,7 @@ internal sealed class UpdateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
         if (!receipt.TryAdvanceConcurrencyStamp(request.ConcurrencyStamp))
             return Result<GoodsReceiptSummary>.Error(ConcurrencyMessages.Conflict);
         await new CreateGoodsReceiptCommandValidator().ValidateAndThrowAsync(values, cancellationToken);
-        return await new CreateGoodsReceiptCommandHandler(unitOfWork).SaveAsync(
+        return await new CreateGoodsReceiptCommandHandler(unitOfWork, inventory).SaveAsync(
             values,
             cancellationToken,
             existing: receipt,

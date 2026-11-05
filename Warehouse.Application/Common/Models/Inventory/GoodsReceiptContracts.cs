@@ -42,7 +42,7 @@ public sealed record GoodsReceiptItemSummary
 
     public string UnitOfMeasureTitle { get; init; } = string.Empty;
 
-    public Guid WarehouseId { get; init; }
+    public Guid? WarehouseId { get; init; }
 
     public string WarehouseTitle { get; init; } = string.Empty;
 

@@ -107,7 +107,7 @@ defineExpose({ openCreate, openEdit })
                 <th class="receipt-list-code-cell">کد کالا <span class="text-danger">*</span></th>
                 <th class="receipt-list-unit-cell">واحد <span class="text-danger">*</span></th>
                 <th class="receipt-list-quantity-cell">مقدار <span class="text-danger">*</span></th>
-                <th v-if="canReadWarehouse" class="receipt-list-warehouse-cell">انبار <span class="text-danger">*</span></th>
+                <th v-if="canReadWarehouse" class="receipt-list-warehouse-cell">انبار (اختیاری)</th>
                 <th v-if="canReadInvoiceStatus" class="receipt-list-invoice-status-cell">فاکتور</th>
                 <th v-if="canReadInvoiceNumber" class="receipt-list-invoice-number-cell">شماره فاکتور</th>
                 <th v-if="canReadCounterparty" class="receipt-list-supplier-cell">طرف حساب</th>
@@ -295,7 +295,7 @@ defineExpose({ openCreate, openEdit })
 
           <div class="receipt-item-details-row">
             <div v-if="canReadWarehouse" class="form-group mb-0">
-              <label>انبار <span class="text-danger">*</span></label>
+              <label>انبار (اختیاری)</label>
               <select v-model="item.warehouseId" class="form-control" :class="{ 'is-invalid': rowError(item, 'warehouse') }"
                       :disabled="saving || item.isLocked || (item.persisted ? !canEditWarehouse : !canInitialEntry)" @change="clearRowError(item, 'warehouse')">
                 <option value="" aria-label="بدون انتخاب"></option>

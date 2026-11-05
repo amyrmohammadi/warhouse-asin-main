@@ -23,6 +23,7 @@ public sealed class GoodsIssueItem : Entity<Guid>
         DateTimeOffset? returnAtUtc,
         int sortOrder)
     {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(quantity);
         Id = Guid.NewGuid();
         GoodsIssueId = goodsIssueId;
         ProductId = productId;
@@ -44,6 +45,9 @@ public sealed class GoodsIssueItem : Entity<Guid>
     public GoodsIssue GoodsIssue { get; private set; } = null!;
     public Guid? ProductId { get; private set; }
     public Product? Product { get; private set; }
+    // Optional for historical issues; inventory-enabled operations must select a warehouse.
+    public Guid? WarehouseId { get; private set; }
+    public StorageWarehouse? Warehouse { get; private set; }
     public string ProductCode { get; private set; } = string.Empty;
     public decimal Quantity { get; private set; }
     public string? AssetNumber { get; private set; }
@@ -64,10 +68,17 @@ public sealed class GoodsIssueItem : Entity<Guid>
     public void SetReturnAtUtc(DateTimeOffset? returnAtUtc) =>
         ReturnAtUtc = returnAtUtc?.ToUniversalTime();
 
+    public void SetWarehouse(Guid? warehouseId)
+    {
+        if (warehouseId == Guid.Empty) throw new ArgumentException("Warehouse must be specified or null.", nameof(warehouseId));
+        WarehouseId = warehouseId;
+    }
+
     public void Update(Guid? productId, string productCode, decimal quantity, string? assetNumber,
         Guid? destinationId, Guid? shippingLocationId, GoodsIssueExitReason exitReason, bool isReturnable,
         string? description, string? deliveringUnit, DateTimeOffset? returnAtUtc, int sortOrder)
     {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(quantity);
         ProductId = productId;
         ProductCode = productCode.Trim();
         Quantity = quantity;

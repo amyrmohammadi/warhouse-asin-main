@@ -49,6 +49,9 @@ public sealed class ApplicationDbContext
 
     public DbSet<GoodsReceiptItem> GoodsReceiptItems => Set<GoodsReceiptItem>();
 
+    public DbSet<StockMovement> StockMovements => Set<StockMovement>();
+    public DbSet<WarehouseStockBalance> WarehouseStockBalances => Set<WarehouseStockBalance>();
+
     public DbSet<GoodsIssueDestination> GoodsIssueDestinations => Set<GoodsIssueDestination>();
 
     public DbSet<GoodsIssue> GoodsIssues => Set<GoodsIssue>();
@@ -100,7 +103,32 @@ public sealed class ApplicationDbContext
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
-
+        builder.Entity<StockMovement>(entity =>
+        {
+            entity.ToTable("StockMovements", "Business", table =>
+                table.HasCheckConstraint("CK_StockMovements_Nonzero", "[QuantityDelta] <> 0"));
+            entity.HasKey(movement => movement.Id);
+            entity.Property(movement => movement.QuantityDelta).HasPrecision(18, 3);
+            entity.Property(movement => movement.MovementType).HasConversion<string>().HasMaxLength(32);
+            entity.Property(movement => movement.Description).HasMaxLength(1000);
+            entity.HasIndex(movement => movement.OperationId).IsUnique();
+            entity.HasIndex(movement => new { movement.WarehouseId, movement.ProductId, movement.MovementType });
+            entity.HasIndex(movement => new { movement.SourceDocumentId, movement.MovementType, movement.SourceLineId });
+            entity.HasOne(movement => movement.Product).WithMany().HasForeignKey(movement => movement.ProductId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(movement => movement.Warehouse).WithMany().HasForeignKey(movement => movement.WarehouseId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(movement => movement.ReversedMovement).WithMany().HasForeignKey(movement => movement.ReversedMovementId).OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<WarehouseStockBalance>(entity =>
+        {
+            entity.ToTable("WarehouseStockBalances", "Business", table =>
+                table.HasCheckConstraint("CK_WarehouseStockBalances_Nonnegative", "[Quantity] >= 0"));
+            entity.HasKey(stock => stock.Id);
+            entity.Property(stock => stock.Quantity).HasPrecision(18, 3);
+            entity.Property(stock => stock.RowVersion).IsRowVersion();
+            entity.HasIndex(stock => new { stock.WarehouseId, stock.ProductId }).IsUnique();
+            entity.HasOne(stock => stock.Product).WithMany().HasForeignKey(stock => stock.ProductId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(stock => stock.Warehouse).WithMany().HasForeignKey(stock => stock.WarehouseId).OnDelete(DeleteBehavior.Restrict);
+        });
         builder.HasDefaultSchema("Identity");
         builder.Entity<ApplicationUser>(entity =>
         {
@@ -297,6 +325,7 @@ public sealed class ApplicationDbContext
             entity.HasOne(item => item.Warehouse)
                 .WithMany(warehouse => warehouse.GoodsReceiptItems)
                 .HasForeignKey(item => item.WarehouseId)
+                .IsRequired(false)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(item => item.Invoice)
                 .WithMany(invoice => invoice.GoodsReceiptItems)
@@ -437,6 +466,8 @@ public sealed class ApplicationDbContext
 
         foreach (var entry in ChangeTracker.Entries().ToArray())
         {
+            if (entry.Entity is StockMovement && entry.State is EntityState.Modified or EntityState.Deleted)
+                throw new InvalidOperationException("گردش موجودی تاریخی قابل ویرایش یا حذف نیست.");
             if (entry.Entity is AuditTrail ||
                 entry.State is EntityState.Detached or EntityState.Unchanged)
             {

@@ -34,7 +34,7 @@ internal static class GoodsReceiptProjection
                     UnitOfMeasureId = item.Product.UnitOfMeasureId,
                     UnitOfMeasureTitle = item.Product.UnitOfMeasure.Title,
                     WarehouseId = item.WarehouseId,
-                    WarehouseTitle = item.Warehouse.Title,
+                    WarehouseTitle = (item.Warehouse == null ? string.Empty : item.Warehouse.Title),
                     InvoiceStatus = item.InvoiceStatus,
                     InvoiceNumber = item.Invoice == null ? null : item.Invoice.InvoiceNumber,
                     SupplierId = item.Invoice == null ? item.SupplierId : item.Invoice.SupplierId,

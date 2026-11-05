@@ -167,7 +167,7 @@ export function useGoodsReceiptForm(deps: Dependencies) {
       id: item.id, isLocked: item.isLocked,
       productId: item.productId, productText: item.productTitle, productCode: item.productCode,
       unitOfMeasureId: item.unitOfMeasureId, unitOfMeasureTitle: item.unitOfMeasureTitle,
-      warehouseId: item.warehouseId, invoiceStatus: item.invoiceStatus, invoiceNumber: item.invoiceNumber ?? '',
+      warehouseId: item.warehouseId ?? '', invoiceStatus: item.invoiceStatus, invoiceNumber: item.invoiceNumber ?? '',
       supplierId: item.supplierId ?? '', supplierText: item.counterparty ?? '', receiptNumber: item.receiptNumber ?? '',
       issueNumber: item.issueNumber ?? '',
       quantity: item.quantity, requestNumber: item.requestNumber ?? '', description: item.description ?? '',
@@ -251,7 +251,6 @@ export function useGoodsReceiptForm(deps: Dependencies) {
 
     for (const item of items) {
       const set = (field: ItemField, message: string) => errors.setRow(item.key, field, message)
-      if (!item.warehouseId && (!item.persisted || permissions.canEditWarehouse)) set('warehouse', 'انبار را انتخاب کنید.')
       if (canManageInvoice && hasInvoiceNumber(item) && !item.invoiceNumber.trim())
         set('invoiceNumber', 'شماره فاکتور را وارد کنید.')
       if (canManageInvoice && isNewSupplier(item) && !canManageMasterData)
@@ -347,7 +346,7 @@ export function useGoodsReceiptForm(deps: Dependencies) {
         productTitle: item.productId ? null : item.productText.trim(),
         productCode: item.productId ? null : item.productCode.trim(),
         unitOfMeasureId: item.productId ? null : item.unitOfMeasureId,
-        warehouseId: item.warehouseId,
+        warehouseId: item.warehouseId || null,
         invoiceStatus: canManageInvoice ? item.invoiceStatus : null,
         invoiceNumber: canManageInvoice && hasInvoiceNumber(item) ? item.invoiceNumber.trim() : null,
         supplierId: canManageInvoice ? (item.supplierId || null) : null,

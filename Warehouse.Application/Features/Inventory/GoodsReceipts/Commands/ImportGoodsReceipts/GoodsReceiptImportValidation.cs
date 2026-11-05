@@ -7,7 +7,7 @@ namespace Warehouse.Application.Features.Inventory.GoodsReceipts.Commands.Import
 
 internal static class GoodsReceiptImportValidation
 {
-    internal sealed record ValidRow(GoodsReceiptExcelReader.Row Source, Guid ProductId, Guid WarehouseId,
+    internal sealed record ValidRow(GoodsReceiptExcelReader.Row Source, Guid ProductId, Guid? WarehouseId,
         Guid? SupplierId, InvoiceStatus? InvoiceStatus, string DelivererKey);
     internal sealed record ValidationResult(List<ValidRow> Rows, List<GoodsReceiptImportRowError> Errors,
         IReadOnlyList<Person> People);
@@ -66,7 +66,7 @@ internal static class GoodsReceiptImportValidation
             if (matchingUnits.Length != 1)
                 messages.Add($"واحد «{row.Unit}» باید از قبل ثبت شده و قابل تشخیص باشد.");
             var matchingWarehouses = warehouses.Where(w => Key(w.Title) == Key(row.Warehouse)).ToArray();
-            if (matchingWarehouses.Length != 1)
+            if (!string.IsNullOrWhiteSpace(row.Warehouse) && matchingWarehouses.Length != 1)
                 messages.Add($"انبار «{row.Warehouse}» باید از قبل ثبت شده و قابل تشخیص باشد.");
             var matchingSuppliers = suppliers.Where(s => Key(s.Title) == Key(row.Supplier)).ToArray();
             if (row.Supplier.Length > 0 && matchingSuppliers.Length != 1)
@@ -107,7 +107,7 @@ internal static class GoodsReceiptImportValidation
             if (!canManageReceipt && row.ReceiptNumber.Length > 0)
                 messages.Add("مجوز ثبت رسید را ندارید.");
             if (messages.Count > 0) errors.Add(new GoodsReceiptImportRowError(row.Number, string.Join(" ", messages)));
-            else valid.Add(new ValidRow(row, candidates[0].Id, matchingWarehouses[0].Id,
+            else valid.Add(new ValidRow(row, candidates[0].Id, string.IsNullOrWhiteSpace(row.Warehouse) ? null : matchingWarehouses[0].Id,
                 row.Supplier.Length > 0 ? matchingSuppliers[0].Id : null, invoice,
                 TextComparison.CreateCompactKey(row.Deliverer)));
         }

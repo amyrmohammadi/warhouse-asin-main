@@ -51,7 +51,7 @@ internal static class InvoiceProjection
                     ProductCode = item.Product.Code,
                     UnitOfMeasureTitle = item.Product.UnitOfMeasure.Title,
                     Quantity = item.Quantity,
-                    WarehouseTitle = item.Warehouse.Title,
+                    WarehouseTitle = (item.Warehouse == null ? string.Empty : item.Warehouse.Title),
                     EnteredAtUtc = item.GoodsReceipt.EnteredAtUtc,
                     PageNumber = item.GoodsReceipt.PageNumber,
                     ReceiptNumber = item.ReceiptNumber,

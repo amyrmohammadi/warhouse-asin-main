@@ -16,7 +16,7 @@ public sealed record CreateGoodsReceiptItemRequest(
     string? ProductTitle,
     string? ProductCode,
     Guid? UnitOfMeasureId,
-    Guid WarehouseId,
+    Guid? WarehouseId,
     InvoiceStatus? InvoiceStatus,
     string? InvoiceNumber,
     Guid? SupplierId,

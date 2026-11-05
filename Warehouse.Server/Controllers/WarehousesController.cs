@@ -20,6 +20,11 @@ namespace Warehouse.Server.Controllers;
 [Route("endpoint/master-data/warehouses")]
 public sealed class WarehousesController(ISender sender, IMapper mapper) : ControllerBase
 {
+    [Authorize(Policy = PermissionPolicyNames.Inventory.WarehouseStockView)]
+    [HttpGet("options")]
+    public async Task<IActionResult> GetStockOptions(CancellationToken token) =>
+        Ok(await sender.Send(new Warehouse.Application.Features.Inventory.WarehouseStocks.GetStockWarehouseOptionsQuery(), token));
+
     [Authorize(Policy = PermissionPolicyNames.MasterData.Read)]
     [HttpGet("validation-rules")]
     public async Task<IActionResult> GetValidationRules(CancellationToken cancellationToken)
