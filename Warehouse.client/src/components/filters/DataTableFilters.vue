@@ -156,9 +156,10 @@ function updateBooleanValue(key: string, event: Event): void {
   setDraftValue(key, value === '' ? null : value === 'true')
 }
 
-function updateMultiSelect(key: string, event: Event): void {
-  const select = event.target as HTMLSelectElement
-  setDraftValue(key, Array.from(select.selectedOptions, (option) => option.value))
+function updateMultiSelect(key: string, value: string, event: Event): void {
+  const selected = asStringArray(draftFilters.value[key])
+  setDraftValue(key, (event.target as HTMLInputElement).checked
+    ? [...new Set([...selected, value])] : selected.filter(option => option !== value))
 }
 
 function updateDateRange(key: string, field: 'from' | 'to', event: Event): void {
@@ -381,9 +382,10 @@ function formatValue(
   if (definition.type === 'select' && typeof value === 'string') {
     return optionsFor(definition).find(option => option.value === value)?.label ?? value
   }
-  if (Array.isArray(value)) return value.join('، ')
+  if (Array.isArray(value)) return value.map(selected => optionsFor(definition).find(option => option.value === selected)?.label ?? selected).join('، ')
   if (isDateRange(value)) return [value.from, value.to].filter(Boolean).join(' تا ')
-  if (typeof value === 'boolean') return value ? 'بله' : 'خیر'
+  if (definition.type === 'boolean' && typeof value === 'boolean')
+    return value ? definition.trueLabel ?? 'بله' : definition.falseLabel ?? 'خیر'
   return String(value ?? '')
 }
 </script>
@@ -409,6 +411,7 @@ function formatValue(
       <button
         class="btn btn-outline-primary btn-sm data-table-filters__toggle"
         type="button"
+        aria-label="فیلترها"
         :aria-expanded="panelOpen"
         @click="togglePanel"
       >
@@ -481,19 +484,25 @@ function formatValue(
                   {{ option.label }}
                 </option>
               </select>
-              <select
+              <details
                 v-else-if="definition.type === 'multiselect'"
-                :id="`filter-${definition.key}`"
-                class="custom-select custom-select-sm"
-                multiple
-                :disabled="loadingOptions[definition.key]"
-                @change="updateMultiSelect(definition.key, $event)"
+                class="data-table-filters__multiselect"
               >
-                <option v-for="option in optionsFor(definition)" :key="option.value" :value="option.value"
-                        :selected="asStringArray(draftFilters[definition.key]).includes(option.value)">
-                  {{ option.label }}
-                </option>
-              </select>
+                <summary :id="`filter-${definition.key}`">
+                  {{ asStringArray(draftFilters[definition.key]).length
+                    ? formatValue(definition, draftFilters[definition.key])
+                    : definition.placeholder ?? 'انتخاب گزینه‌ها' }}
+                </summary>
+                <div class="data-table-filters__multiselect-options" role="group" :aria-label="definition.label">
+                  <label v-for="option in optionsFor(definition)" :key="option.value">
+                    <input type="checkbox" :value="option.value"
+                      :checked="asStringArray(draftFilters[definition.key]).includes(option.value)"
+                      :disabled="loadingOptions[definition.key]"
+                      @change="updateMultiSelect(definition.key, option.value, $event)" />
+                    <span>{{ option.label }}</span>
+                  </label>
+                </div>
+              </details>
               <input
                 v-else-if="definition.type === 'date'"
                 :id="`filter-${definition.key}`"
@@ -613,6 +622,19 @@ function formatValue(
   height: 2.25rem; min-height: 2.25rem;
 }
 .data-table-filters__range { display: grid; gap: 0.5rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.data-table-filters__multiselect {
+  background: var(--surface); border: 1px solid var(--border-color); border-radius: 0.25rem;
+  color: var(--text-primary); font-size: 0.8125rem;
+}
+.data-table-filters__multiselect summary { cursor: pointer; min-height: 2.25rem; padding: 0.5rem 0.75rem; }
+.data-table-filters__multiselect summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.data-table-filters__multiselect-options { border-top: 1px solid var(--border-color); padding: 0.25rem; }
+.data-table-filters__multiselect-options label {
+  align-items: center; cursor: pointer; display: flex; gap: 0.6rem; margin: 0;
+  min-height: 2.25rem; padding: 0.4rem 0.6rem;
+}
+.data-table-filters__multiselect-options label:hover { background: var(--primary-light); }
+.data-table-filters__multiselect-options input { accent-color: var(--primary); height: 1rem; width: 1rem; }
 .data-table-filters__error { color: var(--error); display: block; margin-top: 0.35rem; }
 .data-table-filters__actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.75rem; }
 .data-table-filters__chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }

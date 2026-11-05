@@ -8,6 +8,7 @@ import { highlightTableText } from '@/components/UseTableHighlight'
 import DataTableFilters from '@/components/filters/DataTableFilters.vue'
 import InventoryListToolbar from '@/components/InventoryListToolbar.vue'
 import BaseModal from '@/components/BaseModal.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useColumnVisibility } from '@/composables/useColumnVisibility'
 import { useCompactScrollbar } from '@/composables/useCompactScrollbar'
 import { useDataTableList } from '@/composables/useDataTableList'
@@ -18,6 +19,7 @@ import { useUnauthorizedRedirect } from '@/composables/useUnauthorizedRedirect'
 import {
   getInvoice,
   createInvoice,
+  deleteInvoice,
   getInvoices,
   getInvoiceMetrics,
   updateInvoice,
@@ -64,6 +66,29 @@ const canEditReceipt = has('GoodsReceiptsReceiptRegistration')
 const canEdit = canEditInvoice || canEditReceipt
 const canPrint = has('InvoicesPrint')
 const canReopen = has('InvoicesReopen')
+const canDelete = has('InvoicesDelete')
+const deletingId = ref<string | null>(null)
+const deleteConfirmation = ref<InstanceType<typeof ConfirmDialog> | null>(null)
+
+async function removeInvoice(invoice: InvoiceSummary): Promise<void> {
+  if (!canDelete || !invoice.canDelete || deletingId.value) return
+  const confirmed = await deleteConfirmation.value?.ask({
+    title: 'حذف فاکتور', text: `فاکتور «${invoice.invoiceNumber}» حذف شود؟`,
+    icon: 'warning', confirmButtonText: 'حذف', cancelButtonText: 'انصراف', confirmButtonColor: '#dc3545',
+  })
+  if (!confirmed || deletingId.value) return
+  deletingId.value = invoice.id
+  try {
+    await deleteInvoice(invoice.id)
+    selectedInvoices.value.delete(invoice.id)
+    list.reload(false)
+    void loadMetrics()
+    toast.success('فاکتور حذف شد.')
+  } catch (error) {
+    if (await handleUnauthorized(error)) return
+    toast.error(error instanceof Error ? error.message : 'حذف فاکتور انجام نشد.')
+  } finally { deletingId.value = null }
+}
 const selectedInvoices = ref(new Map<string, InvoiceSummary>())
 const printOpen = ref(false)
 const printing = ref(false)
@@ -328,7 +353,7 @@ function openCreate(): void {
   invoiceDetails.value = {
     id: '', invoiceNumber: '', supplierId: null, counterparty: null, description: null,
     invoiceDate: null, financeDeliveryDate: null, processingStatus: 'UnderReview',
-    price: null, isLocked: false, receiptNumbers: [], items: [],
+    price: null, isLocked: false, canDelete: false, receiptNumbers: [], items: [],
   }
   editMode.value = true
   detailsOpen.value = true
@@ -415,6 +440,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
+  <ConfirmDialog ref="deleteConfirmation" />
   <BaseModal v-model="printOpen" title="چاپ فاکتورهای انتخاب‌شده" size="lg" persistent :busy="printing">
     <p>{{ formatPersianNumber(selected.length) }} فاکتور برای چاپ انتخاب شده است.</p>
     <div v-if="printError" class="alert alert-danger invoice-print-error" role="alert">{{ printError }}</div>
@@ -558,6 +584,11 @@ onBeforeUnmount(() => {
               <button class="btn users-table__role-action" type="button" title="مشاهده فاکتور"
                       aria-label="مشاهده فاکتور" @click="openItems(rowData)">
                 <i class="las la-boxes" aria-hidden="true"></i>
+              </button>
+              <button v-if="canDelete && rowData.canDelete" class="btn btn-outline-danger btn-sm" type="button"
+                      title="حذف فاکتور" aria-label="حذف فاکتور" :disabled="deletingId !== null" @click="removeInvoice(rowData)">
+                <span v-if="deletingId === rowData.id" class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                <i v-else class="las la-trash" aria-hidden="true"></i>
               </button>
             </template>
           </DataTable>

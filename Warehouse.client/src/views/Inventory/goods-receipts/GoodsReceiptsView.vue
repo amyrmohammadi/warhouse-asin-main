@@ -381,10 +381,10 @@ async function openEdit(row: GoodsReceipt | GoodsReceiptItemRow): Promise<void> 
   }
 }
 
-function onSaved(reason: 'saved' | 'deleted'): void {
+function onSaved(reason: 'created' | 'updated' | 'deleted'): void {
   void options.reload()
   void loadMetrics()
-  list.reload(reason === 'saved')
+  list.reload(reason === 'created')
 }
 
 // ── import / export ────────────────────────────────────────────────

@@ -17,6 +17,7 @@ using Warehouse.Application.Features.Inventory.GoodsIssues.Queries.GetGoodsIssue
 using Warehouse.Application.Features.Inventory.GoodsIssues.Queries.GetGoodsIssueOptions;
 using Warehouse.Application.Features.Inventory.GoodsIssues.Queries.GetGoodsIssues;
 using Warehouse.Application.Features.Inventory.GoodsIssues.Queries.GetGoodsIssueMetrics;
+using Warehouse.Application.Features.Inventory.GoodsIssues.Queries.GetNextGoodsIssueNumber;
 using Warehouse.Domain.Enums;
 using Warehouse.Server.Contracts.Inventory;
 
@@ -29,6 +30,15 @@ public sealed class GoodsIssuesController(
     IAuthorizationService authorizationService) : ControllerBase
 {
     private const int ExportBatchSize = 100;
+
+    [Authorize(Policy = PermissionPolicyNames.Inventory.GoodsIssuesCreate)]
+    [HttpGet("next-number")]
+    public async Task<ActionResult<Result<string>>> GetNextNumber(CancellationToken cancellationToken)
+    {
+        Response.Headers.CacheControl = "no-store";
+        var result = await sender.Send(new GetNextGoodsIssueNumberQuery(), cancellationToken);
+        return result.IsSuccess ? Ok(result) : BadRequest(result);
+    }
 
     [Authorize(Policy = PermissionPolicyNames.Inventory.GoodsIssuesRead)]
     [HttpGet("metrics")]

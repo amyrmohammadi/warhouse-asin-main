@@ -3,6 +3,7 @@ import { expireSession, getSession } from '@/services/auth'
 import type { DateFilterValue, TextFilterValue } from '@/types/dataTableFilters'
 
 export interface InvoiceSummary {
+  canDelete: boolean
   isLocked: boolean
   price: number | null
   id: string
@@ -199,6 +200,10 @@ export function printInvoices(invoiceIds: string[], sendToFinance: boolean, sign
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ invoiceIds, sendToFinance }), signal,
   }, 'آماده‌سازی چاپ فاکتورها انجام نشد.', true)
+}
+
+export function deleteInvoice(id: string): Promise<boolean> {
+  return request(`/endpoint/inventory/invoices/${encodeURIComponent(id)}`, { method: 'DELETE' }, 'حذف فاکتور انجام نشد.')
 }
 
 export function changeInvoiceStatus(invoiceId: string, status: InvoiceProcessingStatus,

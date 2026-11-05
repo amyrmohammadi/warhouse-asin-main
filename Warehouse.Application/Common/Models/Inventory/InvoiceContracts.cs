@@ -5,6 +5,7 @@ namespace Warehouse.Application.Common.Models.Inventory;
 
 public sealed class InvoiceSummary
 {
+    public bool CanDelete { get; init; }
     public bool IsLocked => ProcessingStatus != InvoiceProcessingStatus.UnderReview;
     public decimal? Price { get; init; }
 
@@ -60,6 +61,7 @@ public sealed class InvoiceItemSummary
 
 public sealed class InvoiceDetails
 {
+    public bool CanDelete => !IsLocked && Items.Count == 0;
     public bool IsLocked => ProcessingStatus != InvoiceProcessingStatus.UnderReview;
     public decimal? Price { get; init; }
 

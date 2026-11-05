@@ -73,16 +73,14 @@ public sealed class GoodsIssuePdfService(IExcelToPdfService excelToPdfService) :
                 var rowNumber = FirstDataRow + slot;
                 var index = page * rowsPerPage + slot;
                 var row = index < printRows.Count ? printRows[index] : null;
-                foreach (var column in new[] { "A", "B", "D", "E", "F", "G", "H" })
+                foreach (var column in new[] { "A", "B", "D", "E", "F" })
                     SetText(sheet, column + rowNumber, "", cellStyles);
                 if (row is null) continue;
                 SetText(sheet, "A" + rowNumber, row.Number, cellStyles);
                 SetText(sheet, "B" + rowNumber, row.Product, cellStyles);
                 SetText(sheet, "D" + rowNumber, row.Quantity, cellStyles);
-                SetText(sheet, "E" + rowNumber, row.Unit, cellStyles);
-                SetText(sheet, "F" + rowNumber, row.Returnable, cellStyles);
-                SetText(sheet, "G" + rowNumber, row.ReturnDate, dateCellStyles);
-                SetText(sheet, "H" + rowNumber, row.Description, cellStyles);
+                SetText(sheet, "E" + rowNumber, row.ReturnDate, dateCellStyles);
+                SetText(sheet, "F" + rowNumber, row.Description, cellStyles);
             }
             var sheetPath = $"xl/worksheets/sheet{page + 1}.xml";
             if (page > 0)
@@ -144,13 +142,16 @@ public sealed class GoodsIssuePdfService(IExcelToPdfService excelToPdfService) :
             token.ThrowIfCancellationRequested();
             number++;
             var product = SplitText(item.ProductTitle ?? "");
-            var notes = SplitText(item.Description ?? "");
+            var destination = string.Join(" - ", new[] { item.DestinationTitle, item.ShippingLocationTitle }
+                .Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => SingleLine(value!)));
+            var notes = SplitText(item.Description ?? "", new[] { destination, item.AssetNumber }
+                .Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => SingleLine(value!)));
             for (var segment = 0; segment < Math.Max(product.Count, notes.Count); segment++)
                 rows.Add(new PrintRow(segment == 0 ? PersianDigits(number.ToString(CultureInfo.InvariantCulture)) : "ادامه",
                     segment < product.Count ? product[segment] : "", segment < notes.Count ? notes[segment] : "",
-                    segment == 0 ? PersianDigits(item.Quantity.ToString("0.###", CultureInfo.InvariantCulture)) : "",
-                    segment == 0 ? item.ProductUnitOfMeasureTitle ?? "" : "",
-                    segment == 0 ? item.IsReturnable ? "دارد" : "ندارد" : "",
+                    segment == 0 ? string.Join(' ', new[] {
+                        PersianDigits(item.Quantity.ToString("0.###", CultureInfo.InvariantCulture).Replace('.', '/')),
+                        item.ProductUnitOfMeasureTitle }.Where(value => !string.IsNullOrWhiteSpace(value))) : "",
                     segment == 0 && item.IsReturnable && item.ReturnAtUtc.HasValue ? PersianDate(item.ReturnAtUtc.Value) : ""));
         }
         return rows;
@@ -158,9 +159,12 @@ public sealed class GoodsIssuePdfService(IExcelToPdfService excelToPdfService) :
 
     // At 24pt, three short lines fit inside the template's 99pt data row.
     // Continuation rows preserve all text without reducing the font or losing quantities.
-    private static List<string> SplitText(string text)
+    private static string SingleLine(string text) => string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+    private static List<string> SplitText(string text, IEnumerable<string>? leadingLines = null)
     {
-        var lines = new List<string>();
+        // Shipping location + destination and asset number each occupy one logical line.
+        var lines = leadingLines?.ToList() ?? [];
         foreach (var paragraph in text.Replace("\r", "").Split('\n'))
         {
             var remaining = paragraph.Trim();
@@ -237,10 +241,15 @@ public sealed class GoodsIssuePdfService(IExcelToPdfService excelToPdfService) :
             var text = (string?)cell.Attribute("t") == "s"
                 ? sharedStrings[(int)cell.Element(Main + "v")!]
                 : string.Concat(cell.Descendants(Main + "t").Select(value => value.Value));
-            if (!text.Any(character => char.IsLetter(character) &&
+            var address = (string?)cell.Attribute("r") ?? "";
+            var isQuantity = address.StartsWith('D') && int.TryParse(address.AsSpan(1), out var rowNumber)
+                && rowNumber >= FirstDataRow && text.Length > 0 && char.IsDigit(text[0]);
+            if (!isQuantity && !text.Any(character => char.IsLetter(character) &&
                     (character is >= '\u0590' and <= '\u08ff' or >= '\ufb1d' and <= '\ufefc'))) continue;
             var originalStyle = (string?)cell.Attribute("s") ?? "0";
-            if (!rightToLeftStyles.TryGetValue(originalStyle, out var rightToLeftStyle))
+            var readingOrder = isQuantity ? "1" : "2";
+            var styleKey = originalStyle + ":" + readingOrder;
+            if (!rightToLeftStyles.TryGetValue(styleKey, out var rightToLeftStyle))
             {
                 var format = new XElement(formats.Elements().ElementAt(int.Parse(originalStyle, CultureInfo.InvariantCulture)));
                 var alignment = format.Element(Main + "alignment");
@@ -251,12 +260,12 @@ public sealed class GoodsIssuePdfService(IExcelToPdfService excelToPdfService) :
                     if (following is null) format.Add(alignment);
                     else following.AddBeforeSelf(alignment);
                 }
-                // Sheet RTL controls column order; cell readingOrder controls neutral punctuation.
-                alignment.SetAttributeValue("readingOrder", "2");
+                // Keep quantity before its unit visually; Persian prose retains RTL punctuation.
+                alignment.SetAttributeValue("readingOrder", readingOrder);
                 format.SetAttributeValue("applyAlignment", "1");
                 rightToLeftStyle = formats.Elements().Count().ToString(CultureInfo.InvariantCulture);
                 formats.Add(format);
-                rightToLeftStyles.Add(originalStyle, rightToLeftStyle);
+                rightToLeftStyles.Add(styleKey, rightToLeftStyle);
             }
             cell.SetAttributeValue("s", rightToLeftStyle);
         }
@@ -313,7 +322,7 @@ public sealed class GoodsIssuePdfService(IExcelToPdfService excelToPdfService) :
         character is >= '0' and <= '9' ? (char)('۰' + character - '0') : character));
 
     private sealed record PrintRow(string Number, string Product, string Description, string Quantity,
-        string Unit, string Returnable, string ReturnDate);
+        string ReturnDate);
     private const int FirstDataRow = 9;
     private static readonly XNamespace Main = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
     private static readonly XNamespace OfficeRelations = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";

@@ -8,6 +8,7 @@ internal static class InvoiceProjection
     public static IQueryable<InvoiceSummary> ToSummary(this IQueryable<Invoice> query) =>
         query.Select(invoice => new InvoiceSummary
         {
+            CanDelete = invoice.ProcessingStatus == Domain.Enums.InvoiceProcessingStatus.UnderReview && !invoice.GoodsReceiptItems.Any(),
             Id = invoice.Id,
             Price = invoice.Price,
             InvoiceNumber = invoice.InvoiceNumber,

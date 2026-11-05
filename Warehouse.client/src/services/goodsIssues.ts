@@ -134,6 +134,7 @@ export interface GoodsIssueListFilters {
   deliveringUnit?: TextFilterValue
   issuerId?: string
   exitReasons?: GoodsIssueExitReason[]
+  isReturnable?: boolean
 }
 
 export interface GoodsIssueListParameters extends GoodsIssueListFilters {
@@ -171,6 +172,10 @@ export function getGoodsIssues(
 
 export function getGoodsIssue(id: string, signal?: AbortSignal): Promise<GoodsIssue> {
   return request(`/endpoint/inventory/goods-issues/${encodeURIComponent(id)}`, { signal }, 'دریافت سند خروج انجام نشد.')
+}
+
+export function getNextGoodsIssueNumber(signal?: AbortSignal): Promise<string> {
+  return request('/endpoint/inventory/goods-issues/next-number', { signal, cache: 'no-store' }, 'دریافت شماره بعدی خروج انجام نشد؛ شماره را دستی وارد کنید.')
 }
 
 export function setGoodsIssueFinalization(
@@ -233,6 +238,7 @@ function appendFilters(query: URLSearchParams, filters: GoodsIssueListFilters): 
   if (filters.quickFilter) query.set('quickFilter', filters.quickFilter)
   if (filters.destinationId) query.set('destinationId', filters.destinationId)
   if (filters.issuerId) query.set('issuerId', filters.issuerId)
+  if (filters.isReturnable !== undefined) query.set('isReturnable', String(filters.isReturnable))
   for (const reason of filters.exitReasons ?? []) query.append('exitReasons', reason)
   appendDateFilter(query, 'issuedAt', filters.issuedAt)
   appendTextFilter(query, 'issueNumberFilter', filters.issueNumberFilter)

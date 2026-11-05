@@ -46,6 +46,14 @@ public sealed class Invoice : Entity<Guid>
 
     public DateOnly? ReceiptDate { get; private set; }
 
+    public void AssignReceiptDate(DateOnly receiptDate)
+    {
+        if (IsLocked) throw new InvalidOperationException(LockedMessage);
+        if (ReceiptDate.HasValue && ReceiptDate != receiptDate)
+            throw new InvalidOperationException("روز ورود این فاکتور قبلاً مشخص شده است.");
+        ReceiptDate = receiptDate;
+    }
+
     public static DateOnly GetReceiptDate(DateTimeOffset enteredAtUtc) =>
         DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(enteredAtUtc,
             TimeZoneInfo.FindSystemTimeZoneById("Asia/Tehran")).DateTime);

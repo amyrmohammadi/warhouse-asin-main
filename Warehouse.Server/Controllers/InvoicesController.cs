@@ -14,6 +14,7 @@ using Warehouse.Application.Common.Interfaces;
 using Warehouse.Application.Features.Inventory.Invoices.Commands.PrintInvoices;
 using Warehouse.Application.Features.Inventory.Invoices.Commands.ChangeInvoiceStatus;
 using Warehouse.Application.Features.Inventory.Invoices.Commands.CreateInvoice;
+using Warehouse.Application.Features.Inventory.Invoices.Commands.DeleteInvoice;
 using Warehouse.Application.Features.Inventory.Invoices.Queries.GetInvoiceMetrics;
 using Warehouse.Domain.Enums;
 
@@ -26,6 +27,14 @@ public sealed class InvoicesController(
     ISender sender,
     IAuthorizationService authorizationService) : ControllerBase
 {
+    [Authorize(Policy = PermissionPolicyNames.Inventory.InvoicesDelete)]
+    [HttpDelete("{id:guid}")]
+    public async Task<ActionResult<Result<bool>>> Delete(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await sender.Send(new DeleteInvoiceCommand(id), cancellationToken);
+        return result.IsSuccess ? Ok(result) : BadRequest(result);
+    }
+
     [HttpGet("metrics")]
     public async Task<ActionResult<Result<InvoiceMetrics>>> GetMetrics(CancellationToken cancellationToken)
     {

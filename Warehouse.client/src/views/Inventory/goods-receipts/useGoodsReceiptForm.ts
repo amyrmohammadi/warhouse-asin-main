@@ -55,7 +55,7 @@ export interface ConfirmOptions {
 
 interface Dependencies {
   confirm: (options: ConfirmOptions) => Promise<boolean>
-  onSaved: (reason: 'saved' | 'deleted') => void
+  onSaved: (reason: 'created' | 'updated' | 'deleted') => void
 }
 
 type ItemField = 'product' | 'code' | 'unit' | 'warehouse' | 'invoiceStatus' | 'invoiceNumber'
@@ -373,7 +373,7 @@ export function useGoodsReceiptForm(deps: Dependencies) {
       else await createGoodsReceipt(payload, controller.signal)
       open.value = false
       toast.success(wasEditing ? 'سند ورود کالا با موفقیت ویرایش شد.' : 'ورود کالا با موفقیت ثبت شد.')
-      deps.onSaved('saved')
+      deps.onSaved(wasEditing ? 'updated' : 'created')
     } catch (error) {
       if (isAbortError(error)) return
       if (await handleUnauthorized(error)) return

@@ -119,6 +119,7 @@ const filterDefinitions = computed<DataTableFilterDefinition[]>(() => [
   { key: 'productCode', label: 'کد کالا', type: 'text-comparison', placeholder: 'بخشی از کد کالا', maxlength: 100 },
   { key: 'quantity', label: 'تعداد', type: 'numeric-comparison', numericType: 'decimal', min: 0 },
   { key: 'exitReasons', label: 'علت خروج', type: 'multiselect', options: GOODS_ISSUE_EXIT_REASON_OPTIONS, placeholder: 'همه علل خروج' },
+  { key: 'isReturnable', label: 'برگشت', type: 'boolean', trueLabel: 'دارد', falseLabel: 'ندارد' },
   { key: 'assetNumber', label: 'شماره اموال', type: 'text-comparison', placeholder: 'شماره اموال', maxlength: 100 },
   {
     key: 'destinationId', label: 'مقصد', type: 'select', placeholder: 'جستجو و انتخاب مقصد',
@@ -144,6 +145,7 @@ function currentFilterParameters(): GoodsIssueListParameters {
     destinationId: filters.id('destinationId'),
     deliveringUnit: filters.text('deliveringUnit'),
     issuerId: filters.id('issuerId'),
+    isReturnable: typeof appliedFilters.value.isReturnable === 'boolean' ? appliedFilters.value.isReturnable : undefined,
     exitReasons: Array.isArray(appliedFilters.value.exitReasons)
       ? appliedFilters.value.exitReasons as GoodsIssueExitReason[] : undefined,
   }
@@ -370,10 +372,10 @@ async function removeDocument(row: GoodsIssue | GoodsIssueItemRow): Promise<void
   }
 }
 
-function onSaved(reason: 'saved' | 'deleted'): void {
+function onSaved(reason: 'created' | 'updated' | 'deleted'): void {
   void loadMetrics()
   void options.reload()
-  list.reload(reason === 'saved')
+  list.reload(reason === 'created')
 }
 
 const printChannel = useRequestChannel()
@@ -478,7 +480,7 @@ onBeforeUnmount(() => {
       </div>
     </div>
   </Teleport>
-  <GoodsIssueFormModal ref="formModal" :people="people" :units="units" @saved="onSaved" />
+  <GoodsIssueFormModal ref="formModal" :people="people" :units="units" :print-document="printDocument" @saved="onSaved" />
   <GoodsIssueImportModal :model-value="importOpen" :file="importFile" @update:model-value="onImportOpenChange"
                          @imported="onImported" />
 

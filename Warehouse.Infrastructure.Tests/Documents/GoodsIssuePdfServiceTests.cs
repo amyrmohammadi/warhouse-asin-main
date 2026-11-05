@@ -28,10 +28,8 @@ public sealed class GoodsIssuePdfServiceTests
         Assert.Equal("۱", Text(sheet, "A9"));
         Assert.Contains("کالای 1", Text(sheet, "B9"));
         Assert.DoesNotContain("P-1", Text(sheet, "B9"));
-        Assert.Equal("۲.۵", Text(sheet, "D9"));
-        Assert.Equal("عدد", Text(sheet, "E9"));
-        Assert.Equal("دارد", Text(sheet, "F9"));
-        Assert.Equal("۱۴۰۵/۰۸/۰۶", Text(sheet, "G9"));
+        Assert.Equal("۲/۵ عدد", Text(sheet, "D9"));
+        Assert.Equal("۱۴۰۵/۰۸/۰۶", Text(sheet, "E9"));
         Assert.Contains("علی رضایی", Text(sheet, "A" + FooterRow));
         Assert.Contains("علی رضایی", Text(sheet, "A" + (FooterRow + 1)));
         Assert.Equal("", Text(sheet, "A10"));
@@ -97,15 +95,14 @@ public sealed class GoodsIssuePdfServiceTests
         var sheets = zip.Entries.Where(entry => entry.FullName.StartsWith("xl/worksheets/sheet") && entry.FullName.EndsWith(".xml"))
             .Select(entry => Read(zip, entry.FullName)).ToArray();
         var descriptions = string.Join(' ', sheets.SelectMany(sheet => sheet.Descendants(Main + "c"))
-            .Where(cell => ((string?)cell.Attribute("r"))?.StartsWith('H') == true)
+            .Where(cell => ((string?)cell.Attribute("r"))?.StartsWith('F') == true)
             .Select(cell => string.Concat(cell.Descendants(Main + "t").Select(text => text.Value))));
         Assert.Contains("متن1", descriptions);
         Assert.Contains("متن150", descriptions);
         foreach (var word in originalText.Split(' ')) Assert.Contains(word, descriptions);
         Assert.Single(sheets.SelectMany(sheet => sheet.Descendants(Main + "c")), cell =>
             ((string?)cell.Attribute("r"))?.StartsWith('D') == true && cell.Descendants(Main + "t").Any(t => t.Value == "۸"));
-        Assert.Equal("ندارد", Text(sheets[0], "F9"));
-        Assert.Equal("", Text(sheets[0], "G9"));
+        Assert.Equal("", Text(sheets[0], "E9"));
         Assert.Empty(sheets.SelectMany(sheet => sheet.Descendants(Main + "f")));
         Assert.Contains("https://example.invalid", Text(sheets[0], "B9").Replace("\n", ""));
     }
@@ -121,6 +118,45 @@ public sealed class GoodsIssuePdfServiceTests
     }
 
     [Fact]
+    public async Task Generate_KeepsShippingLocationAndDestinationTogetherBeforeAssetAndDescription()
+    {
+        var converter = new RecordingConverter();
+        await new GoodsIssuePdfService(converter).GenerateAsync(Issue([
+            new GoodsIssueItemSummary { ProductTitle = "کالا", Quantity = 1,
+                ShippingLocationTitle = "کارگاه تعمیرات مرکزی", DestinationTitle = "شرکت خدمات صنعتی ابهر",
+                AssetNumber = "A-123", Description = "جهت تعمیر ارسال شود." }
+        ]));
+        using var zip = new ZipArchive(new MemoryStream(converter.Workbook!));
+        var sheet = Read(zip, "xl/worksheets/sheet1.xml");
+        Assert.Equal("شرکت خدمات صنعتی ابهر - کارگاه تعمیرات مرکزی\nA-123\nجهت تعمیر ارسال شود.", Text(sheet, "F9"));
+        Assert.Equal("", Text(sheet, "A10"));
+    }
+
+    [Theory]
+    [InlineData("0", null, "۰")]
+    [InlineData("12", "عدد", "۱۲ عدد")]
+    [InlineData("12.75", "عدد", "۱۲/۷۵ عدد")]
+    [InlineData("2.125", "متر", "۲/۱۲۵ متر")]
+    [InlineData("10.000", "کیلوگرم", "۱۰ کیلوگرم")]
+    public async Task Generate_QuantityIncludesUnitAndSlashDecimalSeparator(string quantity, string? unit, string expected)
+    {
+        var converter = new RecordingConverter();
+        await new GoodsIssuePdfService(converter).GenerateAsync(Issue([
+            new GoodsIssueItemSummary { ProductTitle = "کالا", Quantity = decimal.Parse(quantity, System.Globalization.CultureInfo.InvariantCulture),
+                ProductUnitOfMeasureTitle = unit, DestinationTitle = " مقصد. ", AssetNumber = " A-123 ", Description = "توضیحات:" }
+        ]));
+        using var zip = new ZipArchive(new MemoryStream(converter.Workbook!));
+        var sheet = Read(zip, "xl/worksheets/sheet1.xml");
+        Assert.Equal(expected, Text(sheet, "D9"));
+        Assert.Equal("مقصد.\nA-123\nتوضیحات:", Text(sheet, "F9"));
+        var formats = Read(zip, "xl/styles.xml").Root!.Element(Main + "cellXfs")!.Elements().ToArray();
+        var quantityCell = sheet.Descendants(Main + "c").Single(cell => (string?)cell.Attribute("r") == "D9");
+        Assert.Equal("1", (string?)formats[(int)quantityCell.Attribute("s")!].Element(Main + "alignment")!.Attribute("readingOrder"));
+        var cell = sheet.Descendants(Main + "c").Single(cell => (string?)cell.Attribute("r") == "F9");
+        Assert.Equal("2", (string?)formats[(int)cell.Attribute("s")!].Element(Main + "alignment")!.Attribute("readingOrder"));
+    }
+
+    [Fact]
     public async Task Generate_PersianLabelsAndTrailingPunctuationHaveExplicitRtlDirection()
     {
         var converter = new RecordingConverter();
@@ -130,20 +166,20 @@ public sealed class GoodsIssuePdfServiceTests
         using var zip = new ZipArchive(new MemoryStream(converter.Workbook!));
         var sheet = Read(zip, "xl/worksheets/sheet1.xml");
         var formats = Read(zip, "xl/styles.xml").Root!.Element(Main + "cellXfs")!.Elements().ToArray();
-        foreach (var address in new[] { "A6", "A7", "B9", "H9", "A" + FooterRow, "A" + (FooterRow + 1), "D" + (FooterRow + 1), "F" + (FooterRow + 1), "I" + (FooterRow + 1) })
+        foreach (var address in new[] { "A6", "A7", "B9", "F9", "A" + FooterRow, "A" + (FooterRow + 1), "D" + (FooterRow + 1), "F" + (FooterRow + 1), "I" + (FooterRow + 1) })
         {
             var cell = sheet.Descendants(Main + "c").Single(cell => (string?)cell.Attribute("r") == address);
             var alignment = formats[(int)cell.Attribute("s")!].Element(Main + "alignment")!;
             Assert.Equal("2", (string?)alignment.Attribute("readingOrder"));
         }
         Assert.Equal("عنوان کالا.", Text(sheet, "B9"));
-        Assert.Equal("توضیح فارسی:", Text(sheet, "H9"));
+        Assert.Equal("توضیح فارسی:", Text(sheet, "F9"));
         var englishCell = sheet.Descendants(Main + "c").Single(cell => (string?)cell.Attribute("r") == "I4");
         Assert.NotEqual("2", (string?)formats[(int)englishCell.Attribute("s")!].Element(Main + "alignment")?.Attribute("readingOrder"));
     }
 
     [Fact]
-    public async Task Generate_OnlyFillsFieldsPresentInTheForm_AndUsesConsistentDataFonts()
+    public async Task Generate_CombinesDestinationAssetAndNotesInOrder_AndUsesConsistentDataFonts()
     {
         var issue = new GoodsIssueSummary
         {
@@ -162,22 +198,22 @@ public sealed class GoodsIssuePdfServiceTests
         using var zip = new ZipArchive(new MemoryStream(converter.Workbook!));
         var sheet = Read(zip, "xl/worksheets/sheet1.xml");
         Assert.Equal("کالای 1", Text(sheet, "B9"));
-        Assert.Equal("توضیحات همین قلم", Text(sheet, "H9"));
-        Assert.Equal("", Text(sheet, "H10"));
-        Assert.Equal("", Text(sheet, "H11"));
+        Assert.Equal("مقصد اضافی - محل اضافی\nEXTRA-ASSET\nتوضیحات همین قلم", Text(sheet, "F9"));
+        Assert.Equal("مقصد اضافی - محل اضافی\nEXTRA-ASSET", Text(sheet, "F10"));
+        Assert.Equal("مقصد اضافی - محل اضافی\nEXTRA-ASSET", Text(sheet, "F11"));
         Assert.Equal("", Text(sheet, "A12"));
         var data = string.Join(' ', sheet.Descendants(Main + "t").Select(text => text.Value));
-        foreach (var extra in new[] { issue.Description, "EXTRA-CODE", "EXTRA-ASSET", "مقصد اضافی", "محل اضافی", "واحد اضافی", "علت اضافی" })
+        foreach (var extra in new[] { issue.Description, "EXTRA-CODE", "واحد اضافی", "علت اضافی" })
             Assert.DoesNotContain(extra!, data);
         var styles = Read(zip, "xl/styles.xml");
         var formats = styles.Root!.Element(Main + "cellXfs")!.Elements().ToArray();
         var fonts = styles.Root.Element(Main + "fonts")!.Elements().ToArray();
         foreach (var row in new[] { 9, 10, 11 })
-        foreach (var column in new[] { "A", "B", "D", "E", "F", "G", "H" })
+        foreach (var column in new[] { "A", "B", "D", "E", "F" })
         {
             var cell = sheet.Descendants(Main + "c").Single(cell => (string?)cell.Attribute("r") == column + row);
             var format = formats[(int)cell.Attribute("s")!];
-            Assert.Equal(column == "G" ? "20" : "24", (string?)fonts[(int)format.Attribute("fontId")!].Element(Main + "sz")!.Attribute("val"));
+            Assert.Equal(column == "E" ? "20" : "24", (string?)fonts[(int)format.Attribute("fontId")!].Element(Main + "sz")!.Attribute("val"));
         }
     }
 

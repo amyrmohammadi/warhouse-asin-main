@@ -30,6 +30,8 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
                 itemRepository.Entities.Where(item => item.GoodsReceiptId == existing.Id)
                     .OrderBy(item => item.SortOrder).ThenBy(item => item.Id), cancellationToken);
             var matchedItems = Invoices.InvoiceEditGuard.MatchItems(request.Items, oldItems);
+            var previousInvoiceIds = oldItems.Where(item => item.InvoiceId.HasValue)
+                .Select(item => item.InvoiceId!.Value).Distinct().ToArray();
             if (updateInitial && request.Items.Zip(matchedItems).Any(pair =>
                 pair.Second?.GoodsIssueItemId.HasValue == true && pair.First.ProductId != pair.Second.ProductId))
             {
@@ -308,6 +310,7 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
             if (existing is null)
                 await receiptRepository.AddAsync(receipt, cancellationToken);
             await unitOfWork.SaveAsync(cancellationToken);
+            await Invoices.ReceiptInvoiceResolver.RemoveUnusedShellsAsync(unitOfWork, previousInvoiceIds, cancellationToken);
             await unitOfWork.CommitTransaction(cancellationToken);
 
             var summaries = await receiptRepository.ToListAsync(
@@ -420,40 +423,9 @@ internal sealed class CreateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
         }
 
         var resolvedSupplierId = resolvedSupplier.Supplier?.Id;
-        var cacheKey = CreateInvoiceKey(invoiceNumber, resolvedSupplierId, receiptDate);
-        if (invoiceCache.TryGetValue(cacheKey, out var cachedInvoice))
-        {
-            return (cachedInvoice, null);
-        }
-
-        var invoiceRepository = unitOfWork.Repository<Invoice>();
-        var matches = await invoiceRepository.ToListAsync(
-            invoiceRepository.Entities
-                .Where(invoice =>
-                    invoice.InvoiceNumber == invoiceNumber &&
-                    invoice.SupplierId == resolvedSupplierId && invoice.ReceiptDate == receiptDate)
-                .Take(1),
-            cancellationToken);
-        if (matches.Count > 0)
-        {
-            var tracked = await invoiceRepository.GetByIdAsync(matches[0].Id, cancellationToken);
-            if (tracked is null)
-            {
-                return (null, "فاکتور انتخاب‌شده پیدا نشد.");
-            }
-
-            invoiceCache[cacheKey] = tracked;
-            return (tracked, null);
-        }
-
-        var created = new Invoice(invoiceNumber, resolvedSupplierId, receiptDate);
-        await invoiceRepository.AddAsync(created, cancellationToken);
-        invoiceCache[cacheKey] = created;
-        return (created, null);
+        return await Invoices.ReceiptInvoiceResolver.ResolveAsync(unitOfWork, invoiceNumber,
+            resolvedSupplierId, receiptDate, invoiceCache, cancellationToken);
     }
-
-    private static string CreateInvoiceKey(string invoiceNumber, Guid? supplierId, DateOnly receiptDate) =>
-        $"{invoiceNumber.ToUpperInvariant()}\u001F{supplierId?.ToString("D") ?? "-"}\u001F{receiptDate:yyyy-MM-dd}";
 
     private static string NormalizeSupplierTitle(string value) =>
         string.Join(

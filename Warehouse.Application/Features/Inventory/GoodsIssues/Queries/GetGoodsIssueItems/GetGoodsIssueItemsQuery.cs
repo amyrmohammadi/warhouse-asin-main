@@ -25,6 +25,7 @@ public sealed record GetGoodsIssueItemsQuery
     public TextFilter? DeliveringUnit { get; init; }
     public Guid? IssuerId { get; init; }
     public GoodsIssueExitReason[] ExitReasons { get; init; } = [];
+    public bool? IsReturnable { get; init; }
 }
 
 internal sealed class GetGoodsIssueItemsQueryValidator : AbstractValidator<GetGoodsIssueItemsQuery>
@@ -72,6 +73,7 @@ internal sealed class GetGoodsIssueItemsQueryHandler(IUnitOfWork<Guid> unitOfWor
                 (item.GoodsIssue.Description != null && item.GoodsIssue.Description.Contains(search)) ||
                 item.GoodsIssue.Issuer.FullName.Contains(search) ||
                 item.ProductCode.Contains(search) ||
+                (item.Product != null && item.Product.Title.Contains(search)) ||
                 (item.AssetNumber != null && item.AssetNumber.Contains(search)) ||
                 (item.Destination != null && item.Destination.Title.Contains(search)) ||
                 (item.ShippingLocation != null && item.ShippingLocation.Title.Contains(search)) ||
@@ -93,6 +95,8 @@ internal sealed class GetGoodsIssueItemsQueryHandler(IUnitOfWork<Guid> unitOfWor
             query = query.Where(item => item.GoodsIssue.IssuerId == request.IssuerId.Value);
         if (request.ExitReasons.Length > 0)
             query = query.Where(item => request.ExitReasons.Contains(item.ExitReasonType));
+        if (request.IsReturnable.HasValue)
+            query = query.Where(item => item.IsReturnable == request.IsReturnable.Value);
         var filteredCount = await repository.CountAsync(query, cancellationToken);
         query = ApplySorting(query, request.SortBy, request.SortDescending)
             .Skip((request.PageNumber - 1) * request.PageSize)

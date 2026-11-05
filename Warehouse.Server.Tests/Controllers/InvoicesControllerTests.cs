@@ -26,6 +26,20 @@ namespace Warehouse.Server.Tests.Controllers;
 public sealed class InvoicesControllerTests
 {
     [Fact]
+    public async Task Delete_UsesDedicatedPermission_AndForwardsInvoiceId()
+    {
+        Assert.Equal(PermissionPolicyNames.Inventory.InvoicesDelete,
+            typeof(InvoicesController).GetMethod(nameof(InvoicesController.Delete))!.GetCustomAttribute<AuthorizeAttribute>()!.Policy);
+        var sender = Substitute.For<ISender>();
+        var id = Guid.NewGuid();
+        sender.Send(Arg.Any<Warehouse.Application.Features.Inventory.Invoices.Commands.DeleteInvoice.DeleteInvoiceCommand>(), Arg.Any<CancellationToken>())
+            .Returns(Result<bool>.Success(true));
+        var controller = new InvoicesController(sender, Substitute.For<IAuthorizationService>());
+        Assert.IsType<OkObjectResult>((await controller.Delete(id, default)).Result);
+        await sender.Received(1).Send(Arg.Is<Warehouse.Application.Features.Inventory.Invoices.Commands.DeleteInvoice.DeleteInvoiceCommand>(command => command.Id == id), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Create_RequiresInvoiceEditPermission_AndForwardsOnlyHeaderFields()
     {
         Assert.Equal(PermissionPolicyNames.Inventory.GoodsReceiptsReceiptInvoiceOperations,

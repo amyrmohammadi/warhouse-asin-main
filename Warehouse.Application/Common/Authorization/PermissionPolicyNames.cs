@@ -57,6 +57,7 @@ public static class PermissionPolicyNames
         public const string GoodsIssuesFinalize = nameof(AppPermission.GoodsIssuesFinalize);
         public const string GoodsIssuesReopen = nameof(AppPermission.GoodsIssuesReopen);
         public const string InvoicesRead = nameof(AppPermission.InvoicesRead);
+        public const string InvoicesDelete = nameof(AppPermission.InvoicesDelete);
         public const string InvoicesPrint = nameof(AppPermission.InvoicesPrint);
         public const string InvoicesReopen = nameof(AppPermission.InvoicesReopen);
         public const string InvoicesMissingReceiptCountRead = nameof(AppPermission.InvoicesMissingReceiptCountRead);
@@ -127,6 +128,7 @@ public static class PermissionPolicyNames
             "فاکتورها",
             [
                 new(Inventory.InvoicesRead, "مشاهده فاکتورها و کالاهای آن‌ها"),
+                new(Inventory.InvoicesDelete, "حذف فاکتور خالی و ارسال‌نشده به مالی"),
                 new(Inventory.InvoicesPrint, "چاپ گروهی فاکتورها"),
                 new(Inventory.InvoicesReopen, "برگشت فاکتور از ارسال یا تأیید مالی به در حال رسیدگی"),
                 new(Inventory.InvoicesMissingReceiptCountRead, "مشاهده تعداد اقلام بدون رسید فاکتورها")

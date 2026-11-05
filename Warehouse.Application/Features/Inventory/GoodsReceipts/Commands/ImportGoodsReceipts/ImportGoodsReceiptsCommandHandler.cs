@@ -81,27 +81,7 @@ internal sealed class ImportGoodsReceiptsCommandHandler(
         var importedReceipts = 0;
         var importedItems = 0;
 
-        var requestedInvoiceNumbers = validation.Rows
-            .Where(row => row.InvoiceStatus == Domain.Enums.InvoiceStatus.HasInvoice)
-            .Select(row => Invoice.NormalizeNumber(row.Source.InvoiceNumber))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        var invoiceRepository = unitOfWork.Repository<Invoice>();
-        var existingInvoices = await invoiceRepository.ToListAsync(
-            invoiceRepository.Entities.Where(invoice =>
-                requestedInvoiceNumbers.Contains(invoice.InvoiceNumber)),
-            token);
         var invoicesByNumberAndSupplier = new Dictionary<string, Invoice>(StringComparer.Ordinal);
-        foreach (var existingInvoice in existingInvoices)
-        {
-            var trackedInvoice = await invoiceRepository.GetByIdAsync(existingInvoice.Id, token);
-            if (trackedInvoice is not null)
-            {
-                invoicesByNumberAndSupplier.TryAdd(
-                    CreateInvoiceKey(trackedInvoice.InvoiceNumber, trackedInvoice.SupplierId, trackedInvoice.ReceiptDate),
-                    trackedInvoice);
-            }
-        }
 
         await unitOfWork.BeginSerializableTransaction(token);
 
@@ -170,13 +150,14 @@ internal sealed class ImportGoodsReceiptsCommandHandler(
                 {
                     var invoiceNumber = Invoice.NormalizeNumber(row.Source.InvoiceNumber);
                     var receiptDate = Invoice.GetReceiptDate(row.Source.Date!.Value);
-                    var invoiceKey = CreateInvoiceKey(invoiceNumber, row.SupplierId, receiptDate);
-                    if (!invoicesByNumberAndSupplier.TryGetValue(invoiceKey, out invoice))
+                    var resolved = await Invoices.ReceiptInvoiceResolver.ResolveAsync(unitOfWork,
+                        invoiceNumber, row.SupplierId, receiptDate, invoicesByNumberAndSupplier, token);
+                    if (resolved.Error is not null)
                     {
-                        invoice = new Invoice(invoiceNumber, row.SupplierId, receiptDate);
-                        await invoiceRepository.AddAsync(invoice, token);
-                        invoicesByNumberAndSupplier.Add(invoiceKey, invoice);
+                        await unitOfWork.RollBackTransaction(token);
+                        return Result<GoodsReceiptImportSummary>.Error($"فاکتور «{invoiceNumber}»: {resolved.Error}");
                     }
+                    invoice = resolved.Invoice!;
                     if (invoice.IsLocked)
                     {
                         await unitOfWork.RollBackTransaction(token);
@@ -229,6 +210,4 @@ internal sealed class ImportGoodsReceiptsCommandHandler(
             });
     }
 
-    private static string CreateInvoiceKey(string invoiceNumber, Guid? supplierId, DateOnly? receiptDate) =>
-        $"{invoiceNumber.ToUpperInvariant()}\u001F{supplierId?.ToString("D") ?? "-"}\u001F{receiptDate:yyyy-MM-dd}";
 }

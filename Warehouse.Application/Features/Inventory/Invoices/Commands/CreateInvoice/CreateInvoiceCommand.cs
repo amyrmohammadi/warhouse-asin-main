@@ -36,10 +36,10 @@ internal sealed class CreateInvoiceCommandHandler(IUnitOfWork<Guid> unitOfWork)
             var repository = unitOfWork.Repository<Invoice>();
             var number = Invoice.NormalizeNumber(request.InvoiceNumber);
             if (await repository.CountAsync(repository.Entities.Where(invoice =>
-                invoice.InvoiceNumber == number && invoice.SupplierId == request.SupplierId && invoice.ReceiptDate == null), token) > 0)
+                invoice.InvoiceNumber == number && invoice.SupplierId == request.SupplierId), token) > 0)
             {
                 await unitOfWork.RollBackTransaction(token);
-                return Result<InvoiceDetails>.Error("فاکتور مستقلی با این شماره و طرف حساب قبلاً ثبت شده است.");
+                return Result<InvoiceDetails>.Error("فاکتوری با این شماره و طرف حساب قبلاً ثبت شده است؛ همان فاکتور را ویرایش کنید.");
             }
             if (request.SupplierId.HasValue &&
                 await unitOfWork.Repository<Supplier>().GetByIdAsync(request.SupplierId.Value, token) is null)

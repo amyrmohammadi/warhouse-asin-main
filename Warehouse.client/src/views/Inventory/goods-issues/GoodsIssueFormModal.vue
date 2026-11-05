@@ -10,18 +10,23 @@ import PersonSelect, { type PersonSelectOption } from '@/components/selectors/Pe
 import ProductSelect from '@/components/selectors/ProductSelect.vue'
 import SupplierSelect from '@/components/selectors/SupplierSelect.vue'
 import UnitSelect from '@/components/selectors/UnitSelect.vue'
-import { GOODS_ISSUE_EXIT_REASON_OPTIONS } from '@/services/goodsIssues'
+import { GOODS_ISSUE_EXIT_REASON_OPTIONS, type GoodsIssue } from '@/services/goodsIssues'
 import type { UnitOfMeasure } from '@/services/unitsOfMeasure'
 import { entryFieldAttrs } from '@/utils/entryFocus'
 
 import { useGoodsIssueForm, type ConfirmOptions } from './useGoodsIssueForm'
 
-defineProps<{ people: PersonSelectOption[]; units: UnitOfMeasure[] }>()
-const emit = defineEmits<{ saved: [reason: 'saved' | 'deleted'] }>()
+const props = defineProps<{
+  people: PersonSelectOption[]
+  units: UnitOfMeasure[]
+  printDocument: (issue: GoodsIssue) => Promise<void>
+}>()
+const emit = defineEmits<{ saved: [reason: 'created' | 'updated' | 'deleted'] }>()
 const confirmDialog = ref<{ ask: (options: ConfirmOptions) => Promise<boolean> } | null>(null)
 
 const {
   permissions, open, editingId, saving, formError, form, errors, rows, mode,
+  loadingNumber, onIssueNumberInput,
   setMode, addRow, removeRow, itemHasContent, isNewIssuer, isNewDestination,
   rowError, clearRowError, openCreate, openEdit, save, remove, removeDocument,
   selectProduct, onProductText, clearProduct, onUnitText,
@@ -32,7 +37,13 @@ const {
   confirm: options => confirmDialog.value?.ask(options) ?? Promise.resolve(false),
   onSaved: reason => emit('saved', reason),
 })
-const { canDelete, canManageMasterData, canCreateProducts } = permissions
+const { canDelete, canPrint, canManageMasterData, canCreateProducts } = permissions
+
+async function saveAndPrint(): Promise<void> {
+  if (!canPrint) return
+  const issue = await save()
+  if (issue) await props.printDocument(issue)
+}
 const productNotFoundText = canCreateProducts
   ? 'کالایی پیدا نشد؛ اطلاعات کالای جدید را تکمیل کنید.'
   : 'کالایی پیدا نشد؛ فقط انتخاب کالای موجود مجاز است.'
@@ -44,6 +55,7 @@ defineExpose({ openCreate, openEdit, removeDocument })
   <ConfirmDialog ref="confirmDialog" />
 
   <BaseModal v-model="open" size="xl" persistent :busy="saving" modal-class="goods-issue-modal"
+             :initial-focus="editingId ? undefined : '.goods-issue-issuer-field input'"
              :title="editingId ? 'ویرایش خروج کالا' : 'ثبت خروج کالا'">
     <form id="goods-issue-form" novalidate @submit.prevent="save">
       <div v-if="formError" class="alert alert-danger py-2">{{ formError }}</div>
@@ -52,7 +64,8 @@ defineExpose({ openCreate, openEdit, removeDocument })
         <div class="col-md-3 form-group">
           <label>کد یا شماره خروج <span class="text-danger">*</span></label>
           <input v-model="form.issueNumber" class="form-control" :class="{ 'is-invalid': errors.get('issueNumber') }"
-                 maxlength="100" :disabled="saving" @input="errors.clear('issueNumber')" />
+                 maxlength="100" :disabled="saving" :placeholder="loadingNumber ? 'دریافت شماره بعدی...' : ''"
+                 dir="ltr" @input="onIssueNumberInput" />
           <small v-if="errors.get('issueNumber')" class="invalid-feedback d-block">{{ errors.get('issueNumber') }}</small>
         </div>
         <div class="col-md-3 form-group">
@@ -65,7 +78,7 @@ defineExpose({ openCreate, openEdit, removeDocument })
                       @input="errors.clear('issuedAtLocal')" />
           <small v-if="errors.get('issuedAtLocal')" class="invalid-feedback d-block">{{ errors.get('issuedAtLocal') }}</small>
         </div>
-        <div class="col-md-3 form-group">
+        <div class="col-md-3 form-group goods-issue-issuer-field">
           <PersonSelect :model-value="form.issuerId || null" :text="form.issuerText" :options="people"
                         label="خارج‌کننده" placeholder="انتخاب یا ورود خارج‌کننده" required
                         :allow-create="canManageMasterData" :disabled="saving" :error="errors.get('issuer')"
@@ -325,6 +338,9 @@ defineExpose({ openCreate, openEdit, removeDocument })
       <button v-if="editingId && canDelete" class="btn btn-outline-danger px-4" type="button"
               :disabled="saving" @click="remove"><i class="las la-trash ml-1" aria-hidden="true"></i>حذف خروج</button>
       <button class="btn btn-light px-4" type="button" :disabled="saving" @click="requestClose">انصراف</button>
+      <button v-if="canPrint" class="btn btn-outline-primary px-4" type="button" :disabled="saving" @click="saveAndPrint">
+        <i class="las la-print ml-1" aria-hidden="true"></i>ذخیره و چاپ
+      </button>
       <button class="btn btn-primary px-4" type="submit" form="goods-issue-form" :disabled="saving">
         <span v-if="saving" class="spinner-border spinner-border-sm ml-1" aria-hidden="true"></span>
         {{ editingId ? 'ذخیره تغییرات' : 'ثبت خروج کالا' }}

@@ -1,4 +1,4 @@
-import { reactive, ref } from 'vue'
+import { reactive, ref, watch } from 'vue'
 
 import { useEntryRows } from '@/composables/useEntryRows'
 import { useFieldErrors } from '@/composables/useFieldErrors'
@@ -10,6 +10,7 @@ import {
   createGoodsIssue,
   deleteGoodsIssue,
   getGoodsIssue,
+  getNextGoodsIssueNumber,
   GoodsIssuesApiError,
   updateGoodsIssue,
   type GoodsIssue,
@@ -62,7 +63,7 @@ export interface ConfirmOptions {
 
 interface Dependencies {
   confirm: (options: ConfirmOptions) => Promise<boolean>
-  onSaved: (reason: 'saved' | 'deleted') => void
+  onSaved: (reason: 'created' | 'updated' | 'deleted') => void
 }
 
 type ItemField = 'product' | 'code' | 'unit' | 'quantity' | 'assetNumber' | 'destination'
@@ -120,14 +121,21 @@ export function useGoodsIssueForm(deps: Dependencies) {
     canCreate: has('GoodsIssuesCreate'),
     canUpdate: has('GoodsIssuesUpdate'),
     canDelete: has('GoodsIssuesDelete'),
+    canPrint: has('GoodsIssuesExport'),
     canManageMasterData: has('MasterDataManage'),
     canCreateProducts: has('ProductsCreate'),
   }
   const { handleUnauthorized } = useUnauthorizedRedirect('/dashboard/inventory/goods-issues')
   const channel = useRequestChannel()
+  const numberChannel = useRequestChannel()
+  const loadingNumber = ref(false)
+  let issueNumberEdited = false
   const errors = useFieldErrors()
 
   const open = ref(false)
+  watch(open, value => {
+    if (!value) { numberChannel.abort(); loadingNumber.value = false }
+  })
   const editingId = ref<string | null>(null)
   const concurrencyStamp = ref<string | null>(null)
   const saving = ref(false)
@@ -142,6 +150,9 @@ export function useGoodsIssueForm(deps: Dependencies) {
   const clearRowError = (item: FormItem, field: ItemField): void => errors.clearRow(item.key, field)
 
   function reset(): void {
+    numberChannel.abort()
+    loadingNumber.value = false
+    issueNumberEdited = false
     editingId.value = null
     concurrencyStamp.value = null
     Object.assign(form, {
@@ -156,15 +167,37 @@ export function useGoodsIssueForm(deps: Dependencies) {
     formError.value = ''
   }
 
-  function openCreate(): void {
+  async function openCreate(): Promise<void> {
     reset()
     open.value = true
+    const controller = numberChannel.begin()
+    loadingNumber.value = true
+    try {
+      const number = await getNextGoodsIssueNumber(controller.signal)
+      if (numberChannel.isCurrent(controller) && open.value && !editingId.value && !issueNumberEdited) {
+        form.issueNumber = number
+        errors.clear('issueNumber')
+      }
+    } catch (error) {
+      if (isAbortError(error) || !numberChannel.isCurrent(controller)) return
+      if (await handleUnauthorized(error)) return
+      toast.error(error instanceof Error ? error.message : 'دریافت شماره بعدی خروج انجام نشد؛ شماره را دستی وارد کنید.')
+    } finally {
+      if (numberChannel.isCurrent(controller)) { numberChannel.end(controller); loadingNumber.value = false }
+    }
+  }
+
+  function onIssueNumberInput(): void {
+    issueNumberEdited = true
+    errors.clear('issueNumber')
   }
 
   const issueId = (row: GoodsIssue | GoodsIssueItemRow): string =>
     'goodsIssueId' in row ? row.goodsIssueId : row.id
 
   async function openEdit(row: GoodsIssue | GoodsIssueItemRow): Promise<void> {
+    numberChannel.abort()
+    loadingNumber.value = false
     const id = issueId(row)
     const controller = channel.begin()
     try {
@@ -383,28 +416,33 @@ export function useGoodsIssueForm(deps: Dependencies) {
     }
   }
 
-  async function save(): Promise<void> {
-    if ((editingId.value && !permissions.canUpdate) || (!editingId.value && !permissions.canCreate)) return
+  async function save(): Promise<GoodsIssue | null> {
+    if (saving.value || (editingId.value && !permissions.canUpdate) || (!editingId.value && !permissions.canCreate)) return null
     if (!validate()) {
       formError.value = ''
-      return
+      return null
     }
     const controller = channel.begin()
     saving.value = true
+    numberChannel.abort()
+    loadingNumber.value = false
     formError.value = ''
     const wasEditing = Boolean(editingId.value)
     try {
       const payload = buildPayload()
-      if (editingId.value) await updateGoodsIssue(editingId.value, payload, controller.signal)
-      else await createGoodsIssue(payload, controller.signal)
+      const issue = editingId.value
+        ? await updateGoodsIssue(editingId.value, payload, controller.signal)
+        : await createGoodsIssue(payload, controller.signal)
       open.value = false
       toast.success(wasEditing ? 'سند خروج کالا با موفقیت ویرایش شد.' : 'خروج کالا با موفقیت ثبت شد.')
-      deps.onSaved('saved')
+      deps.onSaved(wasEditing ? 'updated' : 'created')
+      return issue
     } catch (error) {
-      if (isAbortError(error)) return
-      if (await handleUnauthorized(error)) return
+      if (isAbortError(error)) return null
+      if (await handleUnauthorized(error)) return null
       if (error instanceof GoodsIssuesApiError && applyApiFieldErrors(error)) formError.value = ''
       else formError.value = error instanceof Error ? error.message : 'ثبت خروج کالا انجام نشد.'
+      return null
     } finally {
       if (channel.isCurrent(controller)) {
         channel.end(controller)
@@ -455,6 +493,8 @@ export function useGoodsIssueForm(deps: Dependencies) {
     open,
     editingId,
     saving,
+    loadingNumber,
+    onIssueNumberInput,
     formError,
     form,
     errors,

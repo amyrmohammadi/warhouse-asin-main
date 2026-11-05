@@ -39,12 +39,14 @@ public sealed class CreateInvoiceTests
         Assert.True(invoice.IsLocked);
     }
 
-    [Fact]
-    public async Task DuplicateStandaloneInvoice_IsRejectedWithoutMergingOrChangingTheOriginal()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DuplicateInvoice_IsRejectedWithoutMergingOrChangingTheOriginal(bool linkedToReceiptDay)
     {
         await using var context = new ApplicationTestContext();
         var supplier = new Supplier("طرف حساب", null);
-        var existing = new Invoice("INV-1", supplier.Id);
+        var existing = new Invoice("INV-1", supplier.Id, linkedToReceiptDay ? new DateOnly(2026, 10, 19) : null);
         existing.UpdateDetails("اصلی", null, InvoiceProcessingStatus.SentToFinance);
         var invoices = new List<Invoice> { existing };
         Register(context, invoices, supplier);

@@ -20,7 +20,7 @@ defineProps<{
   warehouses: WarehouseOption[]
   units: UnitOfMeasure[]
 }>()
-const emit = defineEmits<{ saved: [reason: 'saved' | 'deleted'] }>()
+const emit = defineEmits<{ saved: [reason: 'created' | 'updated' | 'deleted'] }>()
 
 const confirmDialog = ref<{ ask: (options: ConfirmOptions) => Promise<boolean> } | null>(null)
 

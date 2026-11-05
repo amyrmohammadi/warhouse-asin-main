@@ -46,6 +46,7 @@ public sealed class PermissionPolicyNamesTests
         Assert.Equal("فاکتورها", invoiceGroup.DisplayName);
         Assert.Equal(
             [PermissionPolicyNames.Inventory.InvoicesRead,
+                PermissionPolicyNames.Inventory.InvoicesDelete,
                 PermissionPolicyNames.Inventory.InvoicesPrint,
                 PermissionPolicyNames.Inventory.InvoicesReopen,
                 PermissionPolicyNames.Inventory.InvoicesMissingReceiptCountRead],
