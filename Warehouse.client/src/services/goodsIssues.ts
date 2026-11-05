@@ -3,7 +3,6 @@ import { expireSession, getSession } from '@/services/auth'
 import type { DateFilterValue, NumericFilterValue, TextFilterValue } from '@/types/dataTableFilters'
 
 export type GoodsIssueExitReason =
-  | 'Maintenance'
   | 'Sample'
   | 'Purchase'
   | 'Sale'
@@ -11,15 +10,18 @@ export type GoodsIssueExitReason =
   | 'Consignment'
   | 'Repair'
   | 'Other'
+  | 'Charge'
+  | 'NotApproved'
 
 export const GOODS_ISSUE_EXIT_REASON_OPTIONS: Array<{ value: GoodsIssueExitReason; label: string }> = [
-  { value: 'Maintenance', label: 'تعمیرات' },
   { value: 'Sample', label: 'نمونه' },
   { value: 'Purchase', label: 'خرید' },
   { value: 'Sale', label: 'فروش' },
   { value: 'Services', label: 'خدمات' },
   { value: 'Consignment', label: 'امانی' },
   { value: 'Repair', label: 'تعمیر' },
+  { value: 'Charge', label: 'شارژ' },
+  { value: 'NotApproved', label: 'عدم تایید' },
   { value: 'Other', label: 'سایر' },
 ]
 
@@ -131,6 +133,7 @@ export interface GoodsIssueListFilters {
   destinationId?: string
   deliveringUnit?: TextFilterValue
   issuerId?: string
+  exitReasons?: GoodsIssueExitReason[]
 }
 
 export interface GoodsIssueListParameters extends GoodsIssueListFilters {
@@ -230,6 +233,7 @@ function appendFilters(query: URLSearchParams, filters: GoodsIssueListFilters): 
   if (filters.quickFilter) query.set('quickFilter', filters.quickFilter)
   if (filters.destinationId) query.set('destinationId', filters.destinationId)
   if (filters.issuerId) query.set('issuerId', filters.issuerId)
+  for (const reason of filters.exitReasons ?? []) query.append('exitReasons', reason)
   appendDateFilter(query, 'issuedAt', filters.issuedAt)
   appendTextFilter(query, 'issueNumberFilter', filters.issueNumberFilter)
   appendTextFilter(query, 'productTitle', filters.productTitle)

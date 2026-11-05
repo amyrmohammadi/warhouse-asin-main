@@ -128,3 +128,4 @@ internal sealed class UpdateGoodsReceiptCommandHandler(IUnitOfWork<Guid> unitOfW
             updateWarehouse: request.CanEditWarehouse);
     }
 }
+

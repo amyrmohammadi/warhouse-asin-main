@@ -33,7 +33,7 @@ public sealed class GoodsIssueItem : Entity<Guid>
         ShippingLocationId = shippingLocationId;
         ExitReasonType = exitReasonType;
         IsReturnable = isReturnable;
-        ExitReason = Normalize(legacyExitReason);
+        ExitReason = legacyExitReason?.Trim() is "تعمیرات" or "Maintenance" ? "تعمیر" : Normalize(legacyExitReason);
         Description = Normalize(description);
         DeliveringUnit = Normalize(deliveringUnit);
         ReturnAtUtc = returnAtUtc?.ToUniversalTime();
@@ -75,6 +75,7 @@ public sealed class GoodsIssueItem : Entity<Guid>
         DestinationId = destinationId;
         ShippingLocationId = shippingLocationId;
         ExitReasonType = exitReason;
+        ExitReason = null;
         IsReturnable = isReturnable;
         Description = Normalize(description);
         DeliveringUnit = Normalize(deliveringUnit);

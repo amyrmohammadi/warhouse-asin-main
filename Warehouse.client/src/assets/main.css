@@ -1473,6 +1473,63 @@ body[data-app-theme='dark'] .audit-details-modal pre {
   color: #f1f5f9;
 }
 
+/* Native popup options do not inherit a transparent select's surface. */
+body[data-app-theme='dark'] select option,
+body[data-app-theme='dark'] select optgroup {
+  background-color: var(--surface);
+  color: var(--text-primary);
+}
+
+body[data-app-theme='dark'] select option:checked {
+  background-color: var(--primary);
+  color: #fff;
+}
+
+/* The Persian picker supplies its own light surfaces, including month/year panels. */
+body[data-app-theme='dark'] .vpd-input-group input,
+body[data-app-theme='dark'] .vpd-content,
+body[data-app-theme='dark'] .vpd-addon-list {
+  background-color: var(--surface);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+body[data-app-theme='dark'] .vpd-addon-list-item {
+  border-color: var(--surface);
+  color: var(--text-primary);
+}
+
+body[data-app-theme='dark'] .vpd-addon-list-item:hover,
+body[data-app-theme='dark'] .vpd-addon-list-item.vpd-selected,
+body[data-app-theme='dark'] .vpd-actions button:hover,
+body[data-app-theme='dark'] .vpd-close-addon {
+  background-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+body[data-app-theme='dark'] .vpd-week,
+body[data-app-theme='dark'] .vpd-time-h,
+body[data-app-theme='dark'] .vpd-time-m {
+  color: var(--text-secondary);
+}
+
+/* These labels and actions receive inline accent colors from the picker. */
+body[data-app-theme='dark'] .vpd-actions button,
+body[data-app-theme='dark'] .vpd-addon-list-item.vpd-selected,
+body[data-app-theme='dark'] .vpd-month-label > span:hover {
+  color: #93c5fd !important;
+}
+
+body[data-app-theme='dark'] .vpd-controls svg path,
+body[data-app-theme='dark'] .vpd-time svg path,
+body[data-app-theme='dark'] .vpd-prev-step svg path {
+  fill: var(--text-primary);
+}
+
+body[data-app-theme='dark'] .vpd-time {
+  border-color: var(--border-color);
+}
+
 body[data-app-theme='dark'] .table,
 body[data-app-theme='dark'] .table th,
 body[data-app-theme='dark'] .table td,

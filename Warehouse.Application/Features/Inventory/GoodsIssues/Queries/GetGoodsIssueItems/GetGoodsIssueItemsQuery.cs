@@ -24,6 +24,7 @@ public sealed record GetGoodsIssueItemsQuery
     public Guid? DestinationId { get; init; }
     public TextFilter? DeliveringUnit { get; init; }
     public Guid? IssuerId { get; init; }
+    public GoodsIssueExitReason[] ExitReasons { get; init; } = [];
 }
 
 internal sealed class GetGoodsIssueItemsQueryValidator : AbstractValidator<GetGoodsIssueItemsQuery>
@@ -33,6 +34,7 @@ internal sealed class GetGoodsIssueItemsQueryValidator : AbstractValidator<GetGo
         RuleFor(query => query.PageNumber).GreaterThanOrEqualTo(1);
         RuleFor(query => query.PageSize).InclusiveBetween(1, 100);
         RuleFor(query => query.Search).MaximumLength(256);
+        RuleForEach(query => query.ExitReasons).IsInEnum();
         RuleFor(query => query.QuickFilter).Must(value => value is null or InventoryDateQuickFilter.Today or InventoryDateQuickFilter.CreatedToday);
         RuleFor(query => query.IssuedAt!).SetValidator(new DateFilterValidator()).When(query => query.IssuedAt is not null);
         RuleFor(query => query.IssueNumberFilter!).SetValidator(new TextFilterValidator(100)).When(query => query.IssueNumberFilter is not null);
@@ -89,6 +91,8 @@ internal sealed class GetGoodsIssueItemsQueryHandler(IUnitOfWork<Guid> unitOfWor
             query = query.Where(item => item.DestinationId == request.DestinationId.Value);
         if (request.IssuerId.HasValue)
             query = query.Where(item => item.GoodsIssue.IssuerId == request.IssuerId.Value);
+        if (request.ExitReasons.Length > 0)
+            query = query.Where(item => request.ExitReasons.Contains(item.ExitReasonType));
         var filteredCount = await repository.CountAsync(query, cancellationToken);
         query = ApplySorting(query, request.SortBy, request.SortDescending)
             .Skip((request.PageNumber - 1) * request.PageSize)

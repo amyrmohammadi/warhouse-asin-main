@@ -61,13 +61,14 @@ const exitReasonLabels = new Map<GoodsIssueExitReason, string>(
   GOODS_ISSUE_EXIT_REASON_OPTIONS.map(option => [option.value, option.label]),
 )
 const exitReasonBadges: Record<GoodsIssueExitReason, string> = {
-  Maintenance: 'badge-warning',
   Sample: 'badge-info',
   Purchase: 'badge-success',
   Sale: 'badge-danger',
   Services: 'badge-primary',
   Consignment: 'badge-secondary',
   Repair: 'badge-warning',
+  Charge: 'badge-info',
+  NotApproved: 'badge-danger',
   Other: 'badge-dark',
 }
 
@@ -117,6 +118,7 @@ const filterDefinitions = computed<DataTableFilterDefinition[]>(() => [
   { key: 'productTitle', label: 'عنوان کالا', type: 'text-comparison', placeholder: 'جستجو و انتخاب کالا', maxlength: 256 },
   { key: 'productCode', label: 'کد کالا', type: 'text-comparison', placeholder: 'بخشی از کد کالا', maxlength: 100 },
   { key: 'quantity', label: 'تعداد', type: 'numeric-comparison', numericType: 'decimal', min: 0 },
+  { key: 'exitReasons', label: 'علت خروج', type: 'multiselect', options: GOODS_ISSUE_EXIT_REASON_OPTIONS, placeholder: 'همه علل خروج' },
   { key: 'assetNumber', label: 'شماره اموال', type: 'text-comparison', placeholder: 'شماره اموال', maxlength: 100 },
   {
     key: 'destinationId', label: 'مقصد', type: 'select', placeholder: 'جستجو و انتخاب مقصد',
@@ -142,6 +144,8 @@ function currentFilterParameters(): GoodsIssueListParameters {
     destinationId: filters.id('destinationId'),
     deliveringUnit: filters.text('deliveringUnit'),
     issuerId: filters.id('issuerId'),
+    exitReasons: Array.isArray(appliedFilters.value.exitReasons)
+      ? appliedFilters.value.exitReasons as GoodsIssueExitReason[] : undefined,
   }
 }
 

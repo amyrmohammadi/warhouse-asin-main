@@ -486,11 +486,11 @@ function formatValue(
                 :id="`filter-${definition.key}`"
                 class="custom-select custom-select-sm"
                 multiple
-                :value="asStringArray(draftFilters[definition.key])"
                 :disabled="loadingOptions[definition.key]"
                 @change="updateMultiSelect(definition.key, $event)"
               >
-                <option v-for="option in optionsFor(definition)" :key="option.value" :value="option.value">
+                <option v-for="option in optionsFor(definition)" :key="option.value" :value="option.value"
+                        :selected="asStringArray(draftFilters[definition.key]).includes(option.value)">
                   {{ option.label }}
                 </option>
               </select>

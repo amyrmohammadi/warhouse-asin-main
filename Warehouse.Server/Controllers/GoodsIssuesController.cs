@@ -264,13 +264,14 @@ public sealed class GoodsIssuesController(
 
     private static string FormatExitReason(GoodsIssueExitReason reason) => reason switch
     {
-        GoodsIssueExitReason.Maintenance => "تعمیرات",
         GoodsIssueExitReason.Sample => "نمونه",
         GoodsIssueExitReason.Purchase => "خرید",
         GoodsIssueExitReason.Sale => "فروش",
         GoodsIssueExitReason.Services => "خدمات",
         GoodsIssueExitReason.Consignment => "امانی",
         GoodsIssueExitReason.Repair => "تعمیر",
+        GoodsIssueExitReason.Charge => "شارژ",
+        GoodsIssueExitReason.NotApproved => "عدم تایید",
         _ => "سایر"
     };
 }
