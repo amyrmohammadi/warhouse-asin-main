@@ -134,10 +134,10 @@ public sealed class GoodsIssuePdfServiceTests
 
     [Theory]
     [InlineData("0", null, "۰")]
-    [InlineData("12", "عدد", "۱۲ عدد")]
-    [InlineData("12.75", "عدد", "۱۲/۷۵ عدد")]
-    [InlineData("2.125", "متر", "۲/۱۲۵ متر")]
-    [InlineData("10.000", "کیلوگرم", "۱۰ کیلوگرم")]
+    [InlineData("12", "عدد", "۱۲\nعدد")]
+    [InlineData("12.75", "عدد", "۱۲/۷۵\nعدد")]
+    [InlineData("2.125", "متر", "۲/۱۲۵\nمتر")]
+    [InlineData("10.000", "کیلوگرم", "۱۰\nکیلوگرم")]
     public async Task Generate_QuantityIncludesUnitAndSlashDecimalSeparator(string quantity, string? unit, string expected)
     {
         var converter = new RecordingConverter();

@@ -118,7 +118,7 @@ const filterDefinitions = computed<DataTableFilterDefinition[]>(() => [
   { key: 'productTitle', label: 'عنوان کالا', type: 'text-comparison', placeholder: 'جستجو و انتخاب کالا', maxlength: 256 },
   { key: 'productCode', label: 'کد کالا', type: 'text-comparison', placeholder: 'بخشی از کد کالا', maxlength: 100 },
   { key: 'quantity', label: 'تعداد', type: 'numeric-comparison', numericType: 'decimal', min: 0 },
-  { key: 'exitReasons', label: 'علت خروج', type: 'multiselect', options: GOODS_ISSUE_EXIT_REASON_OPTIONS, placeholder: 'همه علل خروج' },
+  { key: 'exitReason', label: 'علت خروج', type: 'select', options: GOODS_ISSUE_EXIT_REASON_OPTIONS, placeholder: 'همه علل خروج' },
   { key: 'isReturnable', label: 'برگشت', type: 'boolean', trueLabel: 'دارد', falseLabel: 'ندارد' },
   { key: 'assetNumber', label: 'شماره اموال', type: 'text-comparison', placeholder: 'شماره اموال', maxlength: 100 },
   {
@@ -146,8 +146,8 @@ function currentFilterParameters(): GoodsIssueListParameters {
     deliveringUnit: filters.text('deliveringUnit'),
     issuerId: filters.id('issuerId'),
     isReturnable: typeof appliedFilters.value.isReturnable === 'boolean' ? appliedFilters.value.isReturnable : undefined,
-    exitReasons: Array.isArray(appliedFilters.value.exitReasons)
-      ? appliedFilters.value.exitReasons as GoodsIssueExitReason[] : undefined,
+    exitReasons: filters.id('exitReason')
+      ? [filters.id('exitReason') as GoodsIssueExitReason] : undefined,
   }
 }
 

@@ -12,6 +12,22 @@ namespace Warehouse.Application.Tests.Features.Inventory.Invoices;
 public sealed class GetInvoicesFeatureTests
 {
     [Theory]
+    [InlineData(InvoiceProcessingStatus.UnderReview, true)]
+    [InlineData(InvoiceProcessingStatus.SentToFinance, false)]
+    [InlineData(InvoiceProcessingStatus.FinanceApproved, false)]
+    public async Task GetInvoices_PreservesDeleteEligibility(InvoiceProcessingStatus status, bool expected)
+    {
+        await using var context = new ApplicationTestContext();
+        var invoice = new Invoice("INV-EMPTY", null);
+        invoice.UpdateDetails(null, null, status);
+        context.UnitOfWork.Repository<Invoice>().Returns(CreateRepository([invoice]));
+
+        var result = await context.Sender.Send(new GetInvoicesQuery());
+
+        Assert.Equal(expected, Assert.Single(result.Data!.Items).CanDelete);
+    }
+
+    [Theory]
     [InlineData(DateOperator.Eq, 1, false)]
     [InlineData(DateOperator.Before, 2, false)]
     [InlineData(DateOperator.After, 2, false)]

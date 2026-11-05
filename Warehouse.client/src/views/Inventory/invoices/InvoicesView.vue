@@ -585,7 +585,7 @@ onBeforeUnmount(() => {
                       aria-label="مشاهده فاکتور" @click="openItems(rowData)">
                 <i class="las la-boxes" aria-hidden="true"></i>
               </button>
-              <button v-if="canDelete && rowData.canDelete" class="btn btn-outline-danger btn-sm" type="button"
+              <button v-if="canDelete && rowData.canDelete" class="btn users-table__role-action text-danger" type="button"
                       title="حذف فاکتور" aria-label="حذف فاکتور" :disabled="deletingId !== null" @click="removeInvoice(rowData)">
                 <span v-if="deletingId === rowData.id" class="spinner-border spinner-border-sm" aria-hidden="true"></span>
                 <i v-else class="las la-trash" aria-hidden="true"></i>

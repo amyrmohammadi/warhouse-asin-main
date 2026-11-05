@@ -116,6 +116,7 @@ public sealed class InvoicesController(
         var redactedItems = result.Data.Items.Select(item => new InvoiceSummary
         {
             Id = item.Id,
+            CanDelete = item.CanDelete,
             Price = item.Price,
             InvoiceNumber = item.InvoiceNumber,
             Description = item.Description,

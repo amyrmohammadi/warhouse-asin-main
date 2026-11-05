@@ -132,6 +132,7 @@ internal sealed class GetInvoicesQueryHandler(IUnitOfWork<Guid> unitOfWork, Time
         var data = projectedData.Select(summary => new InvoiceSummary
         {
             Id = summary.Id,
+            CanDelete = summary.CanDelete,
             Price = summary.Price,
             InvoiceNumber = summary.InvoiceNumber,
             Description = summary.Description,

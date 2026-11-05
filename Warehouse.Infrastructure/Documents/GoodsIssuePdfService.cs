@@ -142,16 +142,29 @@ public sealed class GoodsIssuePdfService(IExcelToPdfService excelToPdfService) :
             token.ThrowIfCancellationRequested();
             number++;
             var product = SplitText(item.ProductTitle ?? "");
-            var destination = string.Join(" - ", new[] { item.DestinationTitle, item.ShippingLocationTitle }
-                .Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => SingleLine(value!)));
-            var notes = SplitText(item.Description ?? "", new[] { destination, item.AssetNumber }
-                .Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => SingleLine(value!)));
+            var destination = string.Join(" - ", new[] {
+                        item.ShippingLocationTitle,
+                        item.DestinationTitle
+                }.Where(value => !string.IsNullOrWhiteSpace(value))
+                        .Select(value => SingleLine(value!)));
+
+            var notes = SplitText(item.Description ?? "", new[] {
+                        destination,
+                        string.IsNullOrWhiteSpace(item.AssetNumber)
+                        ? null
+                        : $"کد اموال : {item.AssetNumber}"
+                }.Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => SingleLine(value!)));
+
+
             for (var segment = 0; segment < Math.Max(product.Count, notes.Count); segment++)
                 rows.Add(new PrintRow(segment == 0 ? PersianDigits(number.ToString(CultureInfo.InvariantCulture)) : "ادامه",
                     segment < product.Count ? product[segment] : "", segment < notes.Count ? notes[segment] : "",
-                    segment == 0 ? string.Join(' ', new[] {
-                        PersianDigits(item.Quantity.ToString("0.###", CultureInfo.InvariantCulture).Replace('.', '/')),
-                        item.ProductUnitOfMeasureTitle }.Where(value => !string.IsNullOrWhiteSpace(value))) : "",
+                    segment == 0
+                        ? PersianDigits(item.Quantity.ToString("0.###", CultureInfo.InvariantCulture).Replace('.', '/'))
+                            + (string.IsNullOrWhiteSpace(item.ProductUnitOfMeasureTitle)
+                                ? "" : "\n" + item.ProductUnitOfMeasureTitle.Trim())
+                        : "",
                     segment == 0 && item.IsReturnable && item.ReturnAtUtc.HasValue ? PersianDate(item.ReturnAtUtc.Value) : ""));
         }
         return rows;
@@ -247,7 +260,7 @@ public sealed class GoodsIssuePdfService(IExcelToPdfService excelToPdfService) :
             if (!isQuantity && !text.Any(character => char.IsLetter(character) &&
                     (character is >= '\u0590' and <= '\u08ff' or >= '\ufb1d' and <= '\ufefc'))) continue;
             var originalStyle = (string?)cell.Attribute("s") ?? "0";
-            var readingOrder = isQuantity ? "1" : "2";
+            var readingOrder =  "1";
             var styleKey = originalStyle + ":" + readingOrder;
             if (!rightToLeftStyles.TryGetValue(styleKey, out var rightToLeftStyle))
             {

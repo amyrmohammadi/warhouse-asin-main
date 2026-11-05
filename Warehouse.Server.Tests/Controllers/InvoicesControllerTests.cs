@@ -295,6 +295,7 @@ public sealed class InvoicesControllerTests
             Id = Guid.NewGuid(),
             InvoiceNumber = "INV-1",
             Description = "شرح",
+            CanDelete = true,
             InvoiceDate = new DateOnly(2026, 10, 20),
             ProcessingStatus = InvoiceProcessingStatus.SentToFinance,
             Price = 500,
@@ -313,6 +314,7 @@ public sealed class InvoicesControllerTests
         var item = Assert.Single(result.Data!.Items);
         Assert.Equal(canViewCount ? 2 : null, item.ItemsWithoutReceiptCount);
         Assert.Equal(summary.InvoiceNumber, item.InvoiceNumber);
+        Assert.Equal(summary.CanDelete, item.CanDelete);
         Assert.Equal(summary.Description, item.Description);
         Assert.Equal(summary.Price, item.Price);
         Assert.Equal(summary.InvoiceDate, item.InvoiceDate);
