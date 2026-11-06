@@ -12,6 +12,15 @@ namespace Warehouse.Server.Controllers;
 [Route("endpoint/inventory")]
 public sealed class WarehouseStocksController(ISender sender) : ControllerBase
 {
+    [HttpGet("warehouses/{warehouseId:guid}/stocks/{productId:guid}/history")]
+    [Authorize(Policy = PermissionPolicyNames.Inventory.WarehouseStockView)]
+    public async Task<ActionResult<Result<StockHistoryPage>>> GetHistory(Guid warehouseId, Guid productId,
+        CancellationToken token, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 20)
+    {
+        var result = await sender.Send(new GetStockHistoryQuery(warehouseId, productId, pageNumber, pageSize), token);
+        return result.IsSuccess ? Ok(result) : BadRequest(result);
+    }
+
     [HttpGet("warehouses/{warehouseId:guid}/stocks")]
     [Authorize(Policy = PermissionPolicyNames.Inventory.WarehouseStockView)]
     public async Task<ActionResult<Result<WarehouseStockList>>> GetStocks(Guid warehouseId,

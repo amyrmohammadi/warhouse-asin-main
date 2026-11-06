@@ -5,6 +5,8 @@ import DataTablesCore from 'datatables.net-bs4'
 import DataTable from 'datatables.net-vue3'
 import BaseModal from '@/components/BaseModal.vue'
 import ProductSelect from '@/components/selectors/ProductSelect.vue'
+import WarehouseSelect from '@/components/selectors/WarehouseSelect.vue'
+import StockHistoryModal from './StockHistoryModal.vue'
 import { useDataTableList } from '@/composables/useDataTableList'
 import { usePermissions } from '@/composables/usePermissions'
 import { useUnauthorizedRedirect } from '@/composables/useUnauthorizedRedirect'
@@ -30,6 +32,7 @@ const warehouseError = ref('')
 const warehouseSearch = ref('')
 const warehouseId = ref('')
 const selectedWarehouse = computed(() => warehouses.value.find(warehouse => warehouse.id === warehouseId.value))
+const pageTitle = computed(() => selectedWarehouse.value ? `موجودی انبار ${selectedWarehouse.value.title}` : 'موجودی انبارها')
 const visibleWarehouses = computed(() => warehouses.value.filter(warehouse =>
   warehouse.id === warehouseId.value || warehouse.title.includes(warehouseSearch.value.trim())))
 const search = ref('')
@@ -40,6 +43,7 @@ const saving = ref(false)
 const modalError = ref('')
 const conflict = ref(false)
 const adjustment = ref<WarehouseStock | null>(null)
+const historyStock = ref<WarehouseStock | null>(null)
 const newQuantity = ref<number | string>(0)
 const reason = ref('')
 const delta = computed(() => Number(newQuantity.value) - (adjustment.value?.currentQuantity ?? 0))
@@ -64,7 +68,7 @@ const list = useDataTableList<WarehouseStock>({
     const currentWarehouse = warehouseId.value
     if (!currentWarehouse) return { items: [], totalCount: 0, filteredCount: 0 }
     const result = await getWarehouseStocks(currentWarehouse, { pageNumber: query.page, pageSize: query.pageSize,
-      search: search.value.trim(), hasStock: hasStock.value === 'all' ? undefined : hasStock.value === 'true',
+      search: search.value.trim(), hasStock: true,
       sortBy: query.sortBy, sortDescending: query.sortDescending, signal: query.signal })
     if (currentWarehouse !== warehouseId.value || query.signal.aborted) throw new DOMException('Aborted', 'AbortError')
     return result
@@ -77,16 +81,15 @@ const tableOptions = createInventoryTableOptions({
     { data: 'productCode', name: 'productCode', title: 'کد کالا', className: 'stock-secondary-column' },
     { data: 'productTitle', name: 'productTitle', title: 'کالا', className: 'all' },
     { data: 'unitOfMeasure', name: 'unitOfMeasure', title: 'واحد', orderable: false, className: 'stock-secondary-column' },
-    { data: 'openingQuantity', name: 'openingQuantity', title: 'موجودی اولیه', className: 'stock-secondary-column' },
-    { data: 'currentQuantity', name: 'currentQuantity', title: 'موجودی فعلی', className: 'all' },
-    { data: null, name: 'actions', title: 'عملیات', orderable: false, visible: canAdjust, className: 'all' }],
+    { data: 'currentQuantity', name: 'currentQuantity', title: 'موجودی کل', className: 'all' },
+    { data: null, name: 'actions', title: 'عملیات', orderable: false, className: 'all' }],
   order: { name: 'productTitle', dir: 'asc' }, emptyText: 'کالایی ثبت نشده است.',
   loadingText: 'در حال دریافت موجودی…', zeroText: 'کالایی با این فیلتر پیدا نشد.',
 })
 tableOptions.lengthMenu = [10, 20, 50, 100]
 // The compact mobile cells already include code and unit; no extra detail rows are needed.
 tableOptions.responsive = false
-watch(warehouseId, () => { modalError.value = ''; openingOpen.value = false; adjustmentOpen.value = false })
+watch(warehouseId, () => { modalError.value = ''; adjustmentOpen.value = false; historyStock.value = null })
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 watch(search, () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => list.reload(true), 300) })
 watch(hasStock, () => list.reload(true))
@@ -116,6 +119,9 @@ async function showFailure(error: unknown): Promise<void> {
 async function saveOpening(): Promise<void> {
   if (saving.value) return
   modalError.value = ''
+  if (!warehouseId.value) {
+    modalError.value = 'انبار را انتخاب کنید.'; return
+  }
   if (!openingRows.value.length || openingRows.value.some(row => !row.productId || !validQuantity(row.quantity))) {
     modalError.value = 'کالا و مقدار غیرمنفی با حداکثر سه رقم اعشار را در همهٔ ردیف‌ها وارد کنید.'; return
   }
@@ -160,35 +166,51 @@ async function refreshAdjustment(): Promise<void> {
 
 <template>
   <div class="container-fluid users-page inventory-data-page stock-page">
-    <div class="page-titles"><ol class="breadcrumb"><li class="breadcrumb-item"><RouterLink to="/dashboard">داشبورد</RouterLink></li><li class="breadcrumb-item active">موجودی انبارها</li></ol></div>
+    <div class="page-titles"><ol class="breadcrumb"><li class="breadcrumb-item"><RouterLink to="/dashboard">داشبورد</RouterLink></li><li class="breadcrumb-item active">{{ pageTitle }}</li></ol></div>
     <div class="card">
       <div class="card-header stock-header">
-        <div><h4 class="card-title"><i class="las la-warehouse mr-1" aria-hidden="true"></i> موجودی انبارها</h4><p class="page-description text-muted mb-0 mt-1">مشاهده موجودی کالاها، ثبت موجودی اولیه و اصلاح مغایرت‌ها</p></div>
-        <button v-if="canOpen" class="btn btn-primary btn-sm" :disabled="!warehouseId || saving" @click="startOpening">ثبت موجودی اولیه</button>
+        <div><h4 class="card-title"><i class="las la-warehouse mr-1" aria-hidden="true"></i> {{ pageTitle }}</h4><p class="page-description text-muted mb-0 mt-1">مشاهده موجودی کالاها، ثبت موجودی اولیه و اصلاح مغایرت‌ها</p></div>
+        <button v-if="canOpen" class="btn btn-primary btn-sm" :disabled="warehousesLoading || saving" @click="startOpening">ثبت موجودی اولیه</button>
       </div>
       <div class="card-body">
         <div v-if="warehouseError" class="alert alert-danger" role="alert">{{ warehouseError }} <button class="btn btn-link btn-sm" @click="loadWarehouses">تلاش دوباره</button></div>
         <div class="stock-filters">
-          <label>جستجوی انبار<input v-model="warehouseSearch" type="search" class="form-control" placeholder="نام انبار" :disabled="warehousesLoading || saving || openingOpen || adjustmentOpen"></label>
-          <label>انبار<select v-model="warehouseId" class="form-control" :disabled="warehousesLoading || saving || openingOpen || adjustmentOpen"><option value="">{{ warehousesLoading ? 'در حال دریافت انبارها…' : 'انتخاب انبار' }}</option><option v-for="warehouse in visibleWarehouses" :key="warehouse.id" :value="warehouse.id">{{ warehouse.title }}</option></select></label>
-          <label>جستجوی کالا<input v-model="search" type="search" class="form-control" maxlength="200" placeholder="کد یا عنوان کالا" :disabled="!warehouseId"></label>
-          <label>موجودی<select v-model="hasStock" class="form-control" :disabled="!warehouseId"><option value="all">همه کالاها</option><option value="true">دارای موجودی</option><option value="false">بدون موجودی</option></select></label>
-          <button class="btn btn-outline-primary btn-sm" :disabled="!warehouseId || loading" @click="list.reload(false)"><i class="las la-sync" aria-hidden="true"></i> تازه‌سازی</button>
+          <WarehouseSelect v-model="warehouseId" :options="warehouses" class="stock-warehouse-select"
+                           :placeholder="warehousesLoading ? 'در حال دریافت انبارها…' : 'انتخاب انبار'"
+                           :disabled="warehousesLoading || saving || openingOpen || adjustmentOpen" />
+          <div class="stock-quick-search">
+            <i class="las la-search" aria-hidden="true"></i>
+            <input v-model="search" type="search" class="form-control form-control-sm" maxlength="200"
+                   placeholder="جستجو در کد یا عنوان کالا..." aria-label="جستجوی سریع" :disabled="!warehouseId">
+            <button v-if="search" type="button" aria-label="پاک کردن جستجو" @click="search = ''">
+              <i class="las la-times" aria-hidden="true"></i>
+            </button>
+          </div>
         </div>
         <p v-if="!warehouseId" class="stock-empty text-muted" role="status">برای مشاهده موجودی، یک انبار انتخاب کنید.</p>
         <div v-else :key="warehouseId" class="users-table-container inventory-table-container" :aria-busy="loading">
           <DataTable ref="table" :options="tableOptions" class="display responsive nowrap table table-sm table-striped users-table inventory-data-table">
             <template #column-productCode="{ cellData }"><span dir="ltr">{{ cellData }}</span></template>
             <template #column-productTitle="{ cellData, rowData }"><strong class="text-black">{{ cellData }}</strong><small class="stock-mobile-code text-muted" dir="ltr">{{ (rowData as WarehouseStock).productCode }}</small></template>
-            <template #column-openingQuantity="{ cellData }">{{ cellData === null ? '—' : formatPersianNumber(cellData) }}</template>
             <template #column-currentQuantity="{ cellData, rowData }"><strong>{{ formatPersianNumber(cellData) }}</strong><small class="stock-mobile-code text-muted">{{ (rowData as WarehouseStock).unitOfMeasure }}</small></template>
-            <template #column-actions="{ rowData }"><button v-if="canAdjust" type="button" class="btn btn-outline-primary btn-sm" title="ثبت سند اصلاح موجودی" @click="startAdjustment(rowData as WarehouseStock)">اصلاح موجودی</button></template>
+            <template #column-actions="{ rowData }">
+              <button type="button" class="btn users-table__role-action" title="تاریخچه موجودی" aria-label="تاریخچه موجودی"
+                      @click="historyStock = { ...(rowData as WarehouseStock) }"><i class="las la-history" aria-hidden="true"></i></button>
+              <button v-if="canAdjust" type="button" class="btn btn-outline-primary btn-sm" title="ثبت سند اصلاح موجودی" @click="startAdjustment(rowData as WarehouseStock)">اصلاح موجودی</button>
+            </template>
           </DataTable>
         </div>
       </div>
     </div>
+    <StockHistoryModal v-if="historyStock" :key="`${historyStock.warehouseId}-${historyStock.productId}`"
+                       :stock="historyStock" :warehouse-title="selectedWarehouse?.title ?? ''" @close="historyStock = null" />
     <BaseModal v-model="openingOpen" title="ثبت موجودی اولیه" size="lg" :busy="saving">
-      <p>انبار: <strong>{{ selectedWarehouse?.title }}</strong></p>
+      <label class="stock-field mb-3">انبار <span class="text-danger">*</span>
+        <WarehouseSelect v-model="warehouseId" :options="warehouses" :disabled="saving || warehousesLoading" />
+      </label>
+      <div v-if="warehouseError" class="alert alert-danger" role="alert">
+        {{ warehouseError }} <button class="btn btn-link btn-sm" :disabled="saving" @click="loadWarehouses">تلاش دوباره</button>
+      </div>
       <p class="text-muted">فقط کالاهای بدون گردش قبلی مجازند. مقدار صفر نادیده گرفته می‌شود.</p>
       <div v-if="modalError" class="alert alert-danger" role="alert">{{ modalError }}</div>
       <div v-for="(row, index) in openingRows" :key="row.key" class="stock-opening-row">
@@ -220,7 +242,21 @@ async function refreshAdjustment(): Promise<void> {
 <style scoped>
 .stock-header { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
 .stock-filters { display: flex; flex-wrap: wrap; align-items: end; gap: .75rem; margin-bottom: 1rem; }
-.stock-filters label { flex: 1 1 150px; margin: 0; min-width: 0; color: var(--text-primary); }
+.stock-warehouse-select { flex: 0 1 16rem; height: 2.25rem; }
+
+.stock-quick-search { flex: 0 1 24rem; position: relative; width: 100%; }
+.stock-quick-search > i {
+  color: var(--text-secondary); font-size: 1.1rem; pointer-events: none;
+  position: absolute; right: 0.85rem; top: 50%; transform: translateY(-50%);
+}
+.stock-quick-search .form-control {
+  font-size: 0.8125rem; height: 2.25rem; min-height: 2.25rem;
+  padding-left: 2.25rem; padding-right: 2.25rem;
+}
+.stock-quick-search button {
+  background: transparent; border: 0; color: var(--text-secondary); left: 0.65rem;
+  padding: 0.25rem; position: absolute; top: 50%; transform: translateY(-50%);
+}
 .stock-empty { padding: 3rem 1rem; text-align: center; border: 1px dashed var(--border-color); border-radius: .5rem; }
 .stock-opening-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) auto; gap: .75rem; align-items: end; margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border-color); }
 .stock-opening-row label { margin: 0; }

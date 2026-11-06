@@ -12,6 +12,19 @@ export interface WarehouseStock {
   rowVersion: string | null
 }
 export interface WarehouseStockPage { items: WarehouseStock[]; totalCount: number; filteredCount: number }
+export interface StockHistoryRow {
+  id: string
+  date: string | null
+  pageNumber: string | null
+  movementType: string | number
+  quantityDelta: number
+  description: string | null
+  isReversal: boolean
+}
+export interface StockHistoryPage { items: StockHistoryRow[]; totalCount: number }
+export async function getStockHistory(warehouseId: string, productId: string, pageNumber: number, signal?: AbortSignal): Promise<StockHistoryPage> {
+  return (await request<StockHistoryPage>(`/endpoint/inventory/warehouses/${encodeURIComponent(warehouseId)}/stocks/${encodeURIComponent(productId)}/history?pageNumber=${pageNumber}&pageSize=20`, { signal })).data
+}
 export interface StockListParameters {
   pageNumber?: number
   pageSize?: number
